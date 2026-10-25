@@ -194,7 +194,7 @@ Android 8 及以上，arm64。首次打开会准备内置的运行环境，请�
 <summary><b>开源吗？</b></summary>
 <br>
 
-下周公测时，主代码仓库转为公开。许可证随公测一起公布。
+会。下周公测时主代码仓库转为公开，代码以 AGPL-3.0 开源。dsh-go 的名称和标识，以及 Deepy、鲸娘两位吉祥物，保留所有权利。
 
 </details>
 
@@ -210,9 +210,9 @@ Android 8 及以上，arm64。首次打开会准备内置的运行环境，请�
 - [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)：dsh-go 运行和连接的就是它。
 - [DSH-TUI](https://github.com/ccch1mneyyy/dsh-TUI)：吉祥物 Deepy 小鲸鱼和鲸娘来自这里。
 
-## 许可证
+## 许可
 
-待定，随公测公布。
+代码将以 AGPL-3.0 开源（公测时公开）· 品牌与吉祥物保留所有权利
 
 <br>
 

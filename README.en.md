@@ -194,7 +194,7 @@ Android 8 or later on arm64. The first launch sets up the built-in environment; 
 <summary><b>Is it open source?</b></summary>
 <br>
 
-The main code repository goes public with the public beta next week, along with the license.
+Yes. The main code repository goes public with the public beta next week, under AGPL-3.0. The dsh-go name and logo, and the mascots Deepy and Whale girl, remain all rights reserved.
 
 </details>
 
@@ -212,7 +212,7 @@ The main code repository goes public with the public beta next week, along with 
 
 ## License
 
-To be announced with the public beta.
+Code will be open-sourced under AGPL-3.0 (public at the public beta) · Brand and mascots: all rights reserved
 
 <br>
 
