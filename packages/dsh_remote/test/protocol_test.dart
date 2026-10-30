@@ -42,6 +42,7 @@ void main() {
       'control/envelope.json',
       'control/hello.json',
       'control/connect.json',
+      'control/handshake.json',
       'control/relay.json',
       'control/errors.json',
       'control/limits.json',
@@ -142,6 +143,89 @@ void main() {
         expect(accepted, expected);
       });
     }
+  });
+
+  group('wire JSON (upstream wire-json.test.ts)', () {
+    test('duplicate keys are rejected in Control frames and Remote messages', () {
+      final control = jsonEncode(ControlFrame('ping', {'nonce': 'nonce'}).toJson());
+      final remote = jsonEncode(RemoteMessage.rpcRequest('harness.transport.describe', <String, Object?>{}).toJson());
+      RemoteMessage decodeRemote(String text) => RemoteMessage.decode(utf8.encode(text));
+      for (final duplicate in [
+        control.replaceFirst('"id":', '"id":"other","id":'),
+        control.replaceFirst('"nonce":', '"nonce":"other","nonce":'),
+        control.replaceFirst('"nonce":', r'"nonce":"other","nonce":'),
+      ]) {
+        expect(() => decodeControlFrame(duplicate), throwsA(isA<ProtocolError>()), reason: duplicate);
+      }
+      expect(
+        () => decodeRemote(remote.replaceFirst('"method":', '"method":"other","method":')),
+        throwsA(isA<ProtocolError>()),
+      );
+      expect(
+        () => decodeRemote(remote.replaceFirst('"params":{}', '"params":{"outer":{"id":1,"id":2}}')),
+        throwsA(isA<ProtocolError>()),
+      );
+      expect(decodeControlFrame(control).type, 'ping');
+      final separate = RemoteMessage.rpcRequest('harness.transport.describe', {
+        'left': {'id': 1},
+        'right': {'id': 2},
+        'list': [
+          {'id': 1},
+          {'id': 2},
+        ],
+      });
+      expect(decodeRemote(jsonEncode(separate.toJson())).type, 'rpc.request');
+      expect(() => RemoteMessage.decode([0x22, 0xc0, 0xaf, 0x22]), throwsA(isA<ProtocolError>()));
+    });
+
+    test('Relay data envelopes are bounded and strict', () {
+      final relay = encodeRelayDataFrame(
+        ControlFrame('relay', {
+          'connectionId': 'connection-1',
+          'targetDeviceId': 'host-1',
+          'counter': 0,
+          'ciphertext': 'AQ',
+        }),
+      );
+      expect(decodeRelayDataFrame(relay).type, 'relay');
+      expect(decodeRelayDataFrame(encodeRelayDataFrame(ControlFrame('relay.ready', {'epoch': 4}))).type, 'relay.ready');
+      for (final invalid in [
+        relay.replaceFirst('"id":', '"id":"other","id":'),
+        relay.replaceFirst('"counter":0', '"counter":1,"counter":0'),
+        relay.replaceFirst('"payload":', '"extra":true,"payload":'),
+        relay.replaceFirst('"type":"relay"', '"type":""'),
+        relay.replaceFirst('"v":1', '"v":2'),
+      ]) {
+        expect(() => decodeRelayDataFrame(invalid), throwsA(isA<ProtocolError>()), reason: invalid);
+      }
+      final oversized = '{"v":1,"id":"x","type":"relay","timestamp":1,"payload":${' ' * maxRelayFrameBytes}}';
+      expect(
+        () => decodeRelayDataFrame(oversized),
+        throwsA(isA<ProtocolError>().having((e) => e.code, 'code', 'FRAME_TOO_LARGE')),
+      );
+      expect(
+        () => decodeRelayDataFrame(relay, ControlFrameLimits(maxRelayFrameBytes: relay.length - 1)),
+        throwsA(isA<ProtocolError>().having((e) => e.code, 'code', 'FRAME_TOO_LARGE')),
+      );
+    });
+
+    test('capability lists are bounded', () {
+      Map<String, Object?> hello(int count) => {
+        'v': 1,
+        'id': 'h',
+        'type': 'hello',
+        'timestamp': 1786000000000,
+        'payload': {
+          'role': 'client',
+          'deviceId': 'client-1',
+          'accessToken': 'token-1',
+          'protocols': [1],
+          'capabilities': [for (var i = 0; i < count; i++) 'cap.$i'],
+        },
+      };
+      expect(parseControlFrame(hello(maxRemoteCapabilityEntries)).type, 'hello');
+      expect(() => parseControlFrame(hello(maxRemoteCapabilityEntries + 1)), throwsA(isA<ProtocolError>()));
+    });
   });
 
   group('DSHF secure fragments', () {

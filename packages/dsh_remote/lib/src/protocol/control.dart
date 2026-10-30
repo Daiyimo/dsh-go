@@ -12,8 +12,14 @@ const int protocolVersion = 1;
 /// UTF-8 JSON limit for non-relay Control frames.
 const int maxControlFrameBytes = 64 * 1024;
 
-/// UTF-8 JSON limit for `relay` Control frames.
+/// UTF-8 JSON limit for `relay` Control frames and Relay data frames.
 const int maxRelayFrameBytes = 1024 * 1024;
+
+/// Most entries in a capability list (`hello`, `hello.ack`,
+/// `harness.transport.describe`).
+const int maxRemoteCapabilityEntries = 128;
+
+const int _maxProtocolListEntries = 16;
 
 const List<String> controlFrameTypes = [
   'hello',
@@ -114,13 +120,58 @@ ControlFrame decodeControlFrame(String data, [ControlFrameLimits limits = const 
   }
   final Object? json;
   try {
-    json = jsonDecode(data);
+    json = decodeWireJson(data);
   } on FormatException {
     throw const ProtocolError('Control frame is not JSON.');
   }
   final frame = parseControlFrame(json);
   _assertSize(bytes, frame.type, limits);
   return frame;
+}
+
+/// Validates and encodes a frame for the independent Relay data WebSocket.
+/// Its envelope is the Control envelope with a free-form `type`; every
+/// frame counts against the Relay limit.
+String encodeRelayDataFrame(ControlFrame frame, [ControlFrameLimits limits = const ControlFrameLimits()]) {
+  final parsed = _parseRelayDataFrame(frame.toJson());
+  final encoded = jsonEncode(parsed.toJson());
+  _assertSize(utf8.encode(encoded).length, 'relay', limits);
+  return encoded;
+}
+
+/// Decodes one Relay data text frame (`relay.ready`, `relay`,
+/// `relay.detach`, `ping`, ...), checking the size before parsing.
+ControlFrame decodeRelayDataFrame(String data, [ControlFrameLimits limits = const ControlFrameLimits()]) {
+  _assertSize(utf8.encode(data).length, 'relay', limits);
+  final Object? json;
+  try {
+    json = decodeWireJson(data);
+  } on FormatException {
+    throw const ProtocolError('Invalid Relay data frame.');
+  }
+  return _parseRelayDataFrame(json);
+}
+
+ControlFrame _parseRelayDataFrame(Object? input) {
+  final map = asMap(input);
+  final id = map?['id'];
+  final type = map?['type'];
+  final timestamp = map?['timestamp'];
+  final payload = asMap(map?['payload']);
+  if (map == null ||
+      map.length != 5 ||
+      map['v'] != protocolVersion ||
+      id is! String ||
+      id.isEmpty ||
+      type is! String ||
+      type.isEmpty ||
+      timestamp is! int ||
+      timestamp <= 0 ||
+      timestamp > maxSafeInteger ||
+      payload == null) {
+    throw const ProtocolError('Invalid Relay data frame.');
+  }
+  return ControlFrame(type, payload, id: id, timestamp: timestamp);
 }
 
 void _assertSize(int bytes, String type, ControlFrameLimits limits) {
@@ -170,11 +221,12 @@ void _validatePayload(String type, JsonMap p) {
       _nonEmpty(p, 'accessToken');
       final protocols = _list(p, 'protocols');
       if (protocols.isEmpty ||
+          protocols.length > _maxProtocolListEntries ||
           protocols.any((v) => v is! int || v < 0 || v > maxSafeInteger) ||
           protocols.toSet().length != protocols.length) {
         throw const ProtocolError('hello.protocols is invalid.');
       }
-      _uniqueStrings(p, 'capabilities', required: true);
+      _capabilities(p, required: true);
       _optionalString(p, 'clientVersion');
       _optionalString(p, 'harnessVersion');
     case 'hello.ack':
@@ -186,7 +238,7 @@ void _validatePayload(String type, JsonMap p) {
       _positiveInt(p, 'heartbeatIntervalMs');
       _positiveInt(p, 'maxControlFrameBytes', max: maxControlFrameBytes);
       _positiveInt(p, 'maxRelayFrameBytes', max: maxRelayFrameBytes);
-      _uniqueStrings(p, 'capabilities', required: false);
+      _capabilities(p, required: false);
       if (p.containsKey('webrtcEnabled') && p['webrtcEnabled'] is! bool) {
         throw const ProtocolError('hello.ack.webrtcEnabled must be a boolean.');
       }
@@ -197,13 +249,18 @@ void _validatePayload(String type, JsonMap p) {
     case 'connect.incoming':
       _nonEmpty(p, 'connectionId');
       _nonEmpty(p, 'clientDeviceId');
-      _nonEmpty(p, 'clientIdentityKey');
+      final key = p['clientIdentityKey'];
+      if (key is! String || !identityKeyPattern.hasMatch(key)) {
+        throw const ProtocolError('connect.incoming.clientIdentityKey is not a canonical X25519 key.');
+      }
       if (p['authorization'] != 'account') {
         throw const ProtocolError('connect.incoming.authorization must be "account".');
       }
       _transports(p);
+      _relayAssignment(p);
     case 'connect.accepted':
       _nonEmpty(p, 'connectionId');
+      _relayAssignment(p);
     case 'connect.rejected':
       _nonEmpty(p, 'connectionId');
       _optionalString(p, 'code');
@@ -211,8 +268,8 @@ void _validatePayload(String type, JsonMap p) {
     case 'secure.handshake':
       _nonEmpty(p, 'connectionId');
       _nonEmpty(p, 'targetDeviceId');
-      _positiveInt(p, 'step');
-      _nonEmpty(p, 'data');
+      if (p['step'] != 1 && p['step'] != 2) throw const ProtocolError('secure.handshake.step must be 1 or 2.');
+      _base64Url(p, 'data');
     case 'relay':
       _nonEmpty(p, 'connectionId');
       _nonEmpty(p, 'targetDeviceId');
@@ -220,7 +277,7 @@ void _validatePayload(String type, JsonMap p) {
       if (counter is! int || counter < 0 || counter > maxSafeInteger) {
         throw const ProtocolError('relay.counter must be a non-negative safe integer.');
       }
-      _nonEmpty(p, 'ciphertext');
+      _base64Url(p, 'ciphertext');
     case 'signal.offer' || 'signal.answer':
       _nonEmpty(p, 'connectionId');
       _nonEmpty(p, 'targetDeviceId');
@@ -273,20 +330,45 @@ List<Object?> _list(JsonMap p, String key) {
   return value.cast<Object?>();
 }
 
-void _uniqueStrings(JsonMap p, String key, {required bool required}) {
-  if (!p.containsKey(key)) {
-    if (required) throw ProtocolError('$key is required.');
+void _capabilities(JsonMap p, {required bool required}) {
+  if (!p.containsKey('capabilities')) {
+    if (required) throw const ProtocolError('capabilities is required.');
     return;
   }
-  final values = _list(p, key);
-  if (values.any((v) => v is! String || v.isEmpty) || values.toSet().length != values.length) {
-    throw ProtocolError('$key must be unique non-empty strings.');
+  final values = _list(p, 'capabilities');
+  if (values.length > maxRemoteCapabilityEntries ||
+      values.any((v) => v is! String || v.isEmpty) ||
+      values.toSet().length != values.length) {
+    throw const ProtocolError('capabilities must be at most $maxRemoteCapabilityEntries unique non-empty strings.');
   }
 }
 
 void _transports(JsonMap p) {
   final values = _list(p, 'preferredTransports');
-  if (values.isEmpty || values.any((v) => !remoteTransports.contains(v))) {
+  if (values.isEmpty || values.length > remoteTransports.length || values.any((v) => !remoteTransports.contains(v))) {
     throw const ProtocolError('preferredTransports is invalid.');
+  }
+}
+
+void _base64Url(JsonMap p, String key) {
+  final value = p[key];
+  if (value is! String || !isCanonicalBase64Url(value)) {
+    throw ProtocolError('$key must be canonical unpadded base64url.');
+  }
+}
+
+/// Optional independent Relay assignment (`transport.relay.attach`).
+void _relayAssignment(JsonMap p) {
+  if (p.containsKey('relayEndpoint')) {
+    final endpoint = p['relayEndpoint'];
+    if (endpoint is! String || !(Uri.tryParse(endpoint)?.hasScheme ?? false)) {
+      throw const ProtocolError('relayEndpoint must be a URL.');
+    }
+  }
+  if (p.containsKey('relayTicket')) _nonEmpty(p, 'relayTicket');
+  if (p.containsKey('relayNodeId')) _nonEmpty(p, 'relayNodeId');
+  if (p.containsKey('relayEpoch')) {
+    final epoch = p['relayEpoch'];
+    if (epoch is! int || epoch < 0) throw const ProtocolError('relayEpoch must be a non-negative integer.');
   }
 }

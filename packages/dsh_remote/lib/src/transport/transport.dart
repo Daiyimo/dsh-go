@@ -5,7 +5,8 @@
 /// relays the two Noise handshake messages (always over the Server Control
 /// channel). Implementations:
 ///
-/// * [RelayTransport] — ciphertext inside `relay` Control frames (the only
+/// * [RelayTransport] — ciphertext inside `relay` frames, on the Control
+///   socket or on the Relay node data socket the Server assigns (the only
 ///   one today);
 /// * planned: LAN / WebRTC P2P / TURN — a DataChannel named `dsh`
 ///   (`ordered: true`) carrying binary ciphertext, negotiated with

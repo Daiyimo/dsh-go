@@ -2,14 +2,14 @@
 
 Pure-Dart client for [ds-harness-remote](https://github.com/liguobao/ds-harness-remote) (李国宝, MIT). It reaches a remote Host's DSH Harness API through the Server Relay, end-to-end encrypted with `Noise_IK_25519_ChaChaPoly_SHA256`. The result is an ordinary `DshClient` from `package:dsh_client`, so chat, watch, approvals, models and keys work exactly as they do with the local engine.
 
-Status (2026-10-27):
+Status (2026-10-30, upstream `7e387df`, Host plugin 0.6.0):
 
 | Layer | State |
 |---|---|
 | Noise IK | Matches upstream `fixtures/crypto/v1/noise-ik.json` byte for byte |
-| Control frames / negotiation | Passes upstream `fixtures/protocol/v1` (82 cases) |
-| Relay transport, DSHF framing, RPC, tunnel carrier | Unit-tested against an in-process fake Server + Host |
-| Whole stack vs real upstream | **E2E passes** against self-hosted `apps/server` (upstream `91d4e1d`) + `dsh web` 0.2.1-rc.2 with the `ds-harness-remote` Host plugin 0.5.20 from npm; also 0.5.19 (`tool/e2e/run_e2e.sh`; `PLUGIN_SPEC=<tarball>` for unreleased builds) |
+| Control frames / negotiation | Passes upstream `fixtures/protocol/v1` (84 client-relevant cases), including duplicate-key rejection, canonical Base64URL and the list limits |
+| Relay transport (Control socket, or a Relay node data socket via `transport.relay.attach`), DSHF framing, RPC, tunnel carrier | Unit-tested against an in-process fake Server, Relay node and Host |
+| Whole stack vs real upstream | **E2E passes** against self-hosted `apps/server` (upstream `7e387df`) + `dsh web` 0.2.1-rc.5 with the `ds-harness-remote` Host plugin 0.6.0 (packed from `7e387df`, not on npm yet), both on the Control socket and, with `RELAY_ATTACH=1`, through a Relay node data socket; also plugin 0.5.23 from npm (`tool/e2e/run_e2e.sh`; `PLUGIN_SPEC=<tarball>` for unreleased builds) |
 | WebRTC / LAN / TURN | Not implemented. Relay only, behind a transport seam |
 
 ## Quick start (Flutter app)
@@ -87,11 +87,11 @@ await client.close();                                // or account.logout()
 It returns once the first `$events` generation is ready. It throws `RemoteConnectException(failure)` in three cases: immediately for terminal failures, immediately for `HOST_OFFLINE`, and otherwise after `timeout`. Opening a connection does this:
 
 1. Fetches the Host descriptor and checks the **pin**. The first connect pins the key, after `confirmNewHost` returns true when that callback is given; otherwise trust is on first use. A changed key always fails closed with `PEER_IDENTITY_MISMATCH`, before any socket is opened.
-2. Control WebSocket: `hello` → `connect.request` (relay) → `connect.accepted`. A refused token is refreshed and retried once.
+2. Control WebSocket: `hello` → `connect.request` (relay) → `connect.accepted`. A refused token is refreshed and retried once. When `connect.accepted` carries a Relay assignment (Server and Host both on `transport.relay.attach`), the client opens the node's data WebSocket, sends `relay.attach` with the one-time ticket, waits for `relay.ready` and announces `transport.selected`. Ciphertext and the node's heartbeats then use that socket; the handshake stays on the Control socket. Without an assignment (self-hosted `apps/server`, Hosts before 0.6.0) everything stays on the Control socket.
 3. Noise IK as initiator. The Host's static key must equal the pin, and the prologue binds the connection and both device ids.
 4. `harness.transport.describe`. The Host must declare `harness.remote.v3` (DSH 0.2.x Session V3). Older or ApiProxy-only Hosts fail with `HARNESS_VERSION_INCOMPATIBLE`.
 
-The returned client **reconnects by itself** (DshMux backoff 0.5 to 10 s): a new connection, a new `$events` generation, streams reopened, and `watch()` resynced with a snapshot where `isResync` is true. Liveness comes from a `harness.transport.describe` health probe every 25 s (5 s deadline) plus the Server's Control heartbeat; three silent heartbeats count as dead. The Server allows **one Host connection per client device**, so connecting another Host closes the previous client.
+The returned client **reconnects by itself** (DshMux backoff 0.5 to 10 s): a new connection, a new `$events` generation, streams reopened, and `watch()` resynced with a snapshot where `isResync` is true. Liveness comes from a `harness.transport.describe` health probe every 25 s (5 s deadline) plus the Server's Control heartbeat; three silent heartbeats count as dead. `relay.detach` (the Host left the node) or a dropped data socket also ends the connection, and the reconnect builds a new one with a new Noise session. The Server allows **one Host connection per client device**, so connecting another Host closes the previous client.
 
 ### Connection state
 
@@ -130,7 +130,7 @@ A terminal failure **sticks**: the client stops reconnecting, so it never fights
 
 ## Security model
 
-- The device identity (X25519) and tokens live only in `SecretStore`, under keys `dsh_remote.v1.<sha256(origin)[:24]>.{identity,credentials,pins}`. Passwords and web tokens are never stored or logged, and tracers redact tokens and ciphertext.
+- The device identity (X25519) and tokens live only in `SecretStore`, under keys `dsh_remote.v1.<sha256(origin)[:24]>.{identity,credentials,pins}`. Passwords and web tokens are never stored or logged, and tracers redact tokens, Relay tickets and ciphertext. A Relay ticket is sent only on the node's data socket, never on the Control socket.
 - Noise IK authenticates both sides against keys distributed by the Server. **E2EE does not protect against a malicious Server on first contact**: the first pin trusts the Server's descriptor, and the fingerprint is only 48 bits. Pins fail closed afterwards. Upstream Hosts auto-trust any client of the same account, so an account takeover equals Host access. There is no rekey yet (upstream roadmap).
 - Replay protection: the Relay `counter` must equal the next Noise receive nonce. Duplicates, reorders, forgeries, bad fragments and unknown message types close the channel.
 
@@ -147,7 +147,8 @@ RemoteRpcClient (rpc.request/response/error, events, 128 pending, deadlines)
       ▼
 SecureChannel (Noise IK initiator, DSHF fragments, ordered sends, fail closed)
       ▼
-SecureHandshakeTransport ◀── RelayTransport (Control WS: hello, connect, relay, ping/pong)
+SecureHandshakeTransport ◀── RelayTransport (Control WS: hello, connect, handshake, ping/pong;
+                         │    relay on the Control WS, or on the Relay node data WS when assigned)
                          ◀── (future) LAN / P2P / TURN over a WebRTC DataChannel "dsh"
 ```
 
@@ -158,11 +159,11 @@ Performance: crypto is pure Dart (`cryptography` 2.9 ChaCha20-Poly1305 and X2551
 ## Tests
 
 ```bash
-dart test                      # Noise vectors, protocol conformance, DSHF, fake Server+Host carrier tests (110)
+dart test                      # Noise vectors, protocol conformance, DSHF, fake Server+Host carrier tests (170)
 tool/e2e/run_e2e.sh            # real stack, isolated temp HOME/DSH_HOME, loopback only, no prompts
 ```
 
-`run_e2e.sh` bundles upstream `apps/server` from a checkout (`UPSTREAM`, default `../../.refs/ds-harness-remote-upstream`) with esbuild. It installs `ds-harness-remote@0.5.17` from npm into a fresh DSH profile and points that profile at the local Server with a profile `cordis.patch.yml`. Terminal, Codex and ACP are disabled there; the bundled patch hard-codes `https://dsh.r2049.cn`, so the override is required. It pre-provisions the Host credentials (`tool/e2e/provision-host.mjs`; the plugin CLI only does QR or code login), starts `dsh web` (`DSH_BIN` selects the version) and runs `test/live_remote_test.dart`. That test covers connect, list/create/rename/archive sessions, live follow events, model/permission/key, workspaces, host events, the transfer path, reconnect/resync and token rotation.
+`run_e2e.sh` bundles upstream `apps/server` from a checkout (`UPSTREAM`, default `../../.refs/ds-harness-remote-upstream`) with esbuild. It installs `ds-harness-remote@$PLUGIN_VERSION` (default 0.5.23) from npm, or `PLUGIN_SPEC`, into a fresh DSH profile and points that profile at the local Server with a profile `cordis.patch.yml`. Terminal, Codex and ACP are disabled there; the bundled patch hard-codes `https://dsh.r2049.cn`, so the override is required. It pre-provisions the Host credentials (`tool/e2e/provision-host.mjs`; the plugin CLI only does QR or code login), starts `dsh web` (`DSH_BIN` selects the version) and runs `test/live_remote_test.dart`. That test covers connect, list/create/rename/archive sessions, live follow events, model/permission/key, workspaces, host events, the transfer path, reconnect/resync and token rotation. The open-source Server has no Relay node, so `RELAY_ATTACH=1` mounts `tool/e2e/relay-node.ts` on it (`tool/e2e/patch-relay-attach.mjs`): the Server then negotiates `transport.relay.attach`, and the run fails unless both sides attached, answered the node's ping and sent frames through it. That mode needs a 0.6.0 Host plugin.
 
 `bin/remote_probe.dart` is an interactive CLI: `--server`, `--email` (password in `DSH_REMOTE_PASSWORD`) or QR sign-in, `--state` file, `--create-session --cwd`, `--watch-seconds`, `--reconnect-test`, `--trace`. It never sends prompts.
 

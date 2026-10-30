@@ -124,6 +124,68 @@ void main() {
     expect(error.retryable, isFalse);
   });
 
+  group('Relay node attach', () {
+    /// Control answers hello with an assignment; the node answers
+    /// `relay.attach` with [node] (or refuses the ticket when empty).
+    Future<RemoteTransportException> attachError(List<String> node) async {
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      servers.add(server);
+      server.listen((request) async {
+        final ws = await WebSocketTransformer.upgrade(request);
+        ws.listen((data) {
+          final type = (jsonDecode(data as String) as Map<String, Object?>)['type'];
+          if (type == 'relay.attach') {
+            if (node.isEmpty) unawaited(ws.close(4001, 'RELAY_TICKET_INVALID'));
+            node.forEach(ws.add);
+          } else if (type == 'hello') {
+            ws.add(_frame('hello.ack', _ack(capabilities: const ['transport.relay', 'transport.relay.attach'])));
+          } else if (type == 'connect.request') {
+            ws.add(
+              _frame('connect.accepted', {
+                'connectionId': 'c1',
+                'relayEndpoint': 'ws://127.0.0.1:${server.port}/relay',
+                'relayTicket': 'dshrt.payload.signature',
+                'relayNodeId': 'relay-1',
+                'relayEpoch': 4,
+              }),
+            );
+          }
+        });
+      });
+      try {
+        final transport = await RelayTransport.connect(
+          url: Uri.parse('ws://127.0.0.1:${server.port}/ws/v1/connect'),
+          deviceId: 'phone',
+          accessToken: 'token',
+          hostDeviceId: 'host',
+          timeout: const Duration(seconds: 5),
+        );
+        await transport.close();
+        fail('connected');
+      } on RemoteTransportException catch (error) {
+        return error;
+      }
+    }
+
+    test('a refused ticket stays retryable', () async {
+      final error = await attachError(const []);
+      expect(error.code, 'CONNECTION_FAILED');
+      expect(error.retryable, isTrue);
+    });
+
+    test('relay.ready for another epoch stays retryable', () async {
+      final error = await attachError([_frame('relay.ready', {'connectionId': 'c1', 'epoch': 5})]);
+      expect(error.code, 'INVALID_MESSAGE');
+      expect(error.retryable, isTrue);
+    });
+
+    test('a malformed Relay data frame is final', () async {
+      final error = await attachError(['{"v":1,"v":1,"id":"r","type":"relay.ready","timestamp":1,"payload":{}}']);
+      expect(error.code, 'PROTOCOL_MISMATCH');
+      expect(error.retryable, isFalse);
+    });
+  });
+
   test('a dropped socket stays retryable', () async {
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     servers.add(server);

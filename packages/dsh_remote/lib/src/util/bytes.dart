@@ -1,3 +1,4 @@
+// Portions derived from ds-harness-remote (https://github.com/liguobao/ds-harness-remote), MIT, Copyright (c) 2026 DSH Remote contributors. See THIRD_PARTY_NOTICES.md.
 /// Byte, base64url and JSON helpers shared by the protocol layers.
 library;
 
@@ -20,6 +21,21 @@ Uint8List fromBase64Url(String value) {
 
 /// Canonical 32-byte X25519 public key encoding: exactly 43 characters.
 final RegExp identityKeyPattern = RegExp(r'^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$');
+
+const String _base64UrlAlphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
+final RegExp _base64UrlPattern = RegExp(r'^[A-Za-z0-9_-]+$');
+
+/// Non-empty unpadded base64url whose unused trailing bits are zero, so
+/// every byte string has exactly one wire form (handshake data, Relay
+/// ciphertext).
+bool isCanonicalBase64Url(String value) {
+  if (!_base64UrlPattern.hasMatch(value)) return false;
+  final remainder = value.length % 4;
+  if (remainder == 1) return false;
+  if (remainder == 0) return true;
+  final last = _base64UrlAlphabet.indexOf(value[value.length - 1]);
+  return remainder == 2 ? last & 15 == 0 : last & 3 == 0;
+}
 
 bool constantTimeEquals(List<int> a, List<int> b) {
   if (a.length != b.length) return false;
@@ -89,3 +105,44 @@ Object? tryDecodeJson(String text) {
     return null;
   }
 }
+
+/// [jsonDecode] for wire frames: also rejects an object that repeats a key,
+/// including keys that only match once unescaped (`jsonDecode` keeps the
+/// last one silently). Throws [FormatException].
+Object? decodeWireJson(String text) {
+  final value = jsonDecode(text);
+  // The text is valid JSON now, so a string followed by `:` is a key.
+  final objects = <Set<String>?>[];
+  for (var i = 0; i < text.length; i++) {
+    final char = text.codeUnitAt(i);
+    if (char == 0x7b) {
+      objects.add(<String>{});
+    } else if (char == 0x5b) {
+      objects.add(null);
+    } else if (char == 0x7d || char == 0x5d) {
+      objects.removeLast();
+    } else if (char == 0x22) {
+      final start = i;
+      var escaped = false;
+      for (i++; i < text.length; i++) {
+        final c = text.codeUnitAt(i);
+        if (c == 0x5c) {
+          escaped = true;
+          i++;
+        } else if (c == 0x22) {
+          break;
+        }
+      }
+      var next = i + 1;
+      while (next < text.length && _isJsonSpace(text.codeUnitAt(next))) {
+        next++;
+      }
+      if (next == text.length || text.codeUnitAt(next) != 0x3a) continue;
+      final key = escaped ? jsonDecode(text.substring(start, i + 1)) as String : text.substring(start + 1, i);
+      if (!objects.last!.add(key)) throw const FormatException('Duplicate JSON field.');
+    }
+  }
+  return value;
+}
+
+bool _isJsonSpace(int char) => char == 0x20 || char == 0x0a || char == 0x0d || char == 0x09;

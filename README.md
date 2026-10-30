@@ -46,7 +46,7 @@
 </p>
 
 <p align="center">
-  <b>满 1000 Star 后，我会尽快适配 iOS 和鸿蒙端，请大家多多支持！</b>
+  <b>感谢大家对 DSH Go 的支持和喜爱，我将尽快适配 iOS 和鸿蒙！大家 Star 点得越多，我适配得越快哦 hhh</b>
 </p>
 
 <p align="center">
@@ -306,7 +306,7 @@ DSH_BETA_TOKEN_FILE= bash tooling/build-apk.sh --dry-run -f all
 <!-- Telegram：链接待定，拿到后加一行 -->
 
 <p align="center">
-  <a href="https://qm.qq.com/q/OEy2RqZnqY"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/qr-qq-zh-dark.webp"><img src="docs/assets/qr-qq-zh-light.webp" width="300" alt="QQ 群 DSH-Go！！，群号 1132118290"></picture></a>&emsp;&emsp;<picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/qr-wechat-zh-dark.webp"><img src="docs/assets/qr-wechat-zh-light.webp" width="300" alt="微信群 小C的AI交流小屋（DSH-Go）"></picture>
+  <a href="https://qm.qq.com/q/OEy2RqZnqY"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/qr-qq-zh-dark.webp"><img src="docs/assets/qr-qq-zh-light.webp" width="300" alt="QQ 群 DSH-Go！！，群号 1132118290"></picture></a>&emsp;&emsp;<picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/qr-wechat-zh-dark.webp"><img src="docs/assets/qr-wechat-zh-light.webp" width="300" alt="微信群 DSHGo 2群"></picture>
 </p>
 
 <p align="center">
@@ -323,6 +323,8 @@ DSH_BETA_TOKEN_FILE= bash tooling/build-apk.sh --dry-run -f all
 Phase 相关代码经作者许可使用。DeepSeek Harness、PiPilot、DS Bot、DSH Remote 及其他第三方组件、素材保留各自的许可证和署名。具体来源和条款见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
 
 DSH Go 的名称、标识、Deepy 小鲸鱼和鲸娘等形象不在 AGPL 授权范围内，使用条款见 [ASSETS.md](ASSETS.md)。
+
+<sub>远程连接参考了 [ds-harness-remote](https://github.com/liguobao/ds-harness-remote) 的项目和服务器，感谢作者李国宝。</sub>
 
 <br>
 

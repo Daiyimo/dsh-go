@@ -125,6 +125,7 @@ DS Bot 的 NOTICE 原文附在文末。
 | 版权人 | Copyright (c) 2026 DSH Remote contributors |
 | 许可 | MIT（全文另见 `packages/dsh_remote/LICENSE-ds-harness-remote`） |
 | 用途 | 远程连接：协议、分帧、校验、加密信道与连接逻辑 |
+| 对应上游版本 | `7e387df`（Host 插件 0.6.0） |
 
 路径均相对 `packages/dsh_remote/`：
 
@@ -136,9 +137,10 @@ DS Bot 的 NOTICE 原文附在文末。
 | `lib/src/crypto/noise_ik.dart` | `packages/crypto/src/noise.ts`、`packages/crypto/src/index.ts`（会话封装）；Noise IK 状态机为本项目自行实现，经上游作者同意 |
 | `lib/src/channel/secure_channel.dart` | `packages/plugin/src/client-secure-transport.ts`、`packages/plugin/src/server-connection.ts` |
 | `lib/src/channel/rpc_client.dart` | `packages/client-core/src/index.ts`（`RemoteClientCore`） |
-| `lib/src/protocol/control.dart` | `packages/protocol/src/index.ts`（信封、校验、限额、协商） |
+| `lib/src/protocol/control.dart` | `packages/protocol/src/index.ts`（信封、校验、限额、协商、Relay data frame） |
 | `lib/src/protocol/messages.dart` | `packages/protocol/src/index.ts`（`RemoteMessage`、`SecureMessageCodec`、RPC 载荷） |
-| `lib/src/transport/relay_transport.dart` | `packages/webrtc/src/index.ts`（`RelayTransport`） |
+| `lib/src/transport/relay_transport.dart` | `packages/webrtc/src/index.ts`（`RelayTransport`，含 Relay data socket 的 attach）；attach 后发送 `transport.selected` 来自 `packages/webrtc/src/adaptive-transport.ts` |
+| `lib/src/util/bytes.dart` | `packages/protocol/src/wire-json.ts`（拒绝重复字段）、`packages/protocol/src/index.ts`（规范 Base64URL） |
 | `test/fixtures/noise-ik.json` | `fixtures/crypto/v1/noise-ik.json`（原样复制） |
 | `test/fixtures/protocol-v1/` | `fixtures/protocol/v1`（原样复制） |
 

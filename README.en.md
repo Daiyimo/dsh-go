@@ -46,7 +46,7 @@
 </p>
 
 <p align="center">
-  <b>Once we reach 1,000 stars, I'll bring DSH Go to iOS and HarmonyOS as soon as I can — thanks for your support!</b>
+  <b>Thank you all for supporting and loving DSH Go! iOS and HarmonyOS versions are coming as soon as I can make them. The more stars, the faster they come, hehe</b>
 </p>
 
 <p align="center">
@@ -306,7 +306,7 @@ Report security issues through [SECURITY.en.md](SECURITY.en.md). Keep vulnerabil
 <!-- Telegram: link to come, add a line here -->
 
 <p align="center">
-  <a href="https://qm.qq.com/q/OEy2RqZnqY"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/qr-qq-en-dark.webp"><img src="docs/assets/qr-qq-en-light.webp" width="300" alt="QQ group DSH-Go!!, number 1132118290"></picture></a>&emsp;&emsp;<picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/qr-wechat-en-dark.webp"><img src="docs/assets/qr-wechat-en-light.webp" width="300" alt="WeChat group 小C的AI交流小屋（DSH-Go）"></picture>
+  <a href="https://qm.qq.com/q/OEy2RqZnqY"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/qr-qq-en-dark.webp"><img src="docs/assets/qr-qq-en-light.webp" width="300" alt="QQ group DSH-Go!!, number 1132118290"></picture></a>&emsp;&emsp;<picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/qr-wechat-en-dark.webp"><img src="docs/assets/qr-wechat-en-light.webp" width="300" alt="WeChat group DSHGo 2群"></picture>
 </p>
 
 <p align="center">
@@ -323,6 +323,8 @@ This project is licensed under [AGPL-3.0](LICENSE). `sdk/` and `examples/` remai
 Code derived from Phase is used with the author's permission. DeepSeek Harness, PiPilot, DS Bot, DSH Remote and other third-party components and assets retain their own licenses and attribution. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for sources and terms.
 
 The DSH Go name, logo and mascots (Deepy and Whale girl) are not covered by the AGPL; see [ASSETS.md](ASSETS.md) for their terms.
+
+<sub>Remote connections draw on the [ds-harness-remote](https://github.com/liguobao/ds-harness-remote) project and its server. Thanks to its author, liguobao.</sub>
 
 <br>
 

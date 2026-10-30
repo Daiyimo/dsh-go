@@ -61,6 +61,7 @@ class RemoteRpcClient {
   final Map<String, _Pending> _pending = {};
   final StreamController<RemoteEvent> _events = StreamController.broadcast(sync: true);
   final Completer<SecureChannelClosed> _done = Completer();
+  final Stopwatch _sinceInbound = Stopwatch()..start();
 
   /// Events in arrival order (synchronous broadcast: subscribe before the
   /// RPC that triggers them).
@@ -72,6 +73,9 @@ class RemoteRpcClient {
   bool get isClosed => _done.isCompleted;
 
   SecureChannel get channel => _channel;
+
+  /// Time since the Host last sent anything (a reply, event or stream frame).
+  Duration get sinceInbound => _sinceInbound.elapsed;
 
   Future<Object?> call(String method, Object? params, {Duration? timeout}) {
     if (_done.isCompleted) {
@@ -113,6 +117,7 @@ class RemoteRpcClient {
   }
 
   void _onMessage(Uint8List bytes) {
+    _sinceInbound.reset();
     final RemoteMessage message;
     try {
       message = RemoteMessage.decode(bytes);
