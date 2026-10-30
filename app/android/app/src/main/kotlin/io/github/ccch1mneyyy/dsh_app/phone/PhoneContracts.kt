@@ -27,6 +27,28 @@ enum class PhoneScreen(val prefix: Char) {
 }
 
 /**
+ * What kind of page the last observation saw, from the tree's shape (not from a screenshot):
+ * a normal control tree, a page that hides its tree, a canvas, or nothing readable.
+ *
+ * It decides the observation channel: TREE is read as text (element ids), the other three need
+ * the screenshot. A canvas page (game, self-drawn UI, obfuscated page) has no usable elements, so
+ * the model can only locate things by looking — that is the GUI path, and it is normal, not a fault.
+ */
+enum class ScreenKind {
+    /** A usable control tree: element ids and the numbered screenshot both work. */
+    TREE,
+
+    /** The tree is present but blanked (sensitive/encrypted page, or the app hid its content). */
+    BLANKED,
+
+    /** No usable controls: game, self-drawn canvas, obfuscated page. Locate by looking. */
+    CANVAS,
+
+    /** Nothing readable at all (no windows): treat as a transient, re-observe. */
+    UNKNOWN,
+}
+
+/**
  * One observation of a screen, rendered for a text model: one line per element,
  * Chinese role words, element ids valid only for this snapshot's [id].
  */
@@ -42,6 +64,8 @@ data class ScreenSnapshot(
     val secure: Boolean = false,
     /** Fewer than five text nodes: games, canvases, some mini-programs. */
     val poorTree: Boolean = false,
+    /** Page shape of this observation; drives the screenshot channel and tap_xy confirmation. */
+    val kind: ScreenKind = ScreenKind.TREE,
     /** Optional numbered screenshot (same element ids drawn on it), PNG or JPEG bytes. */
     val image: ByteArray? = null,
     val imageMime: String? = null,
@@ -126,6 +150,14 @@ interface PhoneDriver {
     fun availability(): Availability
 
     fun observe(detail: Boolean, image: Boolean): ScreenSnapshot
+
+    /**
+     * Page shape of the latest observation, for the safety gate: on a canvas-like page
+     * ([ScreenKind.CANVAS] / [ScreenKind.BLANKED]) a point tap is the only way to act, so the gate
+     * may skip the per-tap confirmation inside a task that already approved this app. Drivers that
+     * cannot tell return TREE (the gate then keeps asking, as before).
+     */
+    fun screenKind(): ScreenKind = ScreenKind.TREE
 
     fun collect(screenId: String, listElementId: Int, maxPages: Int, until: String?): CollectResult
 

@@ -7,6 +7,7 @@ package io.github.ccch1mneyyy.dsh_app.phone.a11y
 
 import android.accessibilityservice.AccessibilityService
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
@@ -139,6 +140,12 @@ internal class ScreenShooter(private val service: AccessibilityService, private 
         for (b in secrets) {
             canvas.drawRect((b.left - origin.left) * sx, (b.top - origin.top) * sy, (b.right - origin.left) * sx, (b.bottom - origin.top) * sy, grey)
         }
+        // No elements to number (canvas / blanked page): give the model a ruler instead of a bare
+        // picture, so "the button in the middle-right" becomes a 0-1000 point it can write down.
+        if (marks.isEmpty()) {
+            drawGrid(bitmap)
+            return
+        }
         val outline = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeWidth = 2f; color = Color.argb(200, 61, 90, 152) }
         val tag = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.argb(230, 33, 50, 98) }
         val halo = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeWidth = 1.5f; color = Color.WHITE }
@@ -161,7 +168,59 @@ internal class ScreenShooter(private val service: AccessibilityService, private 
         }
     }
 
+    /**
+     * A 10x10 ruler over the whole picture: one cell = 100 in the 0-1000 normalized space the
+     * `tap_xy` contract speaks, labelled on the top and left edges. Drawn only when there are no
+     * element numbers to draw (a canvas page has none), because there the model has nothing else
+     * to anchor on.
+     */
+    private fun drawGrid(bitmap: Bitmap) {
+        val canvas = Canvas(bitmap)
+        val line = Paint().apply { style = Paint.Style.STROKE; strokeWidth = 1f; color = Color.argb(70, 255, 255, 255) }
+        val mid = Paint().apply { style = Paint.Style.STROKE; strokeWidth = 1.5f; color = Color.argb(110, 255, 255, 255) }
+        val size = (bitmap.width / 45f).coerceIn(14f, 28f)
+        val text = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.argb(230, 255, 255, 255); textSize = size; typeface = Typeface.DEFAULT_BOLD }
+        val halo = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeWidth = 2.5f; color = Color.argb(170, 0, 0, 0) }
+        val stepX = bitmap.width / 10f
+        val stepY = bitmap.height / 10f
+        for (i in 0..10) {
+            val x = i * stepX
+            val y = i * stepY
+            val strong = i % 5 == 0
+            canvas.drawLine(x, 0f, x, bitmap.height.toFloat(), if (strong) mid else line)
+            canvas.drawLine(0f, y, bitmap.width.toFloat(), y, if (strong) mid else line)
+        }
+        for (i in 0..10) {
+            val label = (i * 100).toString()
+            val tw = text.measureText(label)
+            val x = (i * stepX - tw / 2f).coerceIn(0f, bitmap.width - tw)
+            canvas.drawText(label, x, size, halo)
+            canvas.drawText(label, x, size, text)
+            val y = (i * stepY).coerceIn(size, bitmap.height - 2f)
+            canvas.drawText(label, 2f, y, halo)
+            canvas.drawText(label, 2f, y, text)
+        }
+    }
+
     companion object {
+        /** A [PixelDiff] thumbnail of a captured JPEG, for post-tap verification; null when unreadable. */
+        fun thumbnail(bytes: ByteArray?): IntArray? {
+            if (bytes == null) return null
+            val bitmap = try {
+                BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+            } catch (_: Throwable) {
+                null
+            } ?: return null
+            return try {
+                if (bitmap.width <= 0 || bitmap.height <= 0) null
+                else PixelDiff.thumb(bitmap.width, bitmap.height) { x, y -> bitmap.getPixel(x, y) }
+            } catch (_: Throwable) {
+                null
+            } finally {
+                bitmap.recycle()
+            }
+        }
+
         /**
          * Password and verification-code fields anywhere in [windows], including ones the text
          * listing left out for length: the screenshot must not show what the text hides.

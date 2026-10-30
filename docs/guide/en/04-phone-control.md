@@ -12,7 +12,7 @@ Let DSH read the screen, tap and type to get things done on your phone. Pause or
 3. Tap **Turn on** next to **Notifications** and allow notifications in App info. Approvals and the stop button need them.
 4. Tap **Read current screen** to see what DSH can read. This reading isn't sent to the model.
 
-During a task, text on the screen is sent to the model you chose; with a vision model, a screenshot may be included. Bank card and ID numbers are masked first.
+During a task, text on the screen is sent to the model you chose; with a vision model you can ask for a screenshot. Games, self-drawn canvas pages and encrypted or obfuscated pages have no usable controls, so DSH attaches a screenshot automatically — see "Games and self-drawn pages" below. Bank card and ID numbers are masked first.
 
 ## Ask DSH to do something
 
@@ -23,6 +23,17 @@ Go back to a chat and say what you want done. While a task runs:
 - A task ends on its own when DSH makes no new move for 3 minutes.
 
 Alarms, events, maps and sharing don't need the accessibility service.
+
+## Games and self-drawn pages
+
+Games, self-drawn canvas pages and encrypted or obfuscated pages have no readable controls, so DSH can't find elements to tap. On these pages DSH:
+
+- **Attaches a screenshot automatically**: the current picture is sent straight to a vision model, with a 10x10 grid drawn on it, each cell standing for 100, so positions can be described.
+- **Taps by grid**: the model reports 0-1000 grid coordinates, (0,0) is the top-left of the screenshot and (1000,1000) the bottom-right; DSH converts them to screen coordinates, whatever the phone's resolution.
+- **Checks the tap**: after tapping, DSH compares the picture before and after. When nothing changed it sends the model a checklist — coordinates measured in screenshot pixels instead of grid units, the status bar in the way, the keyboard covering the target — and after two misses in a row it suggests stopping and handing the screen back to you instead of tapping the same spot again.
+- **Approvals**: coordinate taps on these pages still ask first by default; with **No confirmations this task**, and once this app has been approved in the current task, they stop asking. **Ask every time** keeps asking every time.
+
+A model that can't see pictures can't help on these pages; DSH hands the screen back to you.
 
 ## Floating bar
 

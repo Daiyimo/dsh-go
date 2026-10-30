@@ -51,3 +51,68 @@ class ScreenFormatTest {
     }
 
 }
+
+class ScreenFormatKindTest {
+    private fun input(
+        vararg nodes: UiNode,
+        hidden: Boolean = false,
+        windows: List<UiWindow>? = null,
+    ): ScreenInput {
+        val bounds = Box(0, 0, 400, 800)
+        val list = windows ?: listOf(
+            UiWindow(1, WindowKind.APP, "example.app", null, bounds, UiNode(bounds = bounds, children = nodes.toList())),
+        )
+        return ScreenInput("s1", "Example", "example.app", 400, 800, false, list, hidden = hidden)
+    }
+
+    private fun formatted(vararg nodes: UiNode, hidden: Boolean = false, windows: List<UiWindow>? = null) =
+        ScreenFormat.format(input(*nodes, hidden = hidden, windows = windows))
+
+    @Test fun aGameScreenWithOneDeadNodeIsCanvas() {
+        // 王者荣耀: the whole tree is one non-clickable "Game view" node behind the window root.
+        // The old text-count rule missed this page; the driver must still attach a screenshot.
+        val screen = formatted(UiNode(className = "android.view.View", text = "Game view", bounds = Box(0, 0, 400, 800)))
+        assertEquals(ScreenKind.CANVAS, screen.kind)
+        assertTrue(screen.text.contains(ScreenFormat.CANVAS_NOTE))
+        assertFalse(screen.text.contains(ScreenFormat.POOR_TREE_NOTE))
+    }
+
+    @Test fun anEmptyTreeIsCanvasAndAnAbsentTreeIsUnknown() {
+        assertEquals(ScreenKind.CANVAS, formatted().kind)
+        val noWindows = formatted(windows = emptyList())
+        assertEquals(ScreenKind.UNKNOWN, noWindows.kind)
+        assertFalse(noWindows.kind == ScreenKind.CANVAS)
+    }
+
+    @Test fun aTreeWithNothingToDriveIsCanvas() {
+        val labelsOnly = formatted(
+            UiNode(className = "android.widget.TextView", text = "加载中…", bounds = Box(0, 100, 200, 150)),
+            UiNode(className = "android.widget.TextView", text = "请稍候", bounds = Box(0, 200, 200, 250)),
+        )
+        assertEquals(ScreenKind.CANVAS, labelsOnly.kind)
+    }
+
+    @Test fun anOrdinaryPageWithOneButtonIsTree() {
+        val page = formatted(
+            UiNode(className = "android.widget.Button", text = "发送", bounds = Box(0, 100, 300, 150), clickable = true),
+            UiNode(className = "android.widget.TextView", text = "消息", bounds = Box(0, 200, 300, 250)),
+        )
+        assertEquals(ScreenKind.TREE, page.kind)
+        assertFalse(page.text.contains(ScreenFormat.CANVAS_NOTE))
+    }
+
+    @Test fun aLongPressOnlyPageStillCountsAsSomethingToDrive() {
+        val page = formatted(
+            UiNode(className = "android.widget.ImageView", bounds = Box(0, 100, 300, 150), longClickable = true),
+            UiNode(className = "android.widget.TextView", text = "长按菜单", bounds = Box(0, 200, 300, 250)),
+        )
+        assertEquals(ScreenKind.TREE, page.kind)
+    }
+
+    @Test fun aHiddenWindowIsBlankedNotCanvas() {
+        // Secure window: the tree is withheld, which is a different instruction from "nothing to drive".
+        val screen = formatted(windows = listOf(UiWindow(1, WindowKind.APP, "example.app", null, Box(0, 0, 400, 800), null)), hidden = true)
+        assertEquals(ScreenKind.BLANKED, screen.kind)
+        assertTrue(screen.text.contains(ScreenFormat.BLANKED_NOTE))
+    }
+}

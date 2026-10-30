@@ -1,5 +1,6 @@
 package io.github.ccch1mneyyy.dsh_app.phone.a11y
 
+import io.github.ccch1mneyyy.dsh_app.phone.ScreenKind
 import io.github.ccch1mneyyy.dsh_app.phone.SensitiveWords
 
 // The compact screen text the model reads:
@@ -35,6 +36,8 @@ class ScreenInput(
     val previousKeys: Set<String>? = null,
     /** Extra lines under the header (protected page, secure window …). */
     val notes: List<String> = emptyList(),
+    /** The main window refused to give its tree (secure window title only): see [ScreenFormat.classify]. */
+    val hidden: Boolean = false,
     val charBudget: Int = 3000,
 )
 
@@ -84,6 +87,8 @@ class FormattedScreen(
     val keys: Set<String>,
     /** Elements left out by the page budget. */
     val hidden: Int,
+    /** Page shape: whether this page is drivable as a control tree at all. */
+    val kind: ScreenKind = ScreenKind.TREE,
 ) {
     fun element(id: Int): ScreenElement? = elements.getOrNull(id - 1)?.takeIf { it.id == id } ?: elements.firstOrNull { it.id == id }
 }
@@ -112,6 +117,47 @@ object ScreenFormat {
     // l10n:keep model screen format
     const val POOR_TREE_NOTE = "提示：本页文字信息不足（游戏、自绘界面、部分小程序常见）。能看图的模型可以 screen 加 image 看标号截图；否则请用户协助。"
 
+    // l10n:keep model screen format
+    const val CANVAS_NOTE = "提示：本页没有可用的控件（游戏、自绘 canvas、加密混淆页常见）。DSH 已自动附上截图，图上没有编号，请直接看画面；要点击时用 tap_xy，坐标是 0-1000 归一化（0,0=截图左上角，1000,1000=截图右下角），不要用像素、不要用百分数。目标不在屏上就换一屏再试，或 handoff 交给用户。"
+
+    // l10n:keep model screen format
+    const val BLANKED_NOTE = "提示：这个页面不向 DSH 开放控件内容（加密或敏感页）。可以看截图，点击同样用 tap_xy 的 0-1000 归一化坐标；这类页面 DSH 验证不了点击结果，点了没变化就 handoff 交给用户。"
+
+    /**
+     * Page shape from the tree alone (no screenshot), because the question that matters is
+     * "is there anything to drive", not "is the tree empty".
+     *
+     * Ported from the GAgent field rules, both directions of mis-judgement included: a single
+     * non-clickable "Game view" node is a canvas (the old empty-tree test missed it, so games
+     * were never given the screenshot), while a poster / skeleton screen / WebView first frame
+     * that still has its controls is a tree (the old test flagged it and scared the model off
+     * perfectly good elements). [hidden] — the main window refused to give its tree — is
+     * [ScreenKind.BLANKED]: the page is there, its contents are not.
+     *
+     * The test is "is there anything to drive", not "is there any text": GAgent counted clicks
+     * only, dsh-go counts tap / long-press / scroll / type, because an obfuscated page keeps its
+     * random-character text (textCount > 0) while offering nothing drivable — exactly the pages
+     * that used to fall through to "read the garbage and guess coordinates". Text-only pages
+     * (loading screens, plain articles with a scrollable root) come along on purpose: with zero
+     * drivable nodes every action is a tap_xy anyway, so they get the screenshot too.
+     */
+    fun classify(windows: List<UiWindow>, hidden: Boolean): ScreenKind {
+        val roots = windows.mapNotNull { it.root }
+        if (hidden) return ScreenKind.BLANKED
+        if (roots.isEmpty()) return ScreenKind.UNKNOWN
+        var drivable = 0
+        for (root in roots) drivable += countDrivable(root)
+        return if (drivable == 0) ScreenKind.CANVAS else ScreenKind.TREE
+    }
+
+    // A node the model can act on through the element tools: tap, long-press, scroll or type.
+    // Pure containers (no text, no description, not drivable) are the tree's skeleton and never
+    // make a page drivable on their own — without that, 王者荣耀's single "Game view" node would
+    // hide behind the window root and look like a two-node page.
+    private fun countDrivable(node: UiNode): Int =
+        (if (node.clickable || node.longClickable || node.scrollable || node.editable) 1 else 0) +
+            node.children.sumOf(::countDrivable)
+
     fun format(input: ScreenInput): FormattedScreen {
         val textNodes = input.windows.sumOf { w -> w.root?.let(::countText) ?: 0 }
         val lines = mutableListOf<Line>()
@@ -131,7 +177,14 @@ object ScreenFormat {
         val header = StringBuilder()
         val notes = input.notes.toMutableList()
         val poor = textNodes < POOR_TREE && windows.isNotEmpty()
-        if (poor) notes += POOR_TREE_NOTE
+        val kind = classify(input.windows, input.hidden)
+        // The kind note replaces the poor-tree note instead of stacking on it: a canvas page
+        // needs one clear instruction (look, then tap_xy in 0-1000), not two overlapping hints.
+        when (kind) {
+            ScreenKind.CANVAS -> notes += CANVAS_NOTE
+            ScreenKind.BLANKED -> notes += BLANKED_NOTE
+            else -> if (poor) notes += POOR_TREE_NOTE
+        }
 
         // Page budget: keep the 底部 zone (navigation) and cut the middle with a hint.
         val headerLen = 40 + (input.appLabel?.length ?: 0) + notes.sumOf { it.length + 1 }
@@ -188,7 +241,7 @@ object ScreenFormat {
             val parentItem = item.parent
             item.toElement(id, listItem?.let { ids[it] }, parentItem?.let { ids[it] }, keyOf[item]!!)
         }
-        return FormattedScreen(header.toString(), elements, textNodes, poor, keyOf.values.toSet(), hidden)
+        return FormattedScreen(header.toString(), elements, textNodes, poor, keyOf.values.toSet(), hidden, kind)
     }
 
     /** All elements of [windows] (no budget, no ids), for matching a fingerprint or reading a list. */

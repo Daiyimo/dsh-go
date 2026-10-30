@@ -141,4 +141,36 @@ class SafetyGateTest {
         assertNull(secure.image)
         assertFalse(secure.text.contains("ordinary"))
     }
+
+    @Test fun canvasTapsSkipConfirmationOnlyForAppsAlreadyApprovedForTheTask() {
+        val tasks = PhoneTasks().apply { begin(); approve("example.app") }
+        val gate = SafetyGate({ PhonePolicies(confirmMode = ConfirmMode.TASK) }, tasks, { null })
+        val t = target()
+        // Canvas/blanked page: the app was approved for this task, so coordinates may be tapped freely.
+        assertSame(SafetyGate.Verdict.Allow, gate.checkWrite(WriteKind.TAP_XY, t, "example.app", "Example", needsVision = true))
+        // An ordinary page keeps the coordinate-tap confirmation: needsVision is about the page, not a blanket waiver.
+        val confirm = gate.checkWrite(WriteKind.TAP_XY, t, "example.app", "Example") as SafetyGate.Verdict.Confirm
+        assertEquals("tap_xy", confirm.reason)
+        // Other kinds are untouched.
+        assertSame(SafetyGate.Verdict.Allow, gate.checkWrite(WriteKind.TAP, t, "example.app", "Example", needsVision = true))
+    }
+
+    @Test fun askModeStillConfirmsEveryCanvasTap() {
+        val tasks = PhoneTasks().apply { begin(); approve("example.app") }
+        val gate = SafetyGate({ PhonePolicies(confirmMode = ConfirmMode.ASK) }, tasks, { null })
+        val confirm = gate.checkWrite(WriteKind.TAP_XY, target(), "example.app", "Example", needsVision = true) as SafetyGate.Verdict.Confirm
+        assertEquals("tap_xy", confirm.reason)
+    }
+
+    @Test fun anUnapprovedAppStillConfirmsCanvasTapsAndDeniedPagesStillRefuse() {
+        val fresh = PhoneTasks().apply { begin() }
+        val gate = SafetyGate({ PhonePolicies(confirmMode = ConfirmMode.TASK) }, fresh, { null })
+        // The reason is "tap_xy", not "first-in-app": the gate deliberately reports the coordinate
+        // tap first so the confirmation dialog names the point; either way the app is not approved.
+        val confirm = gate.checkWrite(WriteKind.TAP_XY, target(), "example.app", "Example", needsVision = true) as SafetyGate.Verdict.Confirm
+        assertEquals("tap_xy", confirm.reason)
+        val approved = PhoneTasks().apply { begin(); approve("com.icbc") }
+        val denyGate = SafetyGate({ PhonePolicies(confirmMode = ConfirmMode.TASK) }, approved, { null })
+        assertEquals("deny-list", (denyGate.checkWrite(WriteKind.TAP_XY, target(), "com.icbc", null, needsVision = true) as SafetyGate.Verdict.Refuse).rule)
+    }
 }

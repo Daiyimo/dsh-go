@@ -223,6 +223,12 @@ class SafetyGate(
         typed: String? = null,
         submit: Boolean = false,
         point: Pair<Int, Int>? = null,
+        /**
+         * The page is canvas-like (no usable elements), so a point tap is the only way to act.
+         * Lets the gate skip the per-tap confirmation inside 本任务免确认 for an app this task
+         * already approved; every hard rule above still applies, and ASK mode still asks.
+         */
+        needsVision: Boolean = false,
     ): Verdict {
         val app = labelOf(pkg, appLabel)
         if (kind == WriteKind.KEY) return Verdict.Allow // back / home / recents / shade: always a way out
@@ -242,6 +248,13 @@ class SafetyGate(
         }
         // Everything above is a hard rule (or one the person lifted); everything below only asks.
         if (waived(p)) return Verdict.Allow
+        // canvas / blanked page: point taps are the only way in, and asking once per coordinate
+        // makes the page unworkable (the model stops after every tap to wait for a person). In
+        // 本任务免确认, for an app this task already approved, let the taps through. ASK keeps
+        // asking every time, and a deny-listed / system / secret page never reaches here.
+        if (needsVision && kind == WriteKind.TAP_XY && p.confirmMode == ConfirmMode.TASK && pkg != null && tasks.isApproved(pkg)) {
+            return Verdict.Allow
+        }
         val everyWrite = pkg != null && pkg in p.confirmEveryWritePackages
         val firstInApp = !everyWrite && (pkg == null || !tasks.isApproved(pkg))
         val word = if (kind == WriteKind.TAP || kind == WriteKind.LONG_TAP) SafetyRules.sensitiveWord(target?.label, target?.viewId) else null

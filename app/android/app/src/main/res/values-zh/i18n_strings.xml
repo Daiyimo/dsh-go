@@ -144,7 +144,7 @@
     <string name="phone_confirm_long_tap">在「%1$s」长按「%2$s」</string>
     <string name="phone_confirm_type">在「%1$s」的「%2$s」输入：\"%3$s\"</string>
     <string name="phone_confirm_submit">，然后发送 / 提交</string>
-    <string name="phone_confirm_tap_xy">在「%1$s」点截图上的位置 (%2$s, %3$s)</string>
+    <string name="phone_confirm_tap_xy">在「%1$s」点截图上的刻度位置 (%2$s, %3$s)</string>
     <string name="phone_confirm_scroll">在「%1$s」滚动</string>
     <string name="phone_confirm_key">按系统键</string>
     <string name="phone_current_app">当前应用</string>

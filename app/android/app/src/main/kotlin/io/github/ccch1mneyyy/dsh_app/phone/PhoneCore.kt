@@ -1,5 +1,6 @@
 package io.github.ccch1mneyyy.dsh_app.phone
 
+import io.github.ccch1mneyyy.dsh_app.phone.a11y.ScreenGeom
 import java.time.ZoneId
 
 enum class A11yState { CONNECTED, ENABLED_NOT_CONNECTED, DISABLED }
@@ -476,8 +477,12 @@ class PhoneCore(
             else -> {
                 val x = a.int("x")
                 val y = a.int("y")
+                // 0-1000 归一化契约: 越界在这里就拦掉, 并顺手把单位说清楚, 别让像素坐标一路点到
+                // 屏幕外(那是坐标点击最贵的故障: 不报错, 只是点不到)。
                 // l10n:keep agent tool result
-                if (x == null || y == null || x < 0 || y < 0) return Out("tap_xy 需要非负整数 x 和 y。", error = true)
+                if (x == null || y == null || x !in 0..ScreenGeom.NORM || y !in 0..ScreenGeom.NORM) {
+                    return Out("tap_xy 的 x/y 是 0-1000 归一化坐标（0,0=截图左上角，1000,1000=截图右下角），收到 ($x, $y) 不对：不要用像素，不要用百分数。", error = true)
+                }
                 point = x to y
                 action = PhoneAction.TapXY(sid, x, y)
                 kind = WriteKind.TAP_XY
@@ -503,7 +508,10 @@ class PhoneCore(
         val appLabel = target?.appLabel
         val app = appLabel ?: pkg
         val owner = tasks.activeOwner() ?: return stoppedOut(summary)
-        val verdict = safety.checkWrite(kind, target, pkg, appLabel, typed, submit, point)
+        // canvas 类页面没有元素可点, 坐标是唯一操作方式; 告诉门, 它在任务模式里可以不再逐次问。
+        val kind0 = driver.screenKind()
+        val needsVision = kind == WriteKind.TAP_XY && (kind0 == ScreenKind.CANVAS || kind0 == ScreenKind.BLANKED)
+        val verdict = safety.checkWrite(kind, target, pkg, appLabel, typed, submit, point, needsVision)
         val decision = when (val r = safety.resolve(verdict, scope)) {
             is SafetyGate.Result.No -> return Out(r.message, error = true, app = app, summary = summary, decision = r.decision)
             is SafetyGate.Result.Go -> r.decision
