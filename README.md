@@ -306,7 +306,7 @@ DSH_BETA_TOKEN_FILE= bash tooling/build-apk.sh --dry-run -f all
 <!-- Telegram：链接待定，拿到后加一行 -->
 
 <p align="center">
-  <a href="https://qm.qq.com/q/OEy2RqZnqY"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/qr-qq-zh-dark.webp"><img src="docs/assets/qr-qq-zh-light.webp" width="300" alt="QQ 群 DSH-Go！！，群号 1132118290"></picture></a>&emsp;&emsp;<picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/qr-wechat-zh-dark.webp"><img src="docs/assets/qr-wechat-zh-light.webp" width="300" alt="微信群 小C的AI交流小屋（DSH-Go）"></picture>
+  <a href="https://qm.qq.com/q/OEy2RqZnqY"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/qr-qq-zh-dark.webp"><img src="docs/assets/qr-qq-zh-light.webp" width="300" alt="QQ 群 DSH-Go！！，群号 1132118290"></picture></a>&emsp;&emsp;<picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/qr-wechat-zh-dark.webp"><img src="docs/assets/qr-wechat-zh-light.webp" width="300" alt="微信群 DSHGo 2群"></picture>
 </p>
 
 <p align="center">
