@@ -10,7 +10,9 @@ import '../../plugins/native/native_state.dart';
 import '../../plugins/seams/seams.dart' show PluginSeat, SeatPlacement, Slots, seatPlanProvider;
 import '../../share_code/plugin_share.dart' show sharedPluginFromBundle;
 import '../../state/plugin_config/plugin_config_state.dart';
+import '../../links/plugin_links.dart' show marketPluginLink;
 import '../../state/plugins_state.dart';
+import '../../update/version.dart';
 import '../common/app_sheet.dart';
 import '../common/list_page_row.dart';
 import '../common/sheet_navigator.dart';
@@ -19,6 +21,7 @@ import '../share_code/plugin_share_sheet.dart';
 import '../theme/app_icons.dart';
 import '../theme/theme.dart';
 import 'config/plugin_config_entries.dart';
+import 'market_widgets.dart';
 import 'plugin_reload_action.dart';
 import 'native/native_plugin_section.dart';
 import 'plugin_actions.dart';
@@ -89,31 +92,23 @@ class MarketPluginSheet extends ConsumerWidget {
 
   final MarketEntry entry;
 
-  PluginInstallRequest _request({bool replace = false}) {
-    final plugin = entry.plugin;
-    final target = plugin.latest.installTarget(plugin.name);
-    return PluginInstallRequest(
-      name: plugin.name,
-      spec: target.spec,
-      registry: target.registry,
-      title: plugin.displayTitle(),
-      published: plugin.latest.published,
-      replaceInstalled: replace,
-    );
-  }
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = context.l10n;
     final theme = Theme.of(context);
+    final locale = Localizations.localeOf(context).languageCode;
     final plugin = entry.plugin;
+    final listing = entry.listing;
     final latest = plugin.latest;
     final host = ref.watch(pluginHostProvider);
     final bundles = ref.watch(installedPluginsProvider).value;
     final status = marketInstallStatus(plugin, bundles);
     final job = ref.watch(pluginInstallsProvider.select((jobs) => jobs[plugin.name]));
     final installed = bundles?.where((b) => b.name == plugin.name).firstOrNull;
-    final description = plugin.displayDescription();
+    final needsApp = marketNeedsApp(entry, ref.watch(appVersionProvider));
+    final blocked = marketBlockedInstall(entry, installed);
+    final title = entry.title(locale);
+    final description = entry.summary(locale);
 
     Widget? jobView;
     if (job != null && job.isActive) {
@@ -134,7 +129,18 @@ class MarketPluginSheet extends ConsumerWidget {
         SheetHeader(
           l10n.hubPluginDetails,
           actions: [
-            _ShareKey(onPressed: () => unawaited(shareMarketPlugin(context, plugin, card: entry))),
+            _ShareKey(
+              onPressed: () => unawaited(
+                shareMarketPlugin(
+                  context,
+                  plugin,
+                  card: entry,
+                  // The official market's page for it (§6); the share-code
+                  // link for plugins only dshfind lists.
+                  webLink: listing == null ? null : marketPluginLink(plugin.name),
+                ),
+              ),
+            ),
           ],
         ),
         Expanded(
@@ -142,10 +148,13 @@ class MarketPluginSheet extends ConsumerWidget {
             padding: const EdgeInsets.fromLTRB(20, 4, 20, 16),
             children: [
               PluginHero(
-                avatar: PluginAvatar(name: plugin.name, title: plugin.displayTitle(), icon: plugin.icon, size: 64),
-                title: plugin.displayTitle(),
+                avatar: PluginAvatar(name: plugin.name, title: title, icon: plugin.icon, size: 64),
+                title: title,
                 subtitle: [?plugin.author, ?entry.categoryTitle].join(' · '),
                 badges: [
+                  ...marketEntryBadges(context, entry),
+                  if (status == MarketInstallStatus.updateAvailable)
+                    PluginBadge(l10n.marketUpdateAvailable, tone: PluginBadgeTone.official),
                   if (entry.featured) PluginBadge(l10n.hubPluginFeatured, tone: PluginBadgeTone.featured),
                   if (entry.webOnly) PluginBadge(l10n.hubPluginWebOnly),
                 ],
@@ -159,20 +168,49 @@ class MarketPluginSheet extends ConsumerWidget {
                 (latest.version, l10n.commonVersion),
                 (_date(latest.published), l10n.commonUpdate),
               ]),
+              if (blocked) ...[
+                const SizedBox(height: 16),
+                MarketBlockedBox(
+                  version: installed!.version!,
+                  onUninstall: host?.canInstall ?? false
+                      ? () => unawaited(removePluginBundle(context, installed, ownerRoute: ownerRoute))
+                      : null,
+                ),
+              ],
               if (jobView != null) ...[const SizedBox(height: 16), jobView],
+              if (listing != null && listing.screenshots.isNotEmpty) ...[
+                const SizedBox(height: 20),
+                MarketScreenshots(urls: listing.screenshots),
+              ],
               if (description != null) ...[
                 const SizedBox(height: 16),
                 SelectableText(description, style: theme.textTheme.bodyMedium?.copyWith(height: 1.7)),
               ],
+              if (listing != null) ...[const SizedBox(height: 24), MarketRiskCard(listing: listing)],
               const SizedBox(height: 20),
               ListPageCard(
                 margin: EdgeInsets.zero,
                 children: [
                   if (installed?.version case final version?)
                     ListPageRow(title: l10n.hubPluginInstalledVersion, value: version),
+                  if (listing != null) ListPageRow(title: l10n.marketPinnedVersion, value: latest.version),
                   ListPageRow(title: l10n.hubPluginSource, value: source),
                   if (latest.enginesDsh case final range?) ListPageRow(title: l10n.hubPluginRequiresDsh, value: range),
+                  if (listing?.minApp case final min?) ListPageRow(title: l10n.marketRequiresApp, value: min.name),
                   ListPageRow(title: l10n.hubPluginPackageName, value: plugin.name),
+                  // The pinned version's own page: what the checks looked at.
+                  if (listing != null && latest.source is MarketNpmSource)
+                    ListPageRow(
+                      title: 'npm',
+                      meta: 'npmjs.com',
+                      chevron: true,
+                      onTap: () => unawaited(
+                        _openLink(
+                          context,
+                          'https://www.npmjs.com/package/${plugin.name}/v/${Uri.encodeComponent(latest.version)}',
+                        ),
+                      ),
+                    ),
                   if (plugin.homepage case final url?)
                     ListPageRow(
                       title: l10n.hubPluginHomepage,
@@ -198,7 +236,7 @@ class MarketPluginSheet extends ConsumerWidget {
           top: false,
           child: Padding(
             padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
-            child: _primaryAction(context, host, status, job, installed),
+            child: _primaryAction(context, host, status, job, installed, needsApp),
           ),
         ),
       ],
@@ -211,6 +249,7 @@ class MarketPluginSheet extends ConsumerWidget {
     MarketInstallStatus status,
     PluginInstallJob? job,
     PluginBundle? installed,
+    AppVersion? needsApp,
   ) {
     final l10n = context.l10n;
     final plugin = entry.plugin;
@@ -241,6 +280,22 @@ class MarketPluginSheet extends ConsumerWidget {
     // Nothing to install or update from here: manage what is there.
     if (manageable && (status == MarketInstallStatus.installed || host.safeMode || !host.canInstall)) {
       return manage();
+    }
+    // Listed, but this app is too old for it: shown, not installed.
+    if (needsApp != null) {
+      final reason = FilledButton(
+        style: FilledButton.styleFrom(minimumSize: size),
+        onPressed: null,
+        child: Text(l10n.marketNeedsApp(needsApp.name), maxLines: 1, overflow: TextOverflow.ellipsis),
+      );
+      if (!manageable) return reason;
+      return Row(
+        spacing: 12,
+        children: [
+          Expanded(child: manage()),
+          Expanded(child: reason),
+        ],
+      );
     }
     if (host.safeMode) {
       return FilledButton(
@@ -281,18 +336,7 @@ class MarketPluginSheet extends ConsumerWidget {
       case MarketInstallStatus.updateAvailable:
         final update = FilledButton(
           style: FilledButton.styleFrom(minimumSize: size),
-          onPressed: () async {
-            final ok = await confirmPluginUpdate(
-              context,
-              name: plugin.displayTitle(),
-              bundleName: plugin.name,
-              from: installed?.version,
-              to: plugin.latest.version,
-            );
-            if (ok && context.mounted) {
-              unawaited(runPluginInstall(context, _request(replace: true)));
-            }
-          },
+          onPressed: () => unawaited(updateMarketEntry(context, entry, from: installed?.version)),
           child: Text(l10n.hubPluginUpdateTo(plugin.latest.version)),
         );
         if (!manageable) return update;
@@ -314,7 +358,7 @@ class MarketPluginSheet extends ConsumerWidget {
         }
         return FilledButton(
           style: FilledButton.styleFrom(minimumSize: size),
-          onPressed: () => unawaited(runPluginInstall(context, _request())),
+          onPressed: () => unawaited(installMarketEntry(context, entry)),
           child: Text(
             failure != null && failure.retryable ? l10n.hubPluginRetryInstall : l10n.hubPluginInstallOn(host.label),
           ),
@@ -356,6 +400,13 @@ class BundleSheet extends ConsumerWidget {
     // Local installs can't be shared; a market entry adds the picture card.
     final shareable = !gone && sharedPluginFromBundle(bundle) != null;
     final market = shareable ? ref.watch(marketCatalogProvider.select((c) => c.value?.byName[bundle.name])) : null;
+    // The official market's entry: a newer pinned version, or this one withdrawn.
+    final listed = gone ? null : ref.watch(officialMarketProvider.select((c) => c.value?.byName[bundle.name]));
+    final update =
+        listed != null && marketInstallStatus(listed.plugin, [bundle]) == MarketInstallStatus.updateAvailable
+        ? listed
+        : null;
+    final blocked = listed != null && marketBlockedInstall(listed, bundle);
     // The plugin's name for people (its native title, else the bundle's);
     // the package name stays as the quiet line under it.
     final display = ref.watch(nativePluginTitleProvider(bundle.name));
@@ -378,8 +429,16 @@ class BundleSheet extends ConsumerWidget {
                 title: display,
                 subtitle: display == bundle.name ? '' : bundle.name,
                 monoSubtitle: true,
-                badges: [if (bundle.official) PluginBadge(l10n.hubPluginOfficial, tone: PluginBadgeTone.official)],
+                badges: [
+                  if (bundle.official) PluginBadge(l10n.hubPluginOfficial, tone: PluginBadgeTone.official),
+                  if (update != null) PluginBadge(l10n.marketUpdateAvailable, tone: PluginBadgeTone.official),
+                ],
               ),
+              if (blocked) ...[
+                const SizedBox(height: 16),
+                // 卸载 is this sheet's own button.
+                MarketBlockedBox(version: bundle.version!),
+              ],
               if (summary != null) ...[
                 const SizedBox(height: 16),
                 SelectableText(summary, style: theme.textTheme.bodyMedium?.copyWith(height: 1.7)),
@@ -419,6 +478,13 @@ class BundleSheet extends ConsumerWidget {
                 margin: EdgeInsets.zero,
                 children: [
                   if (bundle.version case final version?) ListPageRow(title: l10n.commonVersion, value: version),
+                  if (update != null)
+                    ListPageRow(
+                      title: l10n.marketUpdateAvailable,
+                      value: update.plugin.latest.version,
+                      chevron: true,
+                      onTap: () => unawaited(showMarketPluginSheet(context, update)),
+                    ),
                   if (bundle.source case final source?) ListPageRow(title: l10n.hubPluginSource, value: source),
                   if (bundle.rows.isNotEmpty)
                     ListPageRow(

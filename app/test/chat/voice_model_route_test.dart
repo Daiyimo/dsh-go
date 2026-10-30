@@ -22,6 +22,7 @@ void main() {
     DshClient client, {
     VoiceMode mode = VoiceMode.auto,
     bool modelReady = false,
+    String? requiredProviderId,
   }) {
     final voice = VoiceInputController(
       input: input,
@@ -29,6 +30,7 @@ void main() {
       client: () => client,
       mode: () async => mode,
       modelReady: () => modelReady,
+      requiredProviderId: requiredProviderId,
       observeLifecycle: false,
     );
     addTearDown(voice.dispose);
@@ -122,5 +124,49 @@ void main() {
     expect(bridge.calls, isNot(contains('recognizer')));
     expect(messages.single.change, isTrue);
     expect(messages.single.text, '请先在语音设置里下载语音模型');
+  });
+  testWidgets('pet fallback pins the offline provider despite a cloud default', (tester) async {
+    final catalog = readySpeechCatalog();
+    catalog['selection'] = {'providerId': 'cloud', 'language': 'auto'};
+    (catalog['providers'] as List).add({'id': 'cloud', 'name': 'Cloud', 'location': 'cloud'});
+    final carrier = FakeRpcCarrier({
+      'speech/catalog': (_) => catalog,
+      'speech/transcribe': (_) => {'text': 'recognized offline', 'audioSeconds': 1},
+    });
+    final bridge = FakeVoiceBridge()..recording = silentWav(1);
+    input.text = 'existing draft ';
+    input.selection = TextSelection.collapsed(offset: input.text.length);
+    final voice = controller(
+      bridge,
+      DshClient.withCarrier(carrier),
+      mode: VoiceMode.engine,
+      requiredProviderId: 'sensevoice-local',
+    );
+    await voice.start();
+    await settleVoice(tester);
+    await voice.stop();
+    await settleVoice(tester);
+    expect((carrier.argsOf('speech/transcribe').single['request'] as Map)['providerId'], 'sensevoice-local');
+    expect(input.text, contains('existing draft'));
+    expect(input.text, contains('recognized offline'));
+    expect(bridge.calls, isNot(contains('recognizer')));
+  });
+
+  testWidgets('pet fallback refuses a provider falsely labelled as cloud', (tester) async {
+    final catalog = readySpeechCatalog();
+    ((catalog['providers'] as List).single as Map)['location'] = 'cloud';
+    final carrier = FakeRpcCarrier({'speech/catalog': (_) => catalog});
+    final bridge = FakeVoiceBridge();
+    final voice = controller(
+      bridge,
+      DshClient.withCarrier(carrier),
+      mode: VoiceMode.engine,
+      requiredProviderId: 'sensevoice-local',
+    );
+    await voice.start();
+    await settleVoice(tester);
+    expect(bridge.calls.where((c) => c.startsWith('recorder:')), isEmpty);
+    expect(bridge.calls, isNot(contains('recognizer')));
+    expect(voice.phase, VoicePhase.idle);
   });
 }

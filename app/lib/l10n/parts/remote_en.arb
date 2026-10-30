@@ -2,6 +2,8 @@
   "remoteStartupSection": "On launch",
   "remoteAutoConnectOnStartup": "Connect to the last host",
   "remoteAutoConnectOnStartupHint": "When off, start on this phone",
+  "remoteDirect": "Prefer direct (P2P)",
+  "remoteDirectHint": "Skip the Server's relay when a direct path works",
   "remoteStepConnect": "Connect to server",
   "remoteStepVerifyHostKey": "Verify host fingerprint",
   "remoteStepStartDsh": "Start DSH",
@@ -247,6 +249,17 @@
   "remoteReconnectingEllipsis": "Reconnecting…",
   "remoteReconnectReason": "Reconnecting · {reason}",
   "remoteConnectedEncrypted": "Connected · End-to-end encrypted",
+  "remoteConnectedVia": "Connected · {path} · End-to-end encrypted",
+  "@remoteConnectedVia": {
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+  "remotePathDirect": "Direct",
+  "remotePathTurn": "TURN",
+  "remotePathRelay": "Relay",
   "remoteConnectedSsh": "Connected · SSH {address}",
   "remoteErrRefreshHosts": "Couldn’t refresh host list",
   "remoteSwitchWarning": "Connects to one host at a time. Switching disconnects the previous host.",

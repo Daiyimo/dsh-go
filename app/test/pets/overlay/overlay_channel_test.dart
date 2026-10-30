@@ -1,6 +1,9 @@
 // The Dart side of the floating pet: what goes over `dsh/pet_overlay`, how the
 // status reads, and the switch's permission flow (docs/design/pets.md §6.4).
 
+import 'dart:async';
+
+import 'package:flutter/services.dart';
 import 'package:dsh_app/pets/overlay_channel.dart';
 import 'package:dsh_app/pets/pet_state.dart';
 import 'package:dsh_app/state/hosts_state.dart';
@@ -47,6 +50,19 @@ void main() {
       expect(bubble['text'], '修复登录 · 做完了');
       expect(bubble['untilMs'], 1729850000000);
       expect(bubble['host'], HostRef.local.encode());
+    });
+
+    test('native action calls share the status channel and receive their result', () async {
+      final channel = PetOverlayChannel();
+      channel.setActionHandler((call) async => {'received': call.method, 'text': (call.arguments as Map)['text']});
+      final response = Completer<Object?>();
+      await TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.handlePlatformMessage(
+        channel.channel.name,
+        channel.channel.codec.encodeMethodCall(const MethodCall('ask', {'text': 'draft'})),
+        (data) => response.complete(channel.channel.codec.decodeEnvelope(data!)),
+      );
+      expect(await response.future, {'received': 'ask', 'text': 'draft'});
+      channel.setActionHandler(null);
     });
 
     test('reads the status map', () async {

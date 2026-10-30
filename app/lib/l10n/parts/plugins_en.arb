@@ -174,7 +174,7 @@
   "pluginsInstallThisPhone": "Install to: This phone",
   "pluginsInstallHost": "Install to: {host}",
   "pluginsOfflineDescription": "Installed plugins appear when the engine is running. You can browse the market now.",
-  "pluginsIconChanged": "Icon changed. Your home screen updates in a few seconds.",
+  "pluginsIconChanged": "Icon selected. Return to your home screen to see the change.",
   "pluginsIconChangeFailed": "Couldn’t change the icon. Try again later.",
   "pluginsTheme": "Theme",
   "pluginsAppearance": "Appearance",

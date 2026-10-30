@@ -9,7 +9,7 @@ import org.junit.Test
 class OverlayMachineTest {
     private val t0 = 1_000_000L
     private val collapse = OverlayMachine.IDLE_COLLAPSE_MS
-    private val tuck = OverlayMachine.TUCK_AFTER_MS
+    private val dim = OverlayMachine.DIM_AFTER_MS
 
     private fun push(state: String, active: Boolean = state != "idle" && state != "sleeping", bubble: PetBubble? = null, pack: String? = "whale-girl") =
         PetPush(pack, state, if (state == "working") 1 else 0, bubble, "s1", null, active, "medium")
@@ -40,9 +40,9 @@ class OverlayMachineTest {
         m.onForeground(false, t0 + 10)
         val d = m.decide(t0 + 20)
         assertEquals(Visibility.SHOWN, d.visibility)
-        assertFalse(d.tucked)
-        // Active: the only timer is the tuck.
-        assertEquals(t0 + 20 + tuck, d.wakeAt)
+        assertFalse(d.dimmed)
+        // Active: the only timer is the dim.
+        assertEquals(t0 + 20 + dim, d.wakeAt)
     }
 
     @Test fun leavingTheAppWithNothingGoingOnShowsNothing() {
@@ -65,11 +65,11 @@ class OverlayMachineTest {
         val m = ready()
         m.onPush(push("attention", active = true), t0)
         m.onPush(push("idle"), t0 + 1)
-        // First the tuck, ten seconds after it came out…
-        assertEquals(t0 + 2 + tuck, m.decide(t0 + 2).wakeAt)
-        // …then, tucked, the collapse five minutes after the last activity.
-        val d = m.decide(t0 + 2 + tuck)
-        assertTrue(d.tucked)
+        // First the dim, ten seconds after it came out…
+        assertEquals(t0 + 2 + dim, m.decide(t0 + 2).wakeAt)
+        // …then, dimmed, the collapse five minutes after the last activity.
+        val d = m.decide(t0 + 2 + dim)
+        assertTrue(d.dimmed)
         assertEquals(t0 + collapse, d.wakeAt)
     }
 
@@ -141,31 +141,39 @@ class OverlayMachineTest {
         }
     }
 
-    @Test fun tucksTenSecondsAfterTheLastTouchOrCall() {
+    @Test fun dimsTenSecondsAfterTheLastTouchOrCall() {
         val m = ready()
         m.onPush(push("working"), t0)
-        assertFalse(m.decide(t0).tucked)
-        assertFalse(m.decide(t0 + tuck - 1).tucked)
-        assertTrue(m.decide(t0 + tuck).tucked)
-        // A touch brings it out again.
-        m.onTouch(t0 + tuck + 100)
-        assertFalse(m.decide(t0 + tuck + 200).tucked)
+        assertFalse(m.decide(t0).dimmed)
+        assertFalse(m.decide(t0 + dim - 1).dimmed)
+        // Dimmed, it is still out (the overlay keeps it whole where it docks, at 60 %).
+        val d = m.decide(t0 + dim)
+        assertTrue(d.dimmed)
+        assertEquals(Visibility.SHOWN, d.visibility)
+        assertEquals(0.6f, OverlayMachine.DIM_ALPHA, 0f)
+        // A touch brings it back to full opacity.
+        m.onTouch(t0 + dim + 100)
+        assertFalse(m.decide(t0 + dim + 200).dimmed)
         // A result or a request does too; a busy-state change doesn't.
-        assertTrue(m.decide(t0 + 3 * tuck).tucked)
-        m.onPush(push("thinking"), t0 + 3 * tuck)
-        assertTrue(m.decide(t0 + 3 * tuck + 1).tucked)
-        m.onPush(push("notification"), t0 + 3 * tuck + 2)
-        assertFalse(m.decide(t0 + 3 * tuck + 3).tucked)
+        assertTrue(m.decide(t0 + 3 * dim).dimmed)
+        m.onPush(push("thinking"), t0 + 3 * dim)
+        assertTrue(m.decide(t0 + 3 * dim + 1).dimmed)
+        m.onPush(push("notification"), t0 + 3 * dim + 2)
+        assertFalse(m.decide(t0 + 3 * dim + 3).dimmed)
+        // So does a new bubble.
+        assertTrue(m.decide(t0 + 5 * dim).dimmed)
+        m.onPush(push("idle", bubble = bubble("b2", t0 + 5 * dim + 4_000)), t0 + 5 * dim)
+        assertFalse(m.decide(t0 + 5 * dim + 1).dimmed)
     }
 
-    @Test fun aBubbleKeepsItOutAndUntucked() {
+    @Test fun aBubbleKeepsItOutAndLit() {
         val m = ready()
         m.onPush(push("idle", bubble = bubble("b1", t0 + 4_000)), t0)
         val d = m.decide(t0)
         assertEquals(Visibility.SHOWN, d.visibility)
         assertEquals("b1", d.bubble?.id)
         assertEquals(t0 + 4_000, d.wakeAt)
-        assertFalse(m.decide(t0 + 3_999).tucked)
+        assertFalse(m.decide(t0 + 3_999).dimmed)
         // Gone at its time.
         assertNull(m.decide(t0 + 4_000).bubble)
     }
@@ -201,14 +209,14 @@ class OverlayMachineTest {
         assertEquals(Visibility.HIDDEN, m.decide(t0 + 3_001).visibility)
     }
 
-    @Test fun reappearingStartsUntucked() {
+    @Test fun reappearingStartsLit() {
         val m = ready()
         m.onPush(push("working"), t0)
         m.decide(t0)
-        assertTrue(m.decide(t0 + tuck).tucked)
-        m.onForeground(true, t0 + tuck + 1)
-        m.decide(t0 + tuck + 2)
-        m.onForeground(false, t0 + tuck + 3)
-        assertFalse(m.decide(t0 + tuck + 4).tucked)
+        assertTrue(m.decide(t0 + dim).dimmed)
+        m.onForeground(true, t0 + dim + 1)
+        m.decide(t0 + dim + 2)
+        m.onForeground(false, t0 + dim + 3)
+        assertFalse(m.decide(t0 + dim + 4).dimmed)
     }
 }

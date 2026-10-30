@@ -133,6 +133,13 @@ class PetOverlayChannel {
   final _statusEvents = StreamController<PetOverlayStatus>.broadcast();
   final _settings = StreamController<void>.broadcast();
   bool _listening = false;
+  Future<Object?> Function(MethodCall)? _actions;
+  Future<String?> Function(String text)? voiceFallback;
+
+  void setActionHandler(Future<Object?> Function(MethodCall)? handler) {
+    _actions = handler;
+    _listen();
+  }
 
   /// Sends [state] to the overlay; nothing happens without the native side.
   Future<void> push(PetState state) async {
@@ -186,8 +193,14 @@ class PetOverlayChannel {
         case 'status':
           final args = call.arguments;
           if (args is Map) _statusEvents.add(PetOverlayStatus.fromMap(args));
+        case 'voiceFallback':
+          final args = call.arguments;
+          if (args is! Map || args['text'] is! String || voiceFallback == null) return null;
+          return {'text': await voiceFallback!(args['text'] as String)};
         case 'openSettings':
           _settings.add(null);
+        default:
+          return _actions?.call(call);
       }
       return null;
     });

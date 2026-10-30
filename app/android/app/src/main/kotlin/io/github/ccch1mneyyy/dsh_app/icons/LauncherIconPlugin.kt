@@ -32,8 +32,8 @@ import io.github.ccch1mneyyy.dsh_app.shortcuts.ShortcutsPlugin
  *   the recent-conversation shortcuts over before the old entry goes off.
  *
  * When the original entry has to wait (a task of ours was opened through it), it is switched off
- * once the app is in the background with nothing of another app on top — or at the next start,
- * if the process ends first.
+ * as soon as the app is in the background with nothing of another app on top — or at the next
+ * start, if the process ends first. The foreground screen and external pickers are left alone.
  */
 class LauncherIconPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
 
@@ -41,11 +41,14 @@ class LauncherIconPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
     private lateinit var methods: MethodChannel
     private val main = Handler(Looper.getMainLooper())
     private var callbacks: Application.ActivityLifecycleCallbacks? = null
+    private var probe: LauncherIconProbe? = null
 
     /** Activities of ours that are started (visible); the app is in the background when none. */
-    private val started = HashSet<Int>()
+    private val started = HashSet<Activity>()
 
     @Volatile private var visible = false
+    @Volatile private var resumedTask: Int? = null
+    @Volatile private var lifecycleReady = false
 
     private val settleInBackground = Runnable {
         ShortcutsPlugin.worker.execute { settle(context, background = true) }
@@ -60,15 +63,23 @@ class LauncherIconPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
             app.registerActivityLifecycleCallbacks(watcher)
             callbacks = watcher
         }
-        // A switch-off left waiting by a process that ended.
-        ShortcutsPlugin.worker.execute { settle(context, background = false) }
+        probe = LauncherIconProbe.register(context, this)
+        // Repair a switch left waiting by a process that ended. lifecycleReady protects the
+        // first activity while it starts; if Home already ran, do not wait for another Stop.
+        ShortcutsPlugin.worker.execute { settle(context, background = true) }
     }
 
     override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
         methods.setMethodCallHandler(null)
         callbacks?.let { (context as? Application)?.unregisterActivityLifecycleCallbacks(it) }
         callbacks = null
+        probe?.unregister()
+        probe = null
         main.removeCallbacks(settleInBackground)
+        started.clear()
+        resumedTask = null
+        visible = false
+        lifecycleReady = false
     }
 
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
@@ -91,7 +102,11 @@ class LauncherIconPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
                 }
                 ShortcutsPlugin.worker.execute {
                     val now = try {
-                        switchTo(context, id)
+                        val icon = switchTo(context, id)
+                        // Home can race the worker: onStopped may have run before `waiting`
+                        // became true, so every completed switch also checks the background.
+                        settle(context, background = true)
+                        icon
                     } catch (_: Exception) {
                         null
                     }
@@ -108,68 +123,70 @@ class LauncherIconPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
 
     private inner class Watcher : Application.ActivityLifecycleCallbacks {
         override fun onActivityStarted(activity: Activity) {
-            started += System.identityHashCode(activity)
+            started += activity
             visible = true
+            lifecycleReady = true
             main.removeCallbacks(settleInBackground)
         }
 
         override fun onActivityStopped(activity: Activity) {
-            // One started before this plugin was attached isn't counted.
-            if (!started.remove(System.identityHashCode(activity))) return
+            started.remove(activity)
             visible = started.isNotEmpty()
             if (!visible && !activity.isChangingConfigurations && waiting) {
-                // Not straight away: a glance at recents shouldn't watch the card go.
-                main.postDelayed(settleInBackground, BACKGROUND_DELAY_MS)
+                // Home must show only the chosen entry. The worker checks visibility/task tops
+                // again, so another activity starting first still protects its task.
+                main.post(settleInBackground)
             }
         }
 
         override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) {}
-        override fun onActivityResumed(activity: Activity) {}
-        override fun onActivityPaused(activity: Activity) {}
+        override fun onActivityResumed(activity: Activity) {
+            resumedTask = if (activity is MainActivity) activity.taskId else null
+            if (waiting) ShortcutsPlugin.worker.execute { settle(context, background = false) }
+        }
+        override fun onActivityPaused(activity: Activity) {
+            if (resumedTask == activity.taskId) resumedTask = null
+        }
         override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) {}
         override fun onActivityDestroyed(activity: Activity) {
-            if (started.remove(System.identityHashCode(activity))) visible = started.isNotEmpty()
+            started.remove(activity)
+            visible = started.isNotEmpty()
+            if (!visible && !activity.isChangingConfigurations && waiting) main.post(settleInBackground)
         }
     }
 
     /**
-     * Brings the entries in line with the current icon: finishes a waiting switch-off, and repairs
-     * what an interrupted switch left (two entries, or none). [background]: may close our task
+     * Brings the entries in line with the saved choice: finishes a waiting switch-off, and repairs
+     * an interrupted switch or component-state rollback after reboot. [background]: may close our task
      * (it is out of sight), if nothing of another app sits on top of it.
      */
     private fun settle(context: Context, background: Boolean) {
         try {
             val stateOf = stateReader(context)
-            val icon = LauncherIcons.current(stateOf, chosen(context))
-            val inUse = !(background && outOfSight(context)) && originalInUse(context)
-            applyPlan(context, LauncherIcons.plan(icon, stateOf, inUse))
+            val inUse = originalInUse(context, background)
+            applyPlan(context, LauncherIcons.settlePlan(stateOf, chosen(context), inUse))
         } catch (_: Exception) {
         }
     }
 
-    private fun outOfSight(context: Context): Boolean {
-        if (visible || MainActivity.inForeground) return false
+    private fun originalInUse(context: Context, background: Boolean): Boolean {
+        val tasks = tasks(context) ?: return true
         val power = context.getSystemService(PowerManager::class.java)
         val keyguard = context.getSystemService(KeyguardManager::class.java)
-        // Locked or dark: the app is what comes back on unlock.
-        if (power?.isInteractive != true || keyguard?.isKeyguardLocked != false) return false
-        val tasks = context.getSystemService(ActivityManager::class.java)?.appTasks ?: return false
-        return tasks.all { task ->
-            val top = try {
-                task.taskInfo.topActivity
-            } catch (_: Exception) {
-                null
-            }
-            // A picker or browser tab of another app on top of ours: closing the task would end it.
-            top == null || top.packageName == context.packageName
-        }
+        return LauncherIcons.keepOriginal(
+            tasks,
+            ownPackage = context.packageName,
+            appVisible = !background || !lifecycleReady || visible || MainActivity.inForeground,
+            resumedTask = resumedTask,
+            interactive = power?.isInteractive == true,
+            locked = keyguard?.isKeyguardLocked != false,
+        )
     }
 
     companion object {
         const val CHANNEL = "dsh/launcher_icon"
         private const val PREFS = "launcher_icon"
         private const val KEY_CHOSEN = "chosen"
-        private const val BACKGROUND_DELAY_MS = 3000L
 
         /** Points on the mask outline sent to Dart. */
         private const val MASK_POINTS = 240
@@ -230,17 +247,23 @@ class LauncherIconPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
         }
 
         /** A task of ours was opened through the original entry (switching it off would close it). */
-        private fun originalInUse(context: Context): Boolean {
-            val original = LauncherIcons.ORIGINAL.className
-            val tasks = context.getSystemService(ActivityManager::class.java)?.appTasks ?: return false
-            return tasks.any { task ->
-                try {
-                    val info = task.taskInfo
-                    info.baseIntent.component?.className == original || info.origActivity?.className == original
-                } catch (_: Exception) {
-                    false
-                }
+        private fun originalInUse(context: Context): Boolean =
+            tasks(context)?.let(LauncherIcons::originalInUse) ?: true
+
+        private fun tasks(context: Context): List<LauncherIcons.Task>? = try {
+            context.getSystemService(ActivityManager::class.java)?.appTasks?.map { task ->
+                val info = task.taskInfo
+                @Suppress("DEPRECATION") // RecentTaskInfo.taskId was added only in API 29; minSdk is 26.
+                val id = info.id
+                LauncherIcons.Task(
+                    listOf(info.baseIntent.component?.className, info.origActivity?.className),
+                    info.numActivities,
+                    id,
+                    info.topActivity?.packageName,
+                )
             }
+        } catch (_: Exception) {
+            null
         }
 
         /** The system's icon mask as a closed outline, x and y in 0…1. */

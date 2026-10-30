@@ -124,7 +124,7 @@ Future<ShareContent?> _artifactExtras(
 }
 
 /// A market plugin as a card: what the plugin share sheet's 「图片」 draws.
-ShareContent pluginCardContent(BuildContext context, MarketEntry entry) {
+ShareContent pluginCardContent(BuildContext context, MarketEntry entry, {String? webLink}) {
   final plugin = entry.plugin;
   final stars = plugin.sortKeys['stars'];
   final published = plugin.latest.published.toLocal();
@@ -134,13 +134,13 @@ ShareContent pluginCardContent(BuildContext context, MarketEntry entry) {
     // plugin, usually too long to scan at the card's size: the card then goes
     // without a QR code (ShareCard.qrFor); the text shared with it carries the
     // install command and the plugin page.
-    link: marketPluginShareWebLink(plugin) ?? dshGoProjectUrl,
+    link: webLink ?? marketPluginShareWebLink(plugin) ?? dshGoProjectUrl,
     blocks: [
       SharePlugin(
         name: plugin.name,
-        title: plugin.displayTitle(),
+        title: entry.title(Localizations.localeOf(context).languageCode),
         author: plugin.author,
-        description: plugin.displayDescription(),
+        description: entry.summary(Localizations.localeOf(context).languageCode),
         icon: plugin.icon,
         facts: [
           if (stars != null) ('${stars.round()}', context.l10n.viewShareStars),
@@ -154,17 +154,20 @@ ShareContent pluginCardContent(BuildContext context, MarketEntry entry) {
 
 /// What goes with a plugin card: name, one line, the install command and
 /// where to read more.
-String pluginShareText(MarketEntry entry) {
+String pluginShareText(MarketEntry entry, {String? webLink}) {
   final plugin = entry.plugin;
   final page =
+      webLink ??
       plugin.homepage ??
       plugin.repositoryUrl ??
       (plugin.latest.source is MarketNpmSource ? 'https://www.npmjs.com/package/${plugin.name}' : null);
-  final description = plugin.displayDescription()?.trim();
+  final description = entry.summary(AppLocale.current.languageCode)?.trim();
   return [
-    appL10n.viewSharePluginTitle(plugin.displayTitle()),
+    appL10n.viewSharePluginTitle(entry.title(AppLocale.current.languageCode)),
     if (description != null && description.isNotEmpty) description,
-    appL10n.viewShareInstallCommand(plugin.name),
+    appL10n.viewShareInstallCommand(
+      entry.listing == null ? plugin.name : plugin.latest.installTarget(plugin.name).spec,
+    ),
     ?page,
     appL10n.viewSharePhoneInstall(dshGoProjectUrl),
   ].join('\n');

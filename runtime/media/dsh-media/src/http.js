@@ -70,7 +70,7 @@ export function createHttpTransport({ allowLoopback = false, lookup = dnsLookup 
   }) {
     checkAbort(signal);
     if (!Number.isSafeInteger(maxBytes) || maxBytes <= 0
-      || !['GET', 'POST'].includes(method)) fail('invalid_request');
+      || !['GET', 'POST', 'DELETE'].includes(method)) fail('invalid_request');
     if (Object.keys(headers).some(name => [
       'host', 'connection', 'upgrade', 'proxy-authorization', 'proxy-connection',
       'transfer-encoding', 'te', 'trailer',

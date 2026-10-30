@@ -27,6 +27,7 @@ import '../shell/page_frame.dart';
 import '../theme/app_icons.dart';
 import '../theme/theme.dart';
 import 'action_log_page.dart';
+import 'a11y_restore_sheet.dart';
 import 'app_rules_page.dart';
 import 'dnd_mode_page.dart';
 import 'phone_disclosure_sheet.dart';
@@ -430,6 +431,13 @@ class _PhoneControlScreenState extends ConsumerState<PhoneControlScreen> {
             trailing: confirmationReady
                 ? DoneMark(label: context.l10n.phoneControlAllowed)
                 : FixButton(label: context.l10n.phoneControlGoEnable, onPressed: _openAppDetails),
+          ),
+          ListPageRow(
+            key: const Key('phone-a11y-restore'),
+            icon: AppIcons.keepAlive,
+            spot: Spots.phoneA11yRestore,
+            subtitle: status.a11yKeeper.granted ? context.l10n.phoneEnabled : context.l10n.a11yRestoreNeedsGrant,
+            onTap: () => showA11yRestoreSheet(context),
           ),
         ],
       ),

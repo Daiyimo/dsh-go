@@ -12,9 +12,97 @@ data class PetBubble(
     val host: String?,
     /** Device clock; the bubble goes at this time without waiting for another push. */
     val untilMs: Long,
+    /** The reply's first lines, under the line: only for 问一句's own answer. */
+    val detail: String? = null,
+    /** A request answered on the bubble itself. */
+    val ask: PetAsk? = null,
 ) {
     /** What the bubble shows: Dart composes the line, the overlay only draws it. */
     val line: String get() = text
+}
+
+/**
+ * What a bubble asks the person (docs/design/pets.md §2.7): the whole action or question, as Dart
+ * masked it, and how it may be answered right there.
+ */
+data class PetAsk(
+    val eventId: String,
+    val token: Long? = null,
+    /** approval / question. */
+    val kind: String,
+    /** Shown in full before any button: an approval's exact action, a question's text. */
+    val text: String,
+    /** An approval whose exact call Dart could show: 拒绝 / 允许 may go on the bubble. */
+    val approvable: Boolean,
+    /** A question's 1–3 choices, each answered with one tap; empty: 去回答. */
+    val choices: List<String>,
+) {
+    companion object {
+        const val APPROVAL = "approval"
+        const val QUESTION = "question"
+        const val MAX_TEXT = 300
+        const val MAX_CHOICE = 24
+        const val MAX_CHOICES = 3
+
+        fun fromMap(m: Map<*, *>?): PetAsk? {
+            m ?: return null
+            val kind = (m["kind"] as? String)?.takeIf { it == APPROVAL || it == QUESTION } ?: return null
+            val raw = (m["choices"] as? List<*>).orEmpty()
+            // The label goes back as the answer, so it is shown as it is or not at all: all or none.
+            val choices = raw.filterIsInstance<String>().filter {
+                it.isNotBlank() && it == it.trim() && '\n' !in it && it.codePointCount(0, it.length) <= MAX_CHOICE
+            }
+            val said = m["text"] as? String
+            val text = PetPush.clean(said, MAX_TEXT) ?: return null
+            return PetAsk(
+                token = (m["token"] as? Number)?.toLong(),
+                eventId = (m["eventId"] as? String)?.takeIf { it.isNotEmpty() && it.length <= 300 } ?: return null,
+                kind = kind,
+                text = text,
+                // Cut here, it is no longer the whole action.
+                approvable = kind == APPROVAL && m["approvable"] == true && text == said,
+                choices = if (kind == QUESTION && text == said && choices.size == raw.size && raw.size <= MAX_CHOICES) choices else emptyList(),
+            )
+        }
+    }
+}
+
+/** One button on a bubble. */
+data class BubbleAction(val kind: Kind, val choice: String? = null) {
+    enum class Kind { REJECT, ALLOW, CHOOSE, OPEN }
+
+    companion object {
+        /**
+         * The buttons for [ask]. Nothing is answered that the person can't read whole: an ask whose
+         * text is cut ([shownWhole] false) only opens the chat, as one Dart marked unanswerable does.
+         */
+        fun of(ask: PetAsk?, shownWhole: Boolean): List<BubbleAction> = when {
+            ask == null -> emptyList()
+            !shownWhole || ask.token == null -> listOf(BubbleAction(Kind.OPEN))
+            ask.kind == PetAsk.APPROVAL && ask.approvable -> listOf(BubbleAction(Kind.REJECT), BubbleAction(Kind.ALLOW))
+            ask.kind == PetAsk.QUESTION && ask.choices.isNotEmpty() -> ask.choices.map { BubbleAction(Kind.CHOOSE, it) }
+            else -> listOf(BubbleAction(Kind.OPEN))
+        }
+    }
+}
+
+/** A host 切换主机 offers: its encoded ref, its label, whether it is the one in use. */
+data class PetHost(val ref: String, val label: String, val current: Boolean)
+
+/** The long-press menu's rows (docs/design/pets.md §2.7): shortcuts only where they apply. */
+enum class PetMenuItem {
+    ASK, NEW_CHAT, STOP, SWITCH_HOST, SNOOZE, SETTINGS;
+
+    companion object {
+        fun of(push: PetPush?): List<PetMenuItem> = buildList {
+            add(ASK)
+            add(NEW_CHAT)
+            if (push?.canStop == true) add(STOP)
+            if ((push?.hosts?.size ?: 0) > 1) add(SWITCH_HOST)
+            add(SNOOZE)
+            add(SETTINGS)
+        }
+    }
 }
 
 /**
@@ -37,11 +125,15 @@ data class PetPush(
     /** 安静模式 or pet alerts off: no bubbles, so results still need their notification to ring. */
     val quiet: Boolean = false,
     val reduceMotion: Boolean = false,
+    /** The conversation the pet stands for runs on the host in use: 「停止当前任务」 applies. */
+    val canStop: Boolean = false,
+    /** The hosts 切换主机 offers; empty with only one. */
+    val hosts: List<PetHost> = emptyList(),
 ) {
     /** Idle and asleep play a still frame with an occasional action; the rest plays at full speed. */
     val calm: Boolean get() = state == PetPack.IDLE || state == SLEEPING || state == ROAM
 
-    /** A result or a request: worth sliding a tucked-away pet back out for. */
+    /** A result or a request: worth lighting a dimmed pet up again for. */
     val calling: Boolean get() = state in CALLING
 
     companion object {
@@ -50,6 +142,8 @@ data class PetPush(
         val CALLING = setOf("attention", "error", "notification")
         private const val MAX_TEXT = 48
         private const val MAX_TITLE = 40
+        private const val MAX_DETAIL = 120
+        private const val MAX_HOSTS = 8
         private const val MAX_ID = 300
         private val ID = Regex("[a-z0-9][a-z0-9._-]*")
 
@@ -67,6 +161,8 @@ data class PetPush(
                     sessionId = session,
                     host = (raw["host"] as? String)?.takeIf { it.length <= 2_000 },
                     untilMs = (raw["untilMs"] as? Number)?.toLong()?.coerceIn(now, now + MAX_BUBBLE_MS) ?: (now + DEFAULT_BUBBLE_MS),
+                    detail = clean(raw["detail"] as? String, MAX_DETAIL),
+                    ask = PetAsk.fromMap(raw["ask"] as? Map<*, *>),
                 )
             }
             // The target conversation: `target {host, sessionId}` (pet_state.dart), or top-level fields.
@@ -85,6 +181,12 @@ data class PetPush(
                 size = (m["size"] as? String)?.takeIf { it == "small" || it == "medium" || it == "large" } ?: "medium",
                 quiet = m["quiet"] == true,
                 reduceMotion = m["reduceMotion"] == true,
+                canStop = m["canStop"] == true,
+                hosts = (m["hosts"] as? List<*>).orEmpty().take(MAX_HOSTS).mapNotNull { raw ->
+                    val h = raw as? Map<*, *> ?: return@mapNotNull null
+                    val ref = (h["ref"] as? String)?.takeIf { it.length <= 2_000 } ?: return@mapNotNull null
+                    PetHost(ref, clean(h["label"] as? String, MAX_TITLE) ?: return@mapNotNull null, h["current"] == true)
+                },
             )
         }
 
@@ -142,13 +244,13 @@ class BubbleSlot {
 enum class Visibility { HIDDEN, SHOWN, PAUSED }
 
 /**
- * One evaluation: whether the window shows, whether it is tucked half off the edge, whether the
+ * One evaluation: whether the window shows, whether it is dimmed where it docks, whether the
  * overlay needs its own foreground service, the bubble, and when to evaluate again without any
  * event ([wakeAt]).
  */
 data class Decision(
     val visibility: Visibility,
-    val tucked: Boolean,
+    val dimmed: Boolean,
     val ownService: Boolean,
     val bubble: PetBubble?,
     val wakeAt: Long?,
@@ -164,7 +266,9 @@ data class Decision(
  *   and for the rest of the day after 「今天不再显示」;
  * - pauses with the screen off or locked;
  * - collapses [IDLE_COLLAPSE_MS] after the last thing going on (not with 「一直显示」);
- * - tucks half off the edge after [TUCK_AFTER_MS] without a touch or a new call for attention;
+ * - dims after [DIM_AFTER_MS] without a touch or a new call for attention: whole where it docks,
+ *   at [DIM_ALPHA], its animation paused;
+ * - neither collapses nor dims while 问一句 is open ([holding]);
  * - keeps the process up with its own foreground service only when it is out and DshService is
  *   not running (remote hosts only).
  */
@@ -182,6 +286,9 @@ class OverlayMachine {
     var phoneTask = false
     var dshService = false
 
+    /** 问一句 is open, or an answer from a bubble is on its way: the pet stays out and lit. */
+    var holding = false
+
     var appForeground = true
         private set
     var last: PetPush? = null
@@ -191,7 +298,7 @@ class OverlayMachine {
     var lastActiveAt = 0L
         private set
 
-    /** Last touch or call for attention (a new bubble, a result, a request): untucks. */
+    /** Last touch or call for attention (a new bubble, a result, a request): back to full opacity. */
     var lastCallAt = 0L
         private set
 
@@ -243,14 +350,14 @@ class OverlayMachine {
         val shown = d.visibility != Visibility.HIDDEN
         if (shown && !wasShown) lastCallAt = now
         wasShown = shown
-        return if (shown && d.visibility == Visibility.SHOWN) withTuck(d, now) else d
+        return if (shown && d.visibility == Visibility.SHOWN) withDim(d, now) else d
     }
 
-    private fun withTuck(d: Decision, now: Long): Decision {
-        if (d.bubble != null) return d
-        val tuckAt = lastCallAt + TUCK_AFTER_MS
-        if (now >= tuckAt) return d.copy(tucked = true)
-        return d.copy(wakeAt = listOfNotNull(d.wakeAt, tuckAt).minOrNull())
+    private fun withDim(d: Decision, now: Long): Decision {
+        if (d.bubble != null || holding) return d
+        val dimAt = lastCallAt + DIM_AFTER_MS
+        if (now >= dimAt) return d.copy(dimmed = true)
+        return d.copy(wakeAt = listOfNotNull(d.wakeAt, dimAt).minOrNull())
     }
 
     private fun rule(now: Long): Decision {
@@ -267,7 +374,7 @@ class OverlayMachine {
 
         val bubble = bubbles.current(now)
         val recent = lastActiveAt > 0 && now - lastActiveAt < IDLE_COLLAPSE_MS
-        if (!(alwaysShow || push.active || bubble != null || recent)) return hidden("nothing going on")
+        if (!(alwaysShow || push.active || bubble != null || recent || holding)) return hidden("nothing going on")
 
         val wakeAt = listOfNotNull(
             bubble?.untilMs,
@@ -280,6 +387,9 @@ class OverlayMachine {
 
     companion object {
         const val IDLE_COLLAPSE_MS = 5 * 60_000L
-        const val TUCK_AFTER_MS = 10_000L
+        const val DIM_AFTER_MS = 10_000L
+
+        /** The pet's opacity while dimmed. */
+        const val DIM_ALPHA = 0.6f
     }
 }

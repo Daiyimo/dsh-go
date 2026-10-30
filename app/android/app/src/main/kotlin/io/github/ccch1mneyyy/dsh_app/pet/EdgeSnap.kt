@@ -102,13 +102,6 @@ object EdgeSnap {
         return Dock(sideFor(rest.x, restW, area, velocityX), f)
     }
 
-    /** [tucked] for a rest frame [restW] wide at the height [position] gives [reach]. */
-    fun tucked(dock: Dock, restW: Int, reach: FramePx, area: SafeArea, margin: Int): WindowPos {
-        val y = position(dock, reach, area, margin).y
-        val hidden = (restW * TUCK_SHARE).roundToInt()
-        return WindowPos(if (dock.side == Side.LEFT) -hidden else area.screenW - restW + hidden, y)
-    }
-
     /** While dragging: follow the finger, but keep the whole pet on screen. */
     fun clampDrag(x: Int, y: Int, w: Int, h: Int, area: SafeArea): WindowPos = WindowPos(
         x.coerceIn(0, maxOf(0, area.screenW - w)),
@@ -161,17 +154,6 @@ object EdgeSnap {
         val x = inner(bw)
         val y = (art.bottom + gap).coerceIn(top, maxOf(top, bottom - tall))
         return BubblePlacement(WindowPos(x, y), bw, tall, along(bw, body.centerX - x, tailInset), Tail.UP)
-    }
-
-    /** Share of the window slid off screen when tucked away at the edge. */
-    const val TUCK_SHARE = 0.4f
-
-    /** The docked position slid [TUCK_SHARE] of the way past the screen edge; the rest stays tappable. */
-    fun tucked(dock: Dock, w: Int, h: Int, area: SafeArea, margin: Int): WindowPos {
-        val p = position(dock, w, h, area, margin)
-        val hidden = (w * TUCK_SHARE).roundToInt()
-        val x = if (dock.side == Side.LEFT) -hidden else area.screenW - w + hidden
-        return WindowPos(x, p.y)
     }
 
     /** Centre of the 「×」 target shown at the bottom middle while dragging. */

@@ -24,9 +24,11 @@ export 'media_catalog.dart';
 
 // ── The plugin ───────────────────────────────────────────────────────────────
 
-/// Package names the media plugin goes by (the name is provisional: `dsh-media`
-/// under any scope).
-bool isMediaPluginName(String name) => name == 'dsh-media' || name.endsWith('/dsh-media');
+/// Package names the media plugin goes by: `@dsh-go/media` (the official
+/// market's), `@ccchimneyyy/dsh-media` (the personal scope it falls back to,
+/// docs/design/plugin-market.md D1), and `dsh-media` under any scope.
+bool isMediaPluginName(String name) =>
+    name == '@dsh-go/media' || name == '@ccchimneyyy/dsh-media' || name == 'dsh-media' || name.endsWith('/dsh-media');
 
 /// The plugin's settings namespace under its own name; a host may rename the
 /// instance, and the catalogue's metadata finds it anyway
@@ -47,18 +49,31 @@ enum MediaPluginState {
 }
 
 /// From the host's plugin list (`pluginManager/listBundles`), which the chat
-/// page reads anyway.
-MediaPluginState mediaPluginStateOf(List<PluginBundle>? bundles) {
-  final bundle = bundles?.where((b) => isMediaPluginName(b.name)).firstOrNull;
-  if (bundle == null) return MediaPluginState.absent;
+/// page reads anyway; [offered]: the official market lists the plugin, so a
+/// host without it can install it (D3: it isn't preinstalled).
+MediaPluginState mediaPluginStateOf(List<PluginBundle>? bundles, {bool offered = false}) {
+  if (bundles == null) return MediaPluginState.absent;
+  final bundle = bundles.where((b) => isMediaPluginName(b.name)).firstOrNull;
+  if (bundle == null) return offered ? MediaPluginState.installable : MediaPluginState.absent;
   if (bundle.installed && bundle.enabled && bundle.error == null) return MediaPluginState.ready;
   return MediaPluginState.installable;
 }
 
+/// The media plugin in the official market, which 「在此主机上安装」 installs;
+/// null while the market loads, when it failed or doesn't list one.
+final mediaMarketEntryProvider = Provider<MarketEntry?>(
+  (ref) => ref.watch(
+    officialMarketProvider.select((c) => c.value?.entries.where((e) => isMediaPluginName(e.name)).firstOrNull),
+  ),
+);
+
 /// The plugin list's word, or ready when a running plugin serves a catalogue
 /// (under a name of the host's choosing).
 final mediaPluginProvider = Provider.autoDispose<MediaPluginState>((ref) {
-  final listed = mediaPluginStateOf(ref.watch(installedPluginsProvider.select((s) => s.value)));
+  final listed = mediaPluginStateOf(
+    ref.watch(installedPluginsProvider.select((s) => s.value)),
+    offered: ref.watch(mediaMarketEntryProvider) != null,
+  );
   if (listed == MediaPluginState.ready) return listed;
   final serves = ref.watch(
     engineSettingsProvider.select((s) => s.value == null ? false : mediaNamespacesOf(s.value!.namespaces).isNotEmpty),

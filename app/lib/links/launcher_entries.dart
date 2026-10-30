@@ -24,9 +24,10 @@ sealed class LauncherEntry {
     if (raw is! Map) return null;
     final sessionId = raw['sessionId'];
     final host = raw['host'];
+    final text = raw['text'] is String ? raw['text'] as String : '';
     return switch (raw['kind']) {
-      'new' => const NewChatEntry(),
-      'voice' => const NewChatEntry(voice: true),
+      'new' => NewChatEntry(text: text),
+      'voice' => NewChatEntry(voice: true, text: text),
       'chat' when sessionId is String && sessionId.isNotEmpty => OpenChatEntry(
         HostRef.decode(host is String ? host : null),
         sessionId,
@@ -38,7 +39,9 @@ sealed class LauncherEntry {
 
 /// A new conversation; [voice] starts dictation in its composer.
 class NewChatEntry extends LauncherEntry {
-  const NewChatEntry({this.voice = false});
+  const NewChatEntry({this.voice = false, this.text = ''});
+
+  final String text;
 
   final bool voice;
 }

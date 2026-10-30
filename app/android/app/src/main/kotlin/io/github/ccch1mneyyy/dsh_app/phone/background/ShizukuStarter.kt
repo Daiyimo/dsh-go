@@ -28,6 +28,9 @@ class ShizukuStarter(private val context: Context, private val onChanged: () -> 
     companion object {
         const val PACKAGE = "moe.shizuku.privileged.api"
         private const val PERMISSION_REQUEST_CODE = 4601
+
+        /** 自动恢复无障碍's request, told apart from 不打扰模式's. */
+        private const val GRANT_REQUEST_CODE = 4602
     }
 
     private val main = Handler(Looper.getMainLooper())
@@ -74,6 +77,27 @@ class ShizukuStarter(private val context: Context, private val onChanged: () -> 
     fun requestPermission(): Boolean {
         if (!running()) return false
         return runCatching { Shizuku.requestPermission(PERMISSION_REQUEST_CODE); true }.getOrDefault(false)
+    }
+
+    /** Asks for the permission; [then] runs (main thread) once the person allows it. */
+    fun requestPermission(then: () -> Unit): Boolean {
+        if (!running()) return false
+        val listener = object : Shizuku.OnRequestPermissionResultListener {
+            override fun onRequestPermissionResult(requestCode: Int, grantResult: Int) {
+                if (requestCode != GRANT_REQUEST_CODE) return
+                Shizuku.removeRequestPermissionResultListener(this)
+                onChanged()
+                if (grantResult == PackageManager.PERMISSION_GRANTED) then()
+            }
+        }
+        return runCatching {
+            Shizuku.addRequestPermissionResultListener(listener)
+            Shizuku.requestPermission(GRANT_REQUEST_CODE)
+            true
+        }.getOrElse {
+            Shizuku.removeRequestPermissionResultListener(listener)
+            false
+        }
     }
 
     /** Binds the UserService (blocking, 15 s). Returns a live channel, or null with [reason]. */

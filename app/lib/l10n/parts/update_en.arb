@@ -65,6 +65,8 @@
   "updateOpenReleasePage": "Open release page",
   "updateUpdateNow": "Update now",
   "updateSkipVersion": "Skip this version",
+  "updateInstallWithSystem": "Install with the system installer",
+  "updateSystemInstallerFailed": "Couldn't open the system installer",
   "updateStarProject": "Star it",
   "updateCancelDownload": "Cancel download",
   "updateDownloadInBackground": "Download in background",

@@ -55,11 +55,14 @@ class _PluginsScreenState extends ConsumerState<PluginsScreen> {
     final messenger = ScaffoldMessenger.maybeOf(context);
     setState(() => _refreshing = true);
     try {
+      // Installed entries use this catalogue for update and withdrawal notices.
+      ref.invalidate(officialMarketProvider);
       if (_tab == PluginsTab.installed) {
         rereadNativeContributions(ref);
         await ref.read(installedPluginsProvider.notifier).refresh();
       } else {
         ref.invalidate(marketCatalogProvider);
+        // The official sections show their own failure; a pull reports dshfind's.
         await ref.read(marketCatalogProvider.future);
       }
     } on Object catch (error) {

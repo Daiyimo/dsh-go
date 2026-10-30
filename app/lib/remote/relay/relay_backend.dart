@@ -155,6 +155,9 @@ abstract class RelayBackend {
   /// reconnects. True when it answered or [client] isn't a relay client.
   Future<bool> probe(DshClient client);
 
+  /// How [client]'s current tunnel travels; null when it has none.
+  RelayPath? pathOf(DshClient client);
+
   /// Opens an end-to-end encrypted tunnel to [host] and returns a ready
   /// client. [onState] reports progress and later drops/reconnects.
   Future<DshClient> connectHost(RelayHost host, {RelayStateCallback? onState});
@@ -201,6 +204,9 @@ class UnavailableRelayBackend implements RelayBackend {
 
   @override
   Future<bool> probe(DshClient client) async => true;
+
+  @override
+  RelayPath? pathOf(DshClient client) => null;
 
   @override
   Future<DshClient> connectHost(RelayHost host, {RelayStateCallback? onState}) => Future.error(_error);
@@ -320,7 +326,7 @@ class RelayHostLink implements HostLink {
       throw StateError('link closed');
     }
     _client = client;
-    _emit(HostLinkStatus(HostLinkPhase.connected, completed: HostLinkStep.values.toSet()));
+    _emit(_connected(client));
     if (_published) _clients.add(client);
     _published = true;
     return client;
@@ -336,7 +342,7 @@ class RelayHostLink implements HostLink {
       case RelayConnectionState.handshaking:
         if (!opened) _emit(_status.withStep(HostLinkStep.login));
       case RelayConnectionState.connected:
-        if (opened) _emit(HostLinkStatus(HostLinkPhase.connected, completed: HostLinkStep.values.toSet()));
+        if (opened) _emit(_connected(_client!));
       case RelayConnectionState.reconnecting:
         if (opened) {
           _reconnects++;
@@ -359,6 +365,9 @@ class RelayHostLink implements HostLink {
   }
 
   int _reconnects = 0;
+
+  HostLinkStatus _connected(DshClient client) =>
+      HostLinkStatus(HostLinkPhase.connected, completed: HostLinkStep.values.toSet(), path: backend.pathOf(client));
 
   @override
   void kick() {

@@ -14,6 +14,17 @@ Let DSH read the screen, tap and type to get things done on your phone. Pause or
 
 During a task, text on the screen is sent to the model you chose; with a vision model, a screenshot may be included. Bank card and ID numbers are masked first.
 
+## Restore accessibility automatically
+
+<!-- nav: commonSettings,hubSettingsPhoneControl,a11yRestoreTitle -->
+`Settings › Phone control › Restore accessibility automatically`
+
+Open this row under **Setup**, read the explanation and tap **Authorize and enable**. A connected Shizuku or self-ADB channel can grant permission. If neither is available, follow the setup page or copy the displayed command and run it once on your computer. Restoration requires both the in-app phone-control switch and the system permission.
+
+After granting permission, turning off the accessibility service in Android settings will trigger an attempt to turn it back on. To stop phone control, turn off the switch inside DSH Go. Restoration changes only DSH Go's service entry and preserves other accessibility services.
+
+After a system force-stop, reopen DSH Go before it can recover. Repeated failures back off to about ten minutes between attempts. This permission does not keep the app alive indefinitely or fix the underlying cause of a service crash.
+
 ## Ask DSH to do something
 
 Go back to a chat and say what you want done. While a task runs:

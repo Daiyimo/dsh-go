@@ -21,6 +21,7 @@ import '../state/run_pulse.dart';
 import '../state/session_attention_state.dart';
 import '../ui/chat/run_info.dart';
 import 'pet_mood.dart';
+import 'pet_overlay_actions.dart';
 import 'pet_pack.dart';
 import 'pet_prefs.dart';
 import 'pet_state.dart';
@@ -52,8 +53,9 @@ class PetEventBus {
   Stream<PetEvent> get events => _events.stream;
 
   /// One alert. [bubble]: it may raise a bubble (it went to the pet or to the
-  /// system, not to the conversation on screen, not switched off).
-  void alert(ChatAlert alert, DateTime now, {bool bubble = false}) {
+  /// system, not to the conversation on screen, not switched off). [asked]:
+  /// the turn answered 问一句, its bubble shows the reply.
+  void alert(ChatAlert alert, DateTime now, {bool bubble = false, bool asked = false}) {
     final kind = switch (alert.kind) {
       AlertKind.done => PetEventKind.done,
       // An engine restart is not the turn's failure: no error.
@@ -68,6 +70,17 @@ class PetEventBus {
       AlertKind.approval => PetEventKind.approval,
       AlertKind.question => PetEventKind.question,
     };
+    // A request shows what it asks; answered on the bubble only when all of it shows.
+    final ask = switch (alert) {
+      ChatAlert(kind: AlertKind.approval || AlertKind.question, :final eventId?) => PetAsk(
+        eventId: eventId,
+        token: alert.petToken,
+        text: alert.petText ?? alert.text,
+        approvable: alert.kind == AlertKind.approval && alert.petText != null,
+        choices: alert.choices ?? const [],
+      ),
+      _ => null,
+    };
     add(
       PetEvent(
         kind: kind,
@@ -77,6 +90,8 @@ class PetEventBus {
         title: alert.title == untitledSession ? null : alert.title,
         at: now,
         bubble: bubble,
+        ask: ask,
+        preview: asked && kind == PetEventKind.done ? alert.reply : null,
       ),
     );
   }
@@ -93,8 +108,29 @@ final petEventBusProvider = Provider<PetEventBus>((ref) {
 });
 
 /// Hands [alert] to the pet (called by `ChatAlertsController._onAlert`).
-void petHearAlert(Ref ref, ChatAlert alert, {bool bubble = false}) =>
-    ref.read(petEventBusProvider).alert(alert, ref.read(petClockProvider)(), bubble: bubble);
+void petHearAlert(Ref ref, ChatAlert alert, {bool bubble = false}) {
+  final asked =
+      alert.key == turnKey && ref.read(petAskedProvider.notifier).take(PetTarget(alert.host, alert.sessionId));
+  ref.read(petEventBusProvider).alert(alert, ref.read(petClockProvider)(), bubble: bubble, asked: asked);
+}
+
+/// Conversations 问一句 sent to whose turn hasn't ended yet: that turn's end
+/// bubble shows the reply's first lines (pet_overlay_actions.dart).
+class PetAskedController extends Notifier<Set<PetTarget>> {
+  @override
+  Set<PetTarget> build() => const {};
+
+  void add(PetTarget target) => state = {...state, target};
+
+  /// Whether [target] was asked; it no longer is.
+  bool take(PetTarget target) {
+    if (!state.contains(target)) return false;
+    state = {...state}..remove(target);
+    return true;
+  }
+}
+
+final petAskedProvider = NotifierProvider<PetAskedController, Set<PetTarget>>(PetAskedController.new);
 
 // ── On screen ────────────────────────────────────────────────────────────────
 
@@ -505,6 +541,7 @@ final petScopedStateProvider = Provider.family<PetState, PetScope>((ref, scope) 
   final mood = scope == PetScope.global ? global : ref.watch(petMoodProvider(scope));
   final signals = ref.watch(petSignalsProvider);
   final prefs = ref.watch(petPrefsProvider);
+  final activeHost = ref.watch(activeHostProvider);
   return PetState(
     state: mood.shown,
     tier: mood.tier,
@@ -516,6 +553,8 @@ final petScopedStateProvider = Provider.family<PetState, PetScope>((ref, scope) 
     size: prefs.size,
     quiet: prefs.quiet,
     reduceMotion: ref.watch(performanceDefaultsProvider.select((p) => p.reduceMotion)),
+    canStop: signals.runs.any((r) => PetTarget(r.host, r.root) == petTarget(global, signals) && r.host == activeHost),
+    hosts: ref.watch(petHostChoicesProvider),
   );
 });
 

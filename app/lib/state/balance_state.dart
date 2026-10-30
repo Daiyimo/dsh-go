@@ -179,7 +179,9 @@ class BalanceState {
     return threshold > 0 && b.total < threshold;
   }
 
-  bool get showBanner => isLow && !dismissed;
+  /// Threshold 0 (「不提醒」) turns the banner off entirely, also when the balance
+  /// can no longer pay: someone on other providers' models doesn't need it.
+  bool get showBanner => threshold > 0 && isLow && !dismissed;
 
   BalanceState copyWith({
     BalanceStatus? status,

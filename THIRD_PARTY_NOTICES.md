@@ -124,25 +124,29 @@ DS Bot 的 NOTICE 原文附在文末。
 | 项目 | ds-harness-remote，https://github.com/liguobao/ds-harness-remote |
 | 版权人 | Copyright (c) 2026 DSH Remote contributors |
 | 许可 | MIT（全文另见 `packages/dsh_remote/LICENSE-ds-harness-remote`） |
-| 用途 | 远程连接：协议、分帧、校验、加密信道与连接逻辑 |
+| 用途 | 远程连接：协议、分帧、校验、加密信道、直连（WebRTC）与连接逻辑 |
 | 对应上游版本 | `7e387df`（Host 插件 0.6.0） |
 
 路径均相对 `packages/dsh_remote/`：
 
 | 本仓库文件 | 上游来源 |
 |---|---|
-| `lib/src/server/server_api.dart` | `apps/android/src/services/api.ts`（`RemoteServerApi`）、`docs/protocol.md`、`docs/plugin-integration.md` |
-| `lib/src/account/remote_account.dart` | `apps/android/src/services/server-session-manager.ts`、`device-directory.ts`、`connection.ts`、`packages/plugin/src/cli.ts` |
+| `lib/src/server/server_api.dart` | `apps/android/src/services/api.ts`（`RemoteServerApi`，含 `turnCredentials`）、`docs/protocol.md`、`docs/plugin-integration.md` |
+| `lib/src/account/remote_account.dart` | `apps/android/src/services/server-session-manager.ts`、`device-directory.ts`、`connection.ts`（含直连失败后另开纯 Relay 连接）、`packages/plugin/src/cli.ts` |
 | `lib/src/carrier/tunnel_carrier.dart` | `packages/client-core/src/remote-gateway.ts`；白名单来自 `packages/plugin/src/harness-remote-bridge.ts`、`terminal-policy.ts` |
 | `lib/src/crypto/noise_ik.dart` | `packages/crypto/src/noise.ts`、`packages/crypto/src/index.ts`（会话封装）；Noise IK 状态机为本项目自行实现，经上游作者同意 |
 | `lib/src/channel/secure_channel.dart` | `packages/plugin/src/client-secure-transport.ts`、`packages/plugin/src/server-connection.ts` |
 | `lib/src/channel/rpc_client.dart` | `packages/client-core/src/index.ts`（`RemoteClientCore`） |
 | `lib/src/protocol/control.dart` | `packages/protocol/src/index.ts`（信封、校验、限额、协商、Relay data frame） |
 | `lib/src/protocol/messages.dart` | `packages/protocol/src/index.ts`（`RemoteMessage`、`SecureMessageCodec`、RPC 载荷） |
-| `lib/src/transport/relay_transport.dart` | `packages/webrtc/src/index.ts`（`RelayTransport`，含 Relay data socket 的 attach）；attach 后发送 `transport.selected` 来自 `packages/webrtc/src/adaptive-transport.ts` |
+| `lib/src/transport/relay_transport.dart` | `packages/webrtc/src/index.ts`（`RelayTransport`，含 Relay data socket 的 attach）；attach 后发送 `transport.selected`、直连能力协商与 signaling 收发来自 `packages/webrtc/src/adaptive-transport.ts` |
+| `lib/src/transport/webrtc_transport.dart` | `packages/webrtc/src/adaptive-transport.ts`（`negotiate`、`tryWebRtc`、ICE 服务器获取与超时）、`packages/webrtc/src/rtc-data-channel.ts`（发起方、远端候选缓存、选路重试） |
+| `lib/src/transport/rtc_chunking.dart` | `packages/webrtc/src/rtc-chunking.ts`（`RTCH` 分块，线格式逐字节一致） |
+| `lib/src/transport/peer_connection.dart` | `packages/webrtc/src/rtc-data-channel.ts`（`inspectSelectedPath`、LAN 判定）、`packages/webrtc/src/rtc-adapter.ts`（地址范围、`stunOnlyIceServers`、DataChannel 名称） |
 | `lib/src/util/bytes.dart` | `packages/protocol/src/wire-json.ts`（拒绝重复字段）、`packages/protocol/src/index.ts`（规范 Base64URL） |
 | `test/fixtures/noise-ik.json` | `fixtures/crypto/v1/noise-ik.json`（原样复制） |
 | `test/fixtures/protocol-v1/` | `fixtures/protocol/v1`（原样复制） |
+| `tool/e2e/patch-webrtc.mjs` | 不复制代码：在 E2E 时改写上游 `apps/server/src/gateway.ts`，按托管 Server 的行为打开 WebRTC 协商与 signaling 转发 |
 
 ### DSHA（MIT）
 
@@ -223,6 +227,70 @@ DS Bot 的 NOTICE 原文附在文末。
 | Bouncy Castle（`bcprov`、`bcpkix-jdk15to18`） | 1.81 | Bouncy Castle Licence（MIT 条款） | Copyright (c) 2000-2023 The Legion of the Bouncy Castle Inc. | 自签名 ADB 客户端证书 |
 | XZ for Java（`org.tukaani:xz`） | 1.10 | 0BSD | Copyright (C) The XZ for Java authors and contributors | 解压 `.tar.xz` 运行时包 |
 | AndroidX WebKit | 1.15.0 | Apache-2.0 | The Android Open Source Project | 网页插件的深色模式 |
+| flutter_webrtc（pub 包，含 Android 插件代码） | 1.6.3 | MIT；其 NOTICE 另含 react-native-webrtc（MIT，Copyright (c) 2015 Howard Yang）与 `SimulcastVideoEncoderFactoryWrapper.kt`（Apache-2.0，Copyright 2017, Lyo Kato；Copyright 2017-2021, Shiguredo Inc.），原文见文末 | Copyright (c) 2018 湖北捷智云技术有限公司 | DSH Remote 直连（P2P / TURN）的 DataChannel；只用数据通道，不碰麦克风、摄像头和音频会话 |
+| WebRTC Android SDK（`io.github.webrtc-sdk:android`，libwebrtc m150） | 150.7871.04 | BSD-3-Clause，另附 Google 的专利授权（PATENTS） | Copyright (c) 2011, The WebRTC project authors | flutter_webrtc 的原生 WebRTC（`libjingle_peerconnection_so.so`，每个 ABI 一份） |
+| AudioSwitch（`com.github.davidliu:audioswitch`，twilio/audioswitch 的分支） | `039a35aefab7747c557242fa216c9ea11743b604` | Apache-2.0 | Copyright 2020 Twilio, inc. | flutter_webrtc 的音频路由依赖；DSH Go 不建音频轨，不会启用 |
+
+### WebRTC 150.7871.04 核对记录（2026-10-30）
+
+已核对实际 Gradle 缓存中的两个 AAR 及其 `classes.jar`：均未包含 LICENSE、NOTICE 或 PATENTS 文件。AAR 摘要如下，用于区分实际消费的 Maven/JitPack 产物与其他同名下载：
+
+```text
+1872dda4e3bf7d6ea6f7c6e11861332081c57081a1e62fc82fab72415c69c84c  android-150.7871.04.aar  (49,068,339 B)
+c8240221daa9a96d4ea01a4dc6f6f6b10b4903d2a71f9b57f838bdfeb6c3fcbc  audioswitch-039a35aefab7747c557242fa216c9ea11743b604.aar  (95,318 B)
+```
+
+| 来源 | 已确认内容 | 不能据此推断的内容 |
+|---|---|---|
+| `flutter_webrtc 1.6.3` pub 包的 `LICENSE`、`NOTICE`、`android/build.gradle` | MIT 版权与 NOTICE 原文；Android 依赖固定为上表两个版本。文末补入 NOTICE 全文及 MIT 版权行 | Flutter 自动收集包根 LICENSE 不保证额外 NOTICE 或原生静态依赖通知已自动收录 |
+| [AudioSwitch 固定 commit 的 LICENSE.txt](https://github.com/davidliu/audioswitch/blob/039a35aefab7747c557242fa216c9ea11743b604/LICENSE.txt) | Apache-2.0 与 `Copyright 2020 Twilio, inc.`；与 App 已登记的版权及许可一致 | AAR 本身没有附正文，仍需由发行物提供 |
+| [Android SDK v150.7871.04 的许可汇编](https://github.com/webrtc-sdk/android/blob/1d6a68a74162d3f218f9681d49c6b5eef8f02800/Licenses/WEBRTC.md) | 发布标签指向 `1d6a68a74162d3f218f9681d49c6b5eef8f02800`；该文件 blob 为 `f371735b3a706ff1401bce870f096efc9bbb5f51`，含 30 个许可章节，包括 WebRTC、Abseil、BoringSSL 等 | 该文件未附实际 AAR 的构建提交、GN 参数或各 ABI 目标依赖清单；不能直接认定 30 节恰好覆盖此 AAR 的所有实际链接组件 |
+| [m150 源码 LICENSE](https://github.com/webrtc-sdk/webrtc/blob/a802fa9849e0dae7f54c7d3deb05820a674b2f46/LICENSE) 与 [PATENTS](https://github.com/webrtc-sdk/webrtc/blob/a802fa9849e0dae7f54c7d3deb05820a674b2f46/PATENTS) | 核查时将 `m150_release` 固定为 `a802fa9849e0dae7f54c7d3deb05820a674b2f46`；顶层 BSD 与 Google 专利文本可核对，全文见文末 | 该源码快照不是已经证明对应上述 AAR 的构建提交；顶层 BSD 与专利文本也不替代静态链接的第三方许可 |
+
+上游 [v150.7871.04 发布流程](https://github.com/webrtc-sdk/android/blob/1d6a68a74162d3f218f9681d49c6b5eef8f02800/.github/workflows/fetch-webrtc-artifacts.yml) 从构建归档中取出 AAR，[发布附件](https://github.com/webrtc-sdk/android/releases/expanded_assets/v150.7871.04) 为三种 AAR 和两种仓库源码归档，没有单独的该次构建许可清单。Maven 发布还会按 [downloadAar.sh](https://github.com/webrtc-sdk/android/blob/1d6a68a74162d3f218f9681d49c6b5eef8f02800/downloadAar.sh) 修改 Java class 版本；不能把 GitHub AAR 的摘要与 Maven AAR 摘要混用。
+
+### 完整上游通知的随包收录（2026-10-31）
+
+App 现将 **同一发布标签的完整 `Licenses/WEBRTC.md`** 原样保存为 `app/assets/licenses/webrtc-150.7871.04.md`，通过 `pubspec.yaml` 打包；设置中的开源许可页在 `WebRTC` 条目展示全部 30 个章节，并继续展示顶层 BSD 与 PATENTS 文本。未按功能使用情况裁掉任何章节。这个改动补齐上游发布通知的随包收录，不代表逐一审计过所有静态链接组件。
+
+来源固定为 `webrtc-sdk/android@1d6a68a74162d3f218f9681d49c6b5eef8f02800`（`v150.7871.04`）：该标签的 `gradle.properties` 明确 `VERSION_NAME=150.7871.04`；上述 `downloadAar.sh` 从同标签发布附件下载 `libwebrtc.aar` 再修改 Java class 版本。2026-10-31 实际下载此附件并与前述 Gradle 缓存 Maven AAR 比较，ZIP 条目列表一致，除 `classes.jar` 外全部条目的内容相同；JAR 条目列表亦一致，唯一内容差异为 433 个 class 的 major version 从 65 改为 61，其他字节均一致。这将实际消费的二进制与通知所在的官方发布标签对应起来，未将移动的 `m150_release` 分支冒充精确构建源码。
+
+```text
+f15e6bf94c1cbb9d6defaa95f04d1ae16b84e897f584032781091022d8366e30  官方 v150.7871.04/libwebrtc.aar（49,068,339 B）
+d1f9382c6878ac024155fd6d44a5977329108bb8b0a01cea40e4a2f1d7de252e  webrtc-150.7871.04.md（788,358 B）
+f371735b3a706ff1401bce870f096efc9bbb5f51  同一通知的 Git blob SHA-1
+```
+
+官方与 Maven AAR 的原生库 SHA-256 均为：
+
+| ABI | `libjingle_peerconnection_so.so` SHA-256 |
+|---|---|
+| arm64-v8a | `2b561520298d9fec3e216baf58a53fbddf4a46dfd247880cbc3821875ed20200` |
+| x86_64 | `b87bbb6d6c81c50f04538cd809575de633a789cc3555af2c5eb6ec414b148908` |
+| armeabi-v7a | `5415e7a02ce83e983329575e7c2e46b8ced6c75baea3c41aa52b5699ccb54eda` |
+| x86 | `9a532ef72dcda8b4b9874d4f578dbd3a5eb18bce01f9f91bee883bc0962dce3c` |
+
+**核验边界：**本次选择完整保留发布方提供的许可汇编，未自行重建 Chromium、取得该构建的 GN 依赖图，亦未证明 30 个章节与二进制实际组件一一对应。此前表格中关于缺少逐组件构建清单的限制仍成立；它与“没有随包附带完整上游通知”是不同事项。后续升级 WebRTC 必须重新核对发布标签、二进制和通知，不得沿用此版本的汇编与摘要。
+
+定向测试验证 `LicenseRegistry` 可加载完整 asset，核对原始摘要、30 个章节、现有 BSD/PATENTS 与其他许可条目。发行构建后还须对每个最终 APK 执行以下校验（将路径替换为实际待分发文件），成功时打印许可摘要与该 APK 含有的 WebRTC ABI：
+
+```bash
+python3 - path/to/final.apk <<'PY_APK'
+import hashlib, sys, zipfile
+with zipfile.ZipFile(sys.argv[1]) as apk:
+    name = 'assets/flutter_assets/assets/licenses/webrtc-150.7871.04.md'
+    data = apk.read(name)
+    digest = hashlib.sha256(data).hexdigest()
+    assert len(data) == 788358
+    assert digest == 'd1f9382c6878ac024155fd6d44a5977329108bb8b0a01cea40e4a2f1d7de252e'
+    libraries = [n for n in apk.namelist() if n.endswith('/libjingle_peerconnection_so.so')]
+    assert libraries, 'No packaged WebRTC native library found'
+    print(sys.argv[1], digest, libraries)
+PY_APK
+```
+
+最终 App 的开源许可页还应能打开 `WebRTC` 条目并查看汇编末尾 `zlib` 章节。上述命令和定向测试不代表已经运行最终发行 APK；构建与 UI 检查结果应另记在实际发行验证记录中。默认关闭 P2P 不会移除这些已打包依赖或免除通知收录。
+
 
 ## 四、Linux 运行时组件
 
@@ -274,6 +342,8 @@ Copyright (c) 2026 qiannianhuanxiang                           (DSHA)
 Copyright (c) 2018 Civilized Discourse Construction Kit, Inc.  (discourse_docker)
 Copyright (c) 2023 Phosphor Icons                              (Phosphor Icons)
 Copyright (c) 2021 RikkaW                                      (Shizuku-API)
+Copyright (c) 2018 湖北捷智云技术有限公司                        (flutter_webrtc)
+Copyright (c) 2015 Howard Yang                                 (react-native-webrtc)
 ```
 
 discourse-emojis 上游未附 LICENSE 文件与版权行，按其 gemspec 声明的 MIT 使用。
@@ -663,6 +733,123 @@ CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM
 LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT,
 NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
 CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+```
+
+### NOTICE：flutter_webrtc 1.6.3（pub 包原文照录）
+
+```text
+###################################################################################
+
+The following modifications follow Apache License 2.0 from shiguredo.
+
+SimulcastVideoEncoderFactoryWrapper.kt
+
+Apache License 2.0
+
+Copyright 2017, Lyo Kato <lyo.kato at gmail.com> (Original Author)
+Copyright 2017-2021, Shiguredo Inc.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+
+#####################################################################################
+
+react-native-webrtc
+https://github.com/react-native-webrtc/react-native-webrtc
+
+The MIT License (MIT)
+
+Copyright (c) 2015 Howard Yang
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+#####################################################################################
+```
+
+### WebRTC BSD 与 Google 专利授权
+
+来源与版本边界见上面的 WebRTC 核对记录；以下正文与 App 登记的顶层许可对应。
+
+```text
+Copyright (c) 2011, The WebRTC project authors. All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are
+met:
+
+  * Redistributions of source code must retain the above copyright
+    notice, this list of conditions and the following disclaimer.
+
+  * Redistributions in binary form must reproduce the above copyright
+    notice, this list of conditions and the following disclaimer in
+    the documentation and/or other materials provided with the
+    distribution.
+
+  * Neither the name of Google nor the names of its contributors may
+    be used to endorse or promote products derived from this software
+    without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+"AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+Additional IP Rights Grant (Patents)
+
+"This implementation" means the copyrightable works distributed by
+Google as part of the WebRTC code package.
+
+Google hereby grants to you a perpetual, worldwide, non-exclusive,
+no-charge, irrevocable (except as stated in this section) patent
+license to make, have made, use, offer to sell, sell, import,
+transfer, and otherwise run, modify and propagate the contents of this
+implementation of the WebRTC code package, where such license applies
+only to those patent claims, both currently owned by Google and
+acquired in the future, licensable by Google that are necessarily
+infringed by this implementation of the WebRTC code package. This
+grant does not include claims that would be infringed only as a
+consequence of further modification of this implementation. If you or
+your agent or exclusive licensee institute or order or agree to the
+institution of patent litigation against any entity (including a
+cross-claim or counterclaim in a lawsuit) alleging that this
+implementation of the WebRTC code package or any code incorporated
+within this implementation of the WebRTC code package constitutes
+direct or contributory patent infringement, or inducement of patent
+infringement, then any patent rights granted to you under this License
+for this implementation of the WebRTC code package shall terminate as
+of the date such litigation is filed.
 ```
 
 ### 其他许可证

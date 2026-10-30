@@ -1,6 +1,8 @@
 // DeepSeek balance surfaces: the balance from `/user/balance` and a
 // low-balance reminder with a top-up link.
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -387,7 +389,21 @@ class LowBalanceBanner extends ConsumerWidget {
                 ),
                 IconButton(
                   tooltip: l10n.commonClose,
-                  onPressed: () => ref.read(balanceProvider.notifier).dismissBanner(),
+                  onPressed: () {
+                    final balance = ref.read(balanceProvider.notifier);
+                    balance.dismissBanner();
+                    // For good: the same as 「不提醒」 in the balance sheet.
+                    ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+                      SnackBar(
+                        content: Text(l10n.viewBalanceBannerHidden),
+                        persist: true,
+                        action: SnackBarAction(
+                          label: l10n.viewBalanceTurnOff,
+                          onPressed: () => unawaited(balance.setThreshold(0)),
+                        ),
+                      ),
+                    );
+                  },
                   iconSize: 18,
                   style: IconButton.styleFrom(
                     minimumSize: const Size(40, 40),

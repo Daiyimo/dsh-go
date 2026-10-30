@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, realpath, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { Config, CREDENTIAL_SLOTS } from '../src/config.js';
+import { Config, CREDENTIAL_SLOTS, catalogModel } from '../src/config.js';
 import { createWorkspaceAuthorizer, installMedia } from '../src/index.js';
 import { MediaError } from '../src/errors.js';
 
@@ -433,16 +433,13 @@ test('Gemini-only setup registers a usable schema and the documented compatible 
   assert.equal(tool.parameters.additionalProperties, false);
   const result = await tool.execute({ prompt: 'A simple blue circle', n: 1 }, f.exec());
   assert.deepEqual(captured, {
-    prompt: 'A simple blue circle', n: 1,
+    prompt: 'A simple blue circle', n: 1, refs: [],
     service: {
       id: 'gemini', provider: 'google',
       baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
       profile: 'openai-compatible', responseFormat: 'b64_json',
     },
-    model: {
-      id: 'gemini-2.5-flash-image', label: 'Gemini 2.5 Flash Image',
-      sizes: [], qualities: [], aspectSizes: {},
-    },
+    model: catalogModel('gemini-2.5-flash-image'),
   });
   assert.deepEqual(f.resolveRefs, [CREDENTIAL_SLOTS[1]]);
   assert.equal(result.meta.request.model, 'gemini-2.5-flash-image');
@@ -483,4 +480,27 @@ test('mixed-service schema does not grant Gemini unverified count or optional pa
   }
   assert.equal(called, 0);
   assert.deepEqual(f.resolveRefs, []);
+});
+
+test('registered video tool routes around an image default without applying the image model', async t => {
+  const captured = [];
+  const f = await fixture(t, {
+    raw: { services: [service({ models: 'gpt-image-2' }), service({ id: 'video', provider: 'ark', profile: 'ark-video', baseUrl: 'https://ark.cn-beijing.volces.com', models: 'doubao-seedance-2-5-260628' })],
+      defaults: { serviceId: 'office', modelId: 'gpt-image-2' } },
+    configured: [CREDENTIAL_SLOTS[0]],
+    generate: async request => { captured.push(request); return mockResult(request); },
+  });
+  const hooks = [];
+  f.ctx.jobs = {
+    start(spec) { const id = 'media-unit-' + hooks.length; hooks.push(spec.run({ id, updateProgress() {}, append() {} })); return id; },
+    get() { return {}; },
+  };
+  await f.installed.ready;
+  const tool = f.registered.get('generate_video'); assert.ok(tool);
+  await tool.execute({ prompt: '猫' }, f.exec());
+  await tool.execute({ prompt: '猫', serviceId: 'video' }, f.exec());
+  await Promise.all(hooks.map(hook => hook.done));
+  assert.equal(captured.length, 2);
+  for (const request of captured) { assert.equal(request.service.id, 'video'); assert.equal(request.model.id, 'doubao-seedance-2-5-260628'); }
+  await assert.rejects(() => tool.execute({ prompt: '猫', serviceId: 'office' }, f.exec()));
 });

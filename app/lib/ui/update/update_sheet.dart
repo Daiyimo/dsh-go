@@ -76,6 +76,9 @@ const _browserOnly = {
   UpdateProblem.downgrade,
 };
 
+/// Install failures the system's own installer may get past (the package is still here).
+const _systemInstallerHelps = {UpdateProblem.installFailed, UpdateProblem.blocked};
+
 String _date(DateTime t) {
   final local = t.toLocal();
   return '${local.year}-${local.month.toString().padLeft(2, '0')}-${local.day.toString().padLeft(2, '0')}';
@@ -296,6 +299,25 @@ class UpdateSheet extends ConsumerWidget {
       ],
     );
 
+    // The in-app install was stopped or failed with the package still here.
+    Widget withSystemInstaller(Widget buttons) => Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        buttons,
+        TextButton(
+          key: const ValueKey('update-system-installer'),
+          onPressed: () async {
+            final messenger = ScaffoldMessenger.maybeOf(context);
+            if (!await controller.installWithSystem()) {
+              messenger?.showSnackBar(SnackBar(content: Text(appL10n.updateSystemInstallerFailed)));
+            }
+          },
+          child: Text(l10n.updateInstallWithSystem),
+        ),
+      ],
+    );
+
     Widget busy(String label) => FilledButton(
       style: FilledButton.styleFrom(minimumSize: _buttonSize),
       onPressed: null,
@@ -366,7 +388,8 @@ class UpdateSheet extends ConsumerWidget {
       case UpdateTaskPhase.installing:
         return busy(l10n.updateInstallingBusy);
       case UpdateTaskPhase.ready:
-        return pair(l10n.commonLater, close, l10n.commonInstall, () => unawaited(controller.install()));
+        final install = pair(l10n.commonLater, close, l10n.commonInstall, () => unawaited(controller.install()));
+        return update.problem == UpdateProblem.installCancelled ? withSystemInstaller(install) : install;
       case UpdateTaskPhase.needsPermission:
         return pair(
           l10n.commonLater,
@@ -378,7 +401,8 @@ class UpdateSheet extends ConsumerWidget {
         if (_browserOnly.contains(update.problem)) {
           return pair(l10n.commonClose, close, l10n.updateOpenReleasePage, () => unawaited(_openPage(context, page)));
         }
-        return pair(l10n.commonLater, close, l10n.commonRetry, () => unawaited(controller.retry()));
+        final retry = pair(l10n.commonLater, close, l10n.commonRetry, () => unawaited(controller.retry()));
+        return _systemInstallerHelps.contains(update.problem) ? withSystemInstaller(retry) : retry;
     }
   }
 }

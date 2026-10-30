@@ -10,6 +10,39 @@ class L10nZh extends L10n {
   L10nZh([String locale = 'zh']) : super(locale);
 
   @override
+  String get a11yRestoreTitle => '自动恢复无障碍';
+
+  @override
+  String get searchKwA11yRestore => '无障碍,恢复,重连,自动恢复,掉线,授权,ADB,Shizuku';
+
+  @override
+  String get a11yRestoreNeedsGrant => '需要授权';
+
+  @override
+  String get a11yRestoreNotice => '开启后，在系统设置里关掉无障碍会被自动打开；要关闭手机操控，请在 DSH Go 里关。';
+
+  @override
+  String get a11yRestoreForceStop => '被强制停止后，重新打开 DSH Go 才能恢复。';
+
+  @override
+  String get a11yRestoreGrant => '授权并开启';
+
+  @override
+  String get a11yRestoreSetup => '配置 Shizuku 或无线调试';
+
+  @override
+  String get a11yRestoreWaiting => '请在 Shizuku 中允许授权';
+
+  @override
+  String get a11yRestoreComputer => '也可以连接电脑，执行一次：';
+
+  @override
+  String get a11yRestoreCopy => '复制授权命令';
+
+  @override
+  String get a11yRestoreCopied => '授权命令已复制';
+
+  @override
   String get accessPickTitle => '想让 DSH Go 帮你做哪些事';
 
   @override
@@ -7457,6 +7490,169 @@ class L10nZh extends L10n {
   String get localEnvSignInInstallFirst => '安装后即可登录';
 
   @override
+  String get marketSectionOfficial => '官方';
+
+  @override
+  String get marketSectionAdapted => '适配 DSH Go';
+
+  @override
+  String get marketSectionAll => '全部';
+
+  @override
+  String get marketSectionLoading => '正在载入…';
+
+  @override
+  String get marketSectionFailed => '官方目录没打开';
+
+  @override
+  String get marketSectionEmpty => '暂无';
+
+  @override
+  String get marketTierOfficial => '官方';
+
+  @override
+  String get marketTierAdapted => '适配 DSH Go';
+
+  @override
+  String get marketRiskMedium => '中风险';
+
+  @override
+  String get marketRiskHigh => '高风险';
+
+  @override
+  String get marketFlagInstallScripts => '安装时运行脚本';
+
+  @override
+  String get marketFlagInstallScriptsBody => '安装时会自动运行包里的脚本（preinstall、install 或 postinstall）';
+
+  @override
+  String get marketFlagNativeCode => '含原生程序';
+
+  @override
+  String get marketFlagNativeCodeBody => '包里有编译好的原生程序（.node、binding.gyp 或二进制文件），没法直接阅读';
+
+  @override
+  String get marketFlagShell => '执行命令';
+
+  @override
+  String get marketFlagShellBody => '代码里会调用系统命令（child_process）';
+
+  @override
+  String get marketFlagNetwork => '联网';
+
+  @override
+  String get marketFlagNetworkBody => '代码里会发起网络请求（fetch、http、WebSocket）';
+
+  @override
+  String get marketFlagFilesystem => '写工作区外的文件';
+
+  @override
+  String get marketFlagFilesystemBody => '会写入工作区以外的路径';
+
+  @override
+  String get marketFlagObfuscated => '代码难以审阅';
+
+  @override
+  String get marketFlagObfuscatedBody => '有压缩或混淆过的大文件，看不出它做什么';
+
+  @override
+  String get marketFlagNotAdapted => '未适配 DSH Go';
+
+  @override
+  String get marketFlagNotAdaptedBody => '没有声明 DSH Go 原生协议，在 App 里没有原生界面';
+
+  @override
+  String get marketFlagOtherBody => '自动检查报告的其他特征';
+
+  @override
+  String get marketChecksTitle => '自动检查';
+
+  @override
+  String get marketChecksClean => '没有发现风险特征';
+
+  @override
+  String get marketChecksNote => '自动检查发现的特征，不代表插件有恶意';
+
+  @override
+  String marketCheckedOn(String date) {
+    return '检查于 $date';
+  }
+
+  @override
+  String marketScreenshot(int index) {
+    return '截图 $index';
+  }
+
+  @override
+  String marketRiskConfirmTitle(String name) {
+    return '「$name」有风险特征';
+  }
+
+  @override
+  String get marketRiskConfirmAction => '仍然安装';
+
+  @override
+  String get marketPinnedVersion => '锁定版本';
+
+  @override
+  String get marketRequiresApp => '需要 DSH Go';
+
+  @override
+  String marketNeedsApp(String version) {
+    return '需要 DSH Go $version 或更高版本';
+  }
+
+  @override
+  String get marketUpdateAvailable => '有更新';
+
+  @override
+  String get marketBlockedTitle => '这个版本已下架';
+
+  @override
+  String marketBlockedMessage(String version) {
+    return '已安装的 $version 已从插件市场下架，建议卸载';
+  }
+
+  @override
+  String get marketBlockedRow => '此版本已下架，建议卸载';
+
+  @override
+  String get marketBlockedBadge => '已下架';
+
+  @override
+  String get marketVerifying => '正在核对版本…';
+
+  @override
+  String get marketMismatchTitle => '版本校验不一致';
+
+  @override
+  String marketMismatchMessage(String version) {
+    return 'npm 上的 $version 和插件市场检查过的不是同一个包，已停止安装';
+  }
+
+  @override
+  String get marketSubmit => '提交插件';
+
+  @override
+  String get marketSubmitHint => '在 GitHub 提交，通过自动检查即上架';
+
+  @override
+  String marketLinkNotFound(String name) {
+    return '插件市场里没有 $name';
+  }
+
+  @override
+  String get marketVerificationUnavailableTitle => '暂时无法核对版本';
+
+  @override
+  String get marketVerificationUnavailableBody => '没能取得 npm 的版本校验信息，尚未开始安装。请检查网络后重试。';
+
+  @override
+  String marketCombinedCount(int count) {
+    return '$count 个插件';
+  }
+
+  @override
   String get mediaGenerateTile => '生成';
 
   @override
@@ -7794,6 +7990,33 @@ class L10nZh extends L10n {
 
   @override
   String get performanceRemoteHint => '推荐连接电脑或服务器，减少本机负担';
+
+  @override
+  String get petActionSending => '正在发送…';
+
+  @override
+  String get petActionTargetChanged => '主机已变化，重新打开「问一句」；文字已保留';
+
+  @override
+  String get petActionSendFailed => '没能发出，文字已保留，请重试';
+
+  @override
+  String get petActionBusy => '这个对话正在忙，请选择「新对话」';
+
+  @override
+  String get petActionVoiceMissing => '先到 App 下载离线语音模型';
+
+  @override
+  String get petActionVoiceTitle => '语音问一句';
+
+  @override
+  String get petActionVoiceReturn => '返回桌宠';
+
+  @override
+  String get petActionVoiceStop => '结束录音';
+
+  @override
+  String get petActionVoiceStart => '开始录音';
 
   @override
   String get phoneDiagnosticsCollecting => '正在收集…';
@@ -10128,7 +10351,7 @@ class L10nZh extends L10n {
   String get pluginsOfflineDescription => '引擎运行后显示已装插件，插件市场现在就能逛';
 
   @override
-  String get pluginsIconChanged => '桌面图标已更换，几秒后生效';
+  String get pluginsIconChanged => '桌面图标已选择，回到桌面后更新';
 
   @override
   String get pluginsIconChangeFailed => '没能更换，稍后再试';
@@ -11227,6 +11450,12 @@ class L10nZh extends L10n {
   String get remoteAutoConnectOnStartupHint => '关闭后从本机开始';
 
   @override
+  String get remoteDirect => '直连优先（P2P）';
+
+  @override
+  String get remoteDirectHint => '能直连就不走服务器中继';
+
+  @override
   String get remoteStepConnect => '连接服务器';
 
   @override
@@ -12056,6 +12285,20 @@ class L10nZh extends L10n {
 
   @override
   String get remoteConnectedEncrypted => '已连接 · 端到端加密';
+
+  @override
+  String remoteConnectedVia(String path) {
+    return '已连接 · $path · 端到端加密';
+  }
+
+  @override
+  String get remotePathDirect => '直连';
+
+  @override
+  String get remotePathTurn => 'TURN';
+
+  @override
+  String get remotePathRelay => '中继';
 
   @override
   String remoteConnectedSsh(String address) {
@@ -12910,6 +13153,9 @@ class L10nZh extends L10n {
 
   @override
   String get searchKwRemoteAutoConnect => '自动连接,启动时连接';
+
+  @override
+  String get searchKwRemoteDirect => '直连,P2P,点对点,局域网,中继,TURN,WebRTC';
 
   @override
   String get searchKwPermissionCurrent => '本对话都允许,这个对话,当前权限';
@@ -15346,6 +15592,12 @@ class L10nZh extends L10n {
   String get updateSkipVersion => '跳过这个版本';
 
   @override
+  String get updateInstallWithSystem => '用系统安装器安装';
+
+  @override
+  String get updateSystemInstallerFailed => '没能打开系统安装器';
+
+  @override
   String get updateStarProject => '去 Star';
 
   @override
@@ -15529,6 +15781,12 @@ class L10nZh extends L10n {
 
   @override
   String get viewBalanceNoAlert => '不提醒';
+
+  @override
+  String get viewBalanceBannerHidden => '本次运行不再显示余额提醒';
+
+  @override
+  String get viewBalanceTurnOff => '不再提醒';
 
   @override
   String viewBalanceBelow(String value) {

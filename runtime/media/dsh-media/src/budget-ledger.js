@@ -83,11 +83,14 @@ function validateState(value) {
   const ids = new Set();
   for (const record of value.requests) {
     exactKeys(record, ['rid', 'identity', 'day', 'estimateMicros', 'request', 'state',
-      'providerTaskId', 'chargeMicros', 'basis']);
+      'providerTaskId', 'chargeMicros', 'basis', 'payload', 'outputDate']);
     if (!RID.test(record.rid ?? '') || ids.has(record.rid) || !HASH.test(record.identity ?? '')
       || !validDay(record.day) || !STATES.has(record.state)) fail('corrupt');
     ids.add(record.rid); amount(record.estimateMicros, true);
+    if (record.outputDate !== undefined && !validDay(record.outputDate)) fail('corrupt');
     const normalized = normalizeRequest(record.request);
+    if (record.payload !== undefined && (Buffer.byteLength(JSON.stringify(record.payload)) > 32768
+      || createHash('sha256').update(JSON.stringify(record.payload)).digest('hex') !== normalized.paramsHash)) fail('corrupt');
     if (requestIdentity(normalized, record.estimateMicros) !== record.identity) fail('corrupt');
     if (record.providerTaskId !== undefined
       && !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$/.test(record.providerTaskId)) fail('corrupt');
@@ -258,7 +261,7 @@ export function createBudgetLedger(trustedDirectory, { clock = Date.now, checkpo
         return { changed, label: 'policy', result: value => value };
       }, options);
     },
-    async reserve({ rid, request, estimateMicros }, options) {
+    async reserve({ rid, request, estimateMicros, payload }, options) {
       if (!RID.test(rid ?? '')) fail('invalid_record');
       amount(estimateMicros, true);
       const normalized = normalizeRequest(request);
@@ -271,7 +274,7 @@ export function createBudgetLedger(trustedDirectory, { clock = Date.now, checkpo
         }
         const day = dayAt(clock());
         if (usedFor(state, day) + BigInt(estimateMicros) > BigInt(state.dailyLimitMicros)) fail('budget_exceeded');
-        const record = { rid, identity, day, estimateMicros, request: normalized, state: 'reserved' };
+        const record = { rid, identity, day, estimateMicros, request: normalized, state: 'reserved', ...(payload === undefined ? {} : { payload, outputDate: new Date(clock()).toISOString().slice(0, 10) }) };
         state.requests.push(record);
         return result(true, 'reserve', { created: true, record });
       }, options);

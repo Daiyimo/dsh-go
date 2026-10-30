@@ -1,6 +1,6 @@
-# MEDIA-CATALOG-CONTRACT · M0
+# MEDIA-CATALOG-CONTRACT · v1 / 插件 0.2.0
 
-本文件是 App 读取插件目录与配置的契约，不修改冻结的 tool/result.meta["dsh-go/media"] v1。状态：源码链支持的候选；插件 Node 测试已通过（见 VERIFICATION.md），真实 settings RPC、App 与真机 UNRUN。§2、§5 的源码位置取自 DSH 0.2.1-rc.2（git 687f282e8625c6b8d11ff58211a90524be2e4317）和 2026-10-28 的 App 源码，行号以后可能偏移。
+本文件是 App 读取插件目录与配置的契约，不修改冻结的 tool/result.meta["dsh-go/media"] v1。状态：插件 0.2.0 的 Node 与真实 rc.4 headless 已通过（见 VERIFICATION.md）；真实 settings RPC、App 与真机仍 UNRUN。§2、§5 的源码位置取自 DSH 0.2.1-rc.2（git 687f282e8625c6b8d11ff58211a90524be2e4317）和 2026-10-28 的 App 源码，行号以后可能偏移。
 
 ## 1. 唯一目录位置
 
@@ -14,19 +14,21 @@
 
     {
       v: 1,
-      revision: "2026-10-28.m0.2",
-      asOf: "2026-10-28",
+      revision: "2026-10-30.0.2.0",
+      asOf: "2026-10-30",
       contract: "dsh-go/media/catalog",
-      capabilities: {tools:["generate_image"],commands:[],image:true,video:false,edit:false},
+      capabilities: {tools:["generate_image","edit_image","generate_video","get_media_result","resume_media"],commands:[],image:true,video:true,edit:true},
       limits: {maxN:4,promptUtf8Bytes:4096},
       availability: "...",
       sources: [...],
       models: [...]
     }
 
+0.2.0 增加可选 video 字段 `durations`、`resolutions`、`videoSizes`、`defaultSize`、`requiresRef`，以及编辑专用 `editOnly`。`profiles` 给出已核原生端点、queryPath 和取消能力；它们是 Host 适配数据，不允许 App 或模型传任意 API 字段。未列的时长/分辨率须省略，不能猜默认值。目录缺少价格即未知。
+
 models 含 id、label、kind、profile、ratios、sizes、aspectSizes、qualities、maxN、maxRefs、edit、extend、upscale、sources。不存在 price 时表示未提供可靠价目。布尔能力与 maxN 是插件开放子集；不得推断供应商无其他能力。
 
-可选 responseFormats 字段：存在时是该模型服务配置必须显式选择的返回格式白名单；缺失时仍遵从 profile 的既有规则，GPT Image 必须省略 responseFormat。它不是工具参数，也不授权模型改变服务返回格式。ratios/sizes/qualities 的空数组与空 aspectSizes 表示 M0 没有开放已核值；App 应允许省略该参数，不制造默认值，不显示空选择器。所选模型 maxN=1 时不能根据目录顶层 maxN=4 显示 2–4 张为可用。
+可选 responseFormats 字段：存在时是该模型服务配置必须显式选择的返回格式白名单；缺失时仍遵从 profile 的既有规则，GPT Image 必须省略 responseFormat。它不是工具参数，也不授权模型改变服务返回格式。ratios/sizes/qualities 的空数组与空 aspectSizes 表示插件没有开放已核值；App 应允许省略该参数，不制造默认值，不显示空选择器。所选模型 maxN=1 时不能根据目录顶层 maxN=4 显示 2–4 张为可用。
 
 默认 bundle 的 entry ID 是 dsh-media，但 Host 可以另命名实例。客户端应在选定 Host 的 settings namespaces 中按 metadata 契约发现，保留 namespace 身份；多个实例不得按同名 label 合并。
 
@@ -56,7 +58,7 @@ App 侧实现在 `app/lib/state/media_catalog.dart`。现有 SchemaMeta.extra �
 3. 使用 header.js 相同语法渲染参数头。显式参数不支持时拒绝；不能把 3:4 改成 2:3，也不能把同名模型默认为第一个服务。
 4. label 相同的模型使用〈serviceId/modelId〉消歧；label 与标记同时匹配。目录提供实际 model ID，不可用显示名猜 ID。
 5. 请求、后续展示与默认值都绑定发起时的 Host / namespace / service / model 身份，不能在等待后向新 Host 重新取默认目标。
-6. 当前 M0 只开放图像；不要因 parser 能读视频头就显示已实现视频能力。
+6. 0.2.0 按目录与当前已配置服务开放图片、编辑和视频。video=true 不能代替服务凭据和模型可用性校验；没有可用视频服务时不显示可执行视频选择。
 
 catalog.v 未知或字段损坏时，停止生成模式选择，保留普通对话工具路径。目录缺失时可显示当前 Host 未提供目录，不从 App 内置旧模型表猜测。未来若需新的位置或结构，使用新版本及明确迁移；本稿不把旧候选 value.catalog 当成权威 fallback。
 
@@ -66,7 +68,7 @@ catalog.v 未知或字段损坏时，停止生成模式选择，保留普通对�
 
 const+volatile+disabled 的 value.catalog 存在真实升级反例：客户端显式把 C1 写进 raw config，升级包 schema 改 const(C2) 且 C1!=C2；旧显式值不走 default 分支，常量校验会失败。disabled 仅控制 UI，也不提供 Host 写保护。
 
-本候选没有 catalog 配置字段。目录仅在 schema metadata，services/defaults/limits/credentials 的普通值均不包含目录。settings describe 的 value/base/user、替换表单与用户覆盖不应带目录；升级只换安装 JSON 与 schema metadata，不迁移持久目录值。应在真实设置集成测试中加入“旧版本写过普通服务配置→升级目录→仍能启动”的回归，不能只断言按钮 disabled。
+本候选没有 catalog 配置字段。目录仅在 schema metadata，services/defaults/limits/budget/credentials 的普通值均不包含目录。settings describe 的 value/base/user、替换表单与用户覆盖不应带目录；升级只换安装 JSON 与 schema metadata，不迁移持久目录值。应在真实设置集成测试中加入“旧版本写过普通服务配置→升级目录→仍能启动”的回归，不能只断言按钮 disabled。
 
 ## 5. 固定凭据槽与已否决的设计
 

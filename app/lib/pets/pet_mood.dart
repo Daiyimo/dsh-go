@@ -224,6 +224,8 @@ class PetEvent {
     required this.at,
     this.title,
     this.bubble = false,
+    this.ask,
+    this.preview,
   });
 
   final PetEventKind kind;
@@ -240,6 +242,12 @@ class PetEvent {
   /// May raise a bubble: the alert went to the pet or to the system (not the
   /// conversation on screen, not switched off in 通知).
   final bool bubble;
+
+  /// A request the bubble shows and may answer (approval, question).
+  final PetAsk? ask;
+
+  /// 问一句's reply, for its done bubble.
+  final String? preview;
 
   PetTarget get target => PetTarget(host, sessionId);
 
@@ -296,6 +304,10 @@ class PetTimings {
 
   /// A queued bubble older than this is dropped instead of shown.
   static const queueFor = Duration(seconds: 10);
+
+  /// A bubble with a request to answer, or 问一句's reply to read, stays this
+  /// long (an answered request goes at once: it is stale).
+  static const readFor = Duration(seconds: 30);
 
   final Map<String, int> minDisplay;
   final Map<String, int> autoReturn;
@@ -487,7 +499,9 @@ PetMood reducePetMood(
       kind: kind,
       title: e.title,
       target: e.target,
-      until: now.add(kind.shownFor),
+      until: now.add(e.ask != null || e.preview != null ? PetTimings.readFor : kind.shownFor),
+      ask: e.ask,
+      preview: e.preview,
     );
     final current = bubble != null && bubble!.until.isAfter(now) ? bubble : null;
     if (current == null) {
@@ -567,7 +581,8 @@ PetMood reducePetMood(
     queuedAt = null;
   }
   if (bubble == null && queued != null) {
-    bubble = queued!.copyWith(until: now.add(queued!.kind.shownFor));
+    final q = queued!;
+    bubble = q.copyWith(until: now.add(q.ask != null || q.preview != null ? PetTimings.readFor : q.kind.shownFor));
     bubbleAt = now;
     merged = {queued!.target};
     queued = null;

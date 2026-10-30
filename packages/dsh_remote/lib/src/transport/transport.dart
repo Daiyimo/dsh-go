@@ -6,17 +6,20 @@
 /// channel). Implementations:
 ///
 /// * [RelayTransport] — ciphertext inside `relay` frames, on the Control
-///   socket or on the Relay node data socket the Server assigns (the only
-///   one today);
-/// * planned: LAN / WebRTC P2P / TURN — a DataChannel named `dsh`
+///   socket or on the Relay node data socket the Server assigns;
+/// * [WebRtcTransport] — LAN / P2P / TURN: a DataChannel named `dsh`
 ///   (`ordered: true`) carrying binary ciphertext, negotiated with
 ///   `signal.offer/answer/ice` and announced with `transport.selected`
-///   before the handshake, falling back to Relay.
-///   They implement the same interface, so the secure channel, RPC layer and
-///   carrier do not change.
+///   before the handshake; a failed attempt falls back to the Relay.
+///
+/// Both implement this interface, so the secure channel, RPC layer and
+/// carrier do not change.
 library;
 
 import 'dart:typed_data';
+
+import 'relay_transport.dart' show RelayTransport;
+import 'webrtc_transport.dart' show WebRtcTransport;
 
 /// Data plane in use; mirrors the `transport.selected` vocabulary.
 enum RemoteTransportMode { lan, p2p, turn, relay }

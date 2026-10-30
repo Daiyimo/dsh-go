@@ -40,6 +40,7 @@ import android.view.accessibility.AccessibilityNodeInfo
 import android.view.accessibility.AccessibilityWindowInfo
 import io.github.ccch1mneyyy.dsh_app.phone.SensitiveWords
 import java.io.ByteArrayOutputStream
+import java.lang.reflect.InvocationTargetException
 import java.lang.reflect.Proxy
 import java.nio.ByteBuffer
 import java.util.concurrent.atomic.AtomicBoolean
@@ -93,6 +94,11 @@ class PrivilegedDisplayCore(private val context: Context) {
             if (op == Proto.OP_GATE) {
                 synchronized(lock) { gateProbe(response) }
                 if (!response.containsKey(Proto.ERROR)) response.putBoolean(Proto.OK, true)
+                return response
+            }
+            if (op == Proto.OP_GRANT_SECURE_SETTINGS) {
+                grantSecureSettings(request.getInt(Proto.USER))
+                response.putBoolean(Proto.OK, true)
                 return response
             }
             synchronized(lock) { dispatch(op, request, response) }
@@ -682,6 +688,33 @@ class PrivilegedDisplayCore(private val context: Context) {
         // DISPLAY_IME_POLICY_HIDE == 2
         wm.javaClass.getMethod("setDisplayImePolicy", Int::class.javaPrimitiveType, Int::class.javaPrimitiveType)
             .invoke(wm, displayId, 2)
+    }
+
+    /**
+     * `pm grant` of WRITE_SECURE_SETTINGS to this app, through the binder `pm` itself uses:
+     * IPackageManager up to Android 10, IPermissionManager from 11 (Android 15 added a device id
+     * before the user). Fixed permission, fixed package.
+     */
+    @SuppressLint("PrivateApi")
+    private fun grantSecureSettings(userId: Int) {
+        val (service, type) = if (Build.VERSION.SDK_INT >= 30) "permissionmgr" to "android.permission.IPermissionManager"
+            else "package" to "android.content.pm.IPackageManager"
+        val binder = Class.forName("android.os.ServiceManager").getMethod("getService", String::class.java)
+            .invoke(null, service) as IBinder
+        val manager = Class.forName("$type\$Stub").getMethod("asInterface", IBinder::class.java).invoke(null, binder)
+        val grant = manager.javaClass.methods.first { it.name == "grantRuntimePermission" }
+        val permission = SecureSettingsGrant.PERMISSION
+        val args = when {
+            grant.parameterTypes.size == 3 -> arrayOf<Any>(Proto.APP_PACKAGE, permission, userId)
+            // VirtualDeviceManager.PERSISTENT_DEVICE_ID_DEFAULT, or Context.DEVICE_ID_DEFAULT.
+            grant.parameterTypes[2] == String::class.java -> arrayOf<Any>(Proto.APP_PACKAGE, permission, "default:0", userId)
+            else -> arrayOf<Any>(Proto.APP_PACKAGE, permission, 0, userId)
+        }
+        try {
+            grant.invoke(manager, *args)
+        } catch (e: InvocationTargetException) {
+            throw e.targetException
+        }
     }
 
     private fun invoke(target: Any, method: String): Any? =

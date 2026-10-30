@@ -38,9 +38,12 @@ object OverlayAccess {
     /**
      * The window type to try. Without the accessibility service an application overlay is tried
      * until an attempt fails — also when `canDrawOverlays` says no (a vendor build that lies).
+     * During an accessibility failure's cooldown, fallback requires explicit overlay permission.
      */
-    fun host(a11yConnected: Boolean, lastAdd: AddResult?): OverlayHost = when {
-        a11yConnected -> OverlayHost.ACCESSIBILITY
+    fun host(a11yConnected: Boolean, lastAdd: AddResult?, a11yFailed: Boolean = false, canDraw: Boolean = false): OverlayHost = when {
+        a11yConnected && !a11yFailed -> OverlayHost.ACCESSIBILITY
+        // A failed accessibility add does not grant permission to use an application overlay.
+        a11yFailed && !canDraw -> OverlayHost.NONE
         lastAdd == AddResult.FAILED -> OverlayHost.NONE
         else -> OverlayHost.APPLICATION
     }
@@ -54,4 +57,23 @@ object OverlayAccess {
         lastAdd != AddResult.FAILED || canDrawChanged || (canDraw && now - failedAt >= RETRY_MS)
 
     const val RETRY_MS = 60_000L
+}
+
+/** Failed accessibility windows wait even when removal callbacks immediately evaluate again. */
+internal class AccessibilityOverlayRetry {
+    private var connection: Any? = null
+    private var failedAt: Long? = null
+
+    fun failed(service: Any, now: Long) {
+        connection = service
+        failedAt = now
+    }
+
+    fun remaining(service: Any?, now: Long): Long? {
+        if (connection !== service) {
+            connection = service
+            failedAt = null
+        }
+        return failedAt?.let { (OverlayAccess.RETRY_MS - (now - it)).takeIf { delay -> delay > 0 } }
+    }
 }

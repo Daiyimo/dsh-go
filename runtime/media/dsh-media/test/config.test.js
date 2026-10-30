@@ -99,16 +99,16 @@ test('unsupported model, protocol parameter, insecure URL and excessive limits a
 
 test('catalog entries have explicit evidence, conservative supported dimensions and no guessed price', () => {
   for (const model of CATALOG.models) {
-    assert.equal(model.kind, 'image');
-    assert.equal(model.maxRefs, 0);
-    assert.equal(model.edit, false);
+    assert.ok(['image', 'video'].includes(model.kind));
+    assert.ok(model.maxRefs >= 0 && model.maxRefs <= 1);
+    assert.equal(typeof model.edit, 'boolean');
     assert.equal(Object.hasOwn(model, 'price'), false);
     assert.ok(model.sources.length > 0);
     for (const id of model.sources) {
       const source = CATALOG.sources.find(item => item.id === id);
       assert.ok(source);
       assert.equal(source.level, 'official-page-read');
-      assert.equal(source.retrieved, '2026-10-28');
+      assert.match(source.retrieved ?? source.verifiedAt, /^2026-10-(28|30)$/);
     }
     for (const [ratio, size] of Object.entries(model.aspectSizes)) {
       const [a, b] = ratio.split(':').map(Number);
@@ -169,8 +169,8 @@ test('every advertised catalog value can be written with the shared header gramm
   const video = { kind: 'video', label: 'Video model', id: 'video/model:1',
     ratios: ['1:1', '16:9', '99:99'], resolutions: ['100p', '720p', '9999p'] };
   assert.equal(validateCatalogHeaderModel(video), video);
-  assert.equal(CATALOG.capabilities.video, false);
-  assert.equal(CATALOG.models.some(model => model.kind === 'video'), false);
+  assert.equal(CATALOG.capabilities.video, true);
+  assert.equal(CATALOG.models.some(model => model.kind === 'video'), true);
 });
 
 test('catalog rejects values or identities the header cannot faithfully express', () => {

@@ -400,7 +400,7 @@
     }
   },
   "pluginsOfflineDescription": "引擎运行后显示已装插件，插件市场现在就能逛",
-  "pluginsIconChanged": "桌面图标已更换，几秒后生效",
+  "pluginsIconChanged": "桌面图标已选择，回到桌面后更新",
   "pluginsIconChangeFailed": "没能更换，稍后再试",
   "pluginsTheme": "主题",
   "pluginsAppearance": "外观",

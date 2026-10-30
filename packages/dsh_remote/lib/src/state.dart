@@ -67,7 +67,8 @@ class RemoteConnectionState {
   /// `connecting` after a failed first attempt).
   final RemoteFailure? failure;
 
-  /// `relay` today (`lan` / `p2p` / `turn` once WebRTC lands).
+  /// Data plane of a connected state: `lan`, `p2p`, `turn` (WebRTC) or
+  /// `relay`.
   final String? transport;
   final DateTime? at;
 

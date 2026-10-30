@@ -15,15 +15,23 @@ import io.flutter.plugin.common.MethodChannel
  * MethodChannel `dsh/pet_overlay` (Dart: `lib/pets/overlay_channel.dart`).
  *
  * Dart → here:
- * - `push {state, tier, bubble?: {id, kind, text, title?, host, sessionId, untilMs}, sessionId?, host?,
- *   active, foreground, packId, size}`: the state PetMood reduced; nothing is reduced again here
- *   (`foreground` is read from the activity lifecycle instead);
+ * - `push {state, tier, bubble?: {id, kind, text, title?, host, sessionId, untilMs, detail?,
+ *   ask?: {eventId, kind, text, approvable, choices}}, sessionId?, host?, active, foreground, packId,
+ *   size, canStop, hosts: [{ref, label, current}]}`: the state PetMood reduced; nothing is reduced
+ *   again here (`foreground` is read from the activity lifecycle instead);
  * - `setEnabled {enabled}`, `setAlwaysShow {on}`, `unsnooze` → status;
  * - `status` → status; `permissionStatus` → status after adding a test window (the real check);
  * - `requestPermission` → bool: opens 「显示在其他应用上层」 for this app;
  * - `openAppDetails` → bool: the app's system info page (restricted settings, vendor switches).
  *
- * Here → Dart: `status {…}` when it changes; `openSettings` after 「宠物设置」 in the pet's menu.
+ * Here → Dart: `status {…}` when it changes; `openSettings` after 「宠物设置」 in the pet's menu; and
+ * what the bar, the bubble and the menu ask, each answered by Dart (`lib/pets/pet_overlay_actions.dart`):
+ * - `askTarget {fresh}` → `{offer, current?: {sessionId, host, line}, fresh: {host, line}, problem?, voice}`;
+ * - `ask {offer, text, fresh, sessionId?, host?}` → `{sent: true}` | `{problem}`;
+ * - `answer {host, sessionId, eventId, token, kind, decision?: allow|reject, choice?}` → `{result: handled|gone|failed}`;
+ * - `transcribe {wav}` → `{text}` | `{problem}`; `stop {host, sessionId}`; `switchHost {host}`.
+ * - `voiceFallback {text}` → `{text}` after foreground offline recording, then return to the overlay.
+ * No answer (no handler yet, the engine going away) reads as null: 问一句 then hands its text to the app.
  *
  * Status: `{enabled, alwaysShow, permission: accessibility|granted|blocked|denied, canDraw,
  * accessibility, snoozed, showing, sdk, manufacturer}`.
@@ -52,6 +60,15 @@ class PetOverlayPlugin : FlutterPlugin, ActivityAware {
 
             override fun onOpenSettings() {
                 if (PetOverlay.ownsProducer(token)) currentChannel.invokeMethod("openSettings", null)
+            }
+
+            override fun call(method: String, args: Any?, reply: (Any?) -> Unit) {
+                if (!PetOverlay.ownsProducer(token)) return reply(null)
+                currentChannel.invokeMethod(method, args, object : MethodChannel.Result {
+                    override fun success(result: Any?) = reply(result)
+                    override fun error(errorCode: String, errorMessage: String?, errorDetails: Any?) = reply(null)
+                    override fun notImplemented() = reply(null)
+                })
             }
         })
         producerToken = token

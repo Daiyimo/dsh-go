@@ -17,11 +17,14 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.os.PowerManager
+import android.os.SystemClock
 import android.provider.Settings
 import io.github.ccch1mneyyy.dsh_app.MainActivity
 import io.github.ccch1mneyyy.dsh_app.R
+import io.github.ccch1mneyyy.dsh_app.phone.a11y.A11yKeeper
 import io.github.ccch1mneyyy.dsh_app.phone.a11y.PhoneA11yService
 import io.github.ccch1mneyyy.dsh_app.phone.background.BackgroundControl
+import io.github.ccch1mneyyy.dsh_app.phone.background.SecureSettingsGrant
 import io.github.ccch1mneyyy.dsh_app.runtime.DshService
 import io.github.ccch1mneyyy.dsh_app.shortcuts.EntryActivity
 import java.io.File
@@ -129,6 +132,7 @@ class PhoneControl private constructor(private val app: Context) : PhoneEnv, Con
     @Volatile private var policiesCache: PhonePolicies? = null
     @Volatile private var statusLine: String? = null
     @Volatile private var lastStatus: Map<String, Any?>? = null
+    @Volatile private var keptTask = 0L
     private var screenReceiver: BroadcastReceiver? = null
     private val sinks = CopyOnWriteArraySet<(Map<String, Any?>) -> Unit>()
     val background: BackgroundControl = BackgroundControl.get(app)
@@ -142,11 +146,13 @@ class PhoneControl private constructor(private val app: Context) : PhoneEnv, Con
         (app as? Application)?.let { AppVisibility.register(it) }
         tasks.addListener { onTask(it) }
         ticker.scheduleWithFixedDelay({ tick() }, 2, 2, TimeUnit.SECONDS)
+        // The app's start: a force stop took the accessibility service out of the settings.
+        ticker.execute(::keep)
     }
 
     // ── Switch and app lists ────────────────────────────────────────────────────────
 
-    fun isEnabled(): Boolean = prefs.getBoolean(K_ENABLED, false)
+    fun isEnabled(): Boolean = switchedOn(app)
 
     /** Off takes effect at once (bridge closed, task stopped); on needs an engine restart (the UI does it). */
     fun setEnabled(enabled: Boolean): Boolean {
@@ -157,6 +163,7 @@ class PhoneControl private constructor(private val app: Context) : PhoneEnv, Con
             stopBridge()
         } else {
             tasks.clearStop()
+            ticker.execute(::keep)
         }
         emitStatus()
         return true
@@ -324,6 +331,10 @@ class PhoneControl private constructor(private val app: Context) : PhoneEnv, Con
 
     private fun onTask(s: PhoneTasks.Snapshot) {
         prompts.check()
+        if (s.active && s.id != keptTask) {
+            keptTask = s.id
+            ticker.execute(::keep)
+        }
         if (!s.active) {
             tasks.runIfInactive(s) {
                 if (s.stopped && tasks.isStopped()) core.worker.interruptCurrent()
@@ -418,6 +429,7 @@ class PhoneControl private constructor(private val app: Context) : PhoneEnv, Con
         "notifications" to nm.areNotificationsEnabled(),
         "confirmationNotifications" to notificationGate.available(),
         "background" to backgroundStatus(),
+        "a11yKeeper" to keeperStatus(),
         "task" to tasks.snapshot().toMap(),
         "device" to linkedMapOf(
             "manufacturer" to Build.MANUFACTURER,
@@ -431,6 +443,42 @@ class PhoneControl private constructor(private val app: Context) : PhoneEnv, Con
         background.status()
     } catch (e: Exception) {
         linkedMapOf("mode" to "off", "ready" to false, "reason" to (e.message ?: AppStrings.get(app, R.string.phone_background_error)), "androidOk" to (Build.VERSION.SDK_INT >= 34))
+    }
+
+    /** 自动恢复无障碍: whether it may work (the permission), the one-tap way to it, the command for the other. */
+    private fun keeperStatus(): Map<String, Any?> {
+        val granted = A11yKeeper.granted(app)
+        return linkedMapOf(
+            "granted" to granted,
+            "path" to runCatching { background.grantPath(granted) }.getOrDefault(SecureSettingsGrant.SETUP),
+            "command" to SecureSettingsGrant.command(app.packageName),
+        )
+    }
+
+    /**
+     * 自动恢复无障碍 → the one tap: the shell-uid engine grants WRITE_SECURE_SETTINGS over Shizuku or
+     * self-ADB. Shizuku without its own permission asks for that first (`pending`) and grants once
+     * the person allows. Blocks; the plugin thread.
+     */
+    fun grantSecureSettings(): Map<String, Any?> = when (val path = background.grantPath(A11yKeeper.granted(app))) {
+        SecureSettingsGrant.GRANTED -> mapOf("ok" to true)
+        SecureSettingsGrant.SHIZUKU, SecureSettingsGrant.ADB -> {
+            background.grantSecureSettings(path)
+            val ok = A11yKeeper.granted(app)
+            if (ok) ticker.execute(::keep)
+            emitStatus()
+            val failed = if (path == SecureSettingsGrant.ADB) R.string.background_adb_disconnected else R.string.a11y_keeper_grant_failed
+            mapOf("ok" to ok, "reason" to if (ok) null else AppStrings.get(app, failed))
+        }
+        SecureSettingsGrant.SHIZUKU_PERMISSION -> {
+            val asked = background.requestShizukuPermission { ticker.execute { grantSecureSettings() } }
+            mapOf("ok" to false, "pending" to asked, "reason" to if (asked) null else AppStrings.get(app, R.string.background_shizuku_permission))
+        }
+        else -> mapOf("ok" to false, "reason" to AppStrings.get(app, R.string.a11y_keeper_needs_setup))
+    }
+
+    private fun keep() {
+        runCatching { A11yKeeper.check(app) }
     }
 
     /** Installed from a browser or file manager rather than a store (Android 13+ restricted settings apply). */
@@ -472,10 +520,11 @@ class PhoneControl private constructor(private val app: Context) : PhoneEnv, Con
         main.post { sinks.forEach { runCatching { it(s) } } }
     }
 
-    /** Every 2 s: end idle tasks; push status changes we can't observe (accessibility connecting). */
+    /** Every 2 s: end idle tasks; 自动恢复无障碍; push status changes we can't observe (accessibility connecting). */
     private fun tick() {
         try {
             tasks.expireIdle()
+            A11yKeeper.check(app)
             pushIfChanged(force = false)
         } catch (_: Exception) {
         }
@@ -506,8 +555,15 @@ class PhoneControl private constructor(private val app: Context) : PhoneEnv, Con
 
     override fun gate(): UserGate = prompts
 
-    /** The background driver is registered per task: bring it up on first use (worker thread; may connect). */
+    /**
+     * The background driver is registered per task: bring it up on first use (worker thread; may
+     * connect). The main one may be on its way back (自动恢复无障碍): give it a few seconds.
+     */
     override fun driver(screen: PhoneScreen): PhoneDriver? {
+        if (screen == PhoneScreen.MAIN && PhoneRegistry.mainDriver == null && A11yKeeper.check(app)) {
+            val until = SystemClock.elapsedRealtime() + KEEPER_WAIT_MS
+            while (PhoneRegistry.mainDriver == null && SystemClock.elapsedRealtime() < until) Thread.sleep(100)
+        }
         if (screen != PhoneScreen.BACKGROUND) return PhoneRegistry.driver(screen)
         return if (runCatching { background.beginTask(tasks.snapshot().id) }.getOrDefault(false)) PhoneRegistry.backgroundDriver else null
     }
@@ -560,6 +616,9 @@ class PhoneControl private constructor(private val app: Context) : PhoneEnv, Con
         private const val CHANNEL_FIX = "dsh-phone-fix"
         private const val NOTIFY_FIX_ID = 4099
 
+        /** How long a call needing the main screen waits for 自动恢复无障碍 to bring it back. */
+        private const val KEEPER_WAIT_MS = 3_000L
+
         /** Installer packages of app stores; anything else (or none) counts as sideloaded. */
         private val STORES = setOf(
             "com.android.vending", "com.xiaomi.market", "com.heytap.market", "com.oppo.market", "com.bbk.appstore",
@@ -577,5 +636,9 @@ class PhoneControl private constructor(private val app: Context) : PhoneEnv, Con
 
         /** Without creating it (DshService builds notifications before anything else may exist). */
         fun peek(): PhoneControl? = instance
+
+        /** The master switch 「手机操控」, without creating the controller. */
+        fun switchedOn(context: Context): Boolean =
+            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(K_ENABLED, false)
     }
 }

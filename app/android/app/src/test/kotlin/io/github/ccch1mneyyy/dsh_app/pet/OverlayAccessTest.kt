@@ -49,4 +49,35 @@ class OverlayAccessTest {
     @Test fun wireNamesMatchDart() {
         assertEquals(listOf("accessibility", "granted", "blocked", "denied"), OverlayPermission.values().map { it.wire })
     }
+
+    @Test fun accessibilityFailureOnlyFallsBackWithExplicitPermission() {
+        assertEquals(OverlayHost.NONE, OverlayAccess.host(true, AddResult.OK, a11yFailed = true, canDraw = false))
+        assertEquals(OverlayHost.APPLICATION, OverlayAccess.host(true, null, a11yFailed = true, canDraw = true))
+        assertEquals(OverlayHost.NONE, OverlayAccess.host(true, AddResult.FAILED, a11yFailed = true, canDraw = true))
+        assertEquals(OverlayHost.ACCESSIBILITY, OverlayAccess.host(true, AddResult.FAILED, a11yFailed = false, canDraw = true))
+    }
+
+    @Test fun failedAccessibilityAddCannotSpinThroughRemovalCallbacks() {
+        val retry = AccessibilityOverlayRetry()
+        val service = Any()
+        val failedAt = 1_000L
+        retry.failed(service, failedAt)
+        repeat(500) { callback ->
+            assertTrue(retry.remaining(service, failedAt + callback) != null)
+        }
+        assertEquals(1L, retry.remaining(service, failedAt + OverlayAccess.RETRY_MS - 1))
+        assertEquals(null, retry.remaining(service, failedAt + OverlayAccess.RETRY_MS))
+        retry.failed(service, failedAt + OverlayAccess.RETRY_MS)
+        assertEquals(OverlayAccess.RETRY_MS, retry.remaining(service, failedAt + OverlayAccess.RETRY_MS))
+    }
+
+    @Test fun reconnectedAccessibilityServiceDoesNotInheritOldTokenFailure() {
+        val retry = AccessibilityOverlayRetry()
+        val oldService = Any()
+        retry.failed(oldService, 1_000L)
+        assertEquals(null, retry.remaining(Any(), 1_001L))
+        retry.failed(oldService, 1_002L)
+        assertEquals(null, retry.remaining(null, 1_003L))
+        assertEquals(null, retry.remaining(oldService, 1_004L))
+    }
 }

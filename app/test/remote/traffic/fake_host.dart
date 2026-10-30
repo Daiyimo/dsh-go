@@ -751,6 +751,9 @@ class TrafficRelayBackend implements RelayBackend {
   }
 
   @override
+  RelayPath? pathOf(DshClient client) => null;
+
+  @override
   Future<DshClient> connectHost(RelayHost relayHost, {RelayStateCallback? onState}) async {
     if (!host.online) {
       host.meter.record('rest api.device', up: 300, down: 600, messages: 0);

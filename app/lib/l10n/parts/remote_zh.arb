@@ -2,6 +2,8 @@
   "remoteStartupSection": "启动",
   "remoteAutoConnectOnStartup": "连接上次使用的主机",
   "remoteAutoConnectOnStartupHint": "关闭后从本机开始",
+  "remoteDirect": "直连优先（P2P）",
+  "remoteDirectHint": "能直连就不走服务器中继",
   "remoteStepConnect": "连接服务器",
   "remoteStepVerifyHostKey": "验证主机指纹",
   "remoteStepStartDsh": "启动 DSH",
@@ -604,6 +606,17 @@
     }
   },
   "remoteConnectedEncrypted": "已连接 · 端到端加密",
+  "remoteConnectedVia": "已连接 · {path} · 端到端加密",
+  "@remoteConnectedVia": {
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+  "remotePathDirect": "直连",
+  "remotePathTurn": "TURN",
+  "remotePathRelay": "中继",
   "remoteConnectedSsh": "已连接 · SSH {address}",
   "@remoteConnectedSsh": {
     "placeholders": {

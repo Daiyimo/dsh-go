@@ -77,6 +77,15 @@ class FakeUpdate extends AppUpdateController {
   @override
   Future<void> onAppResumed({Duration confirmGrace = Duration.zero}) async => calls.add('resumed');
 
+  /// What [installWithSystem] answers.
+  bool systemInstallerOpens = true;
+
+  @override
+  Future<bool> installWithSystem() async {
+    calls.add('installWithSystem');
+    return systemInstallerOpens;
+  }
+
   @override
   Future<void> setAutoCheck(bool value) async {
     calls.add('autoCheck:$value');
@@ -259,6 +268,31 @@ void main() {
       expect(update.calls, ['skipLatest']);
       expect(find.text('发现新版本'), findsNothing);
       expect(find.text('已跳过 1.2.0'), findsOneWidget);
+    });
+
+    testWidgets('a stopped or failed install offers the system installer', (tester) async {
+      final update = await pump(
+        tester,
+        FakeUpdate(_offer(task: UpdateTaskPhase.ready, problem: UpdateProblem.installCancelled)),
+      );
+      await _openSheet(tester);
+      expect(find.text('已取消安装'), findsOneWidget);
+      await tester.tap(find.text('用系统安装器安装'));
+      await tester.pump();
+      expect(update.calls, ['installWithSystem']);
+      update.systemInstallerOpens = false;
+      await tester.tap(find.text('用系统安装器安装'));
+      await tester.pump();
+      expect(find.text('没能打开系统安装器'), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox());
+      await pump(tester, FakeUpdate(_offer(task: UpdateTaskPhase.failed, problem: UpdateProblem.installFailed)));
+      await _openSheet(tester);
+      expect(find.text('用系统安装器安装'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox());
+      await pump(tester, FakeUpdate(_offer(task: UpdateTaskPhase.ready)));
+      await _openSheet(tester);
+      expect(find.text('用系统安装器安装'), findsNothing);
     });
 
     testWidgets('signature mismatch offers the release page, not a retry', (tester) async {

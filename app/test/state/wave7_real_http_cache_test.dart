@@ -39,7 +39,7 @@ import '../account/support.dart' show FixedAccount;
 import '../chat/support/harness.dart' show testApp, usePhoneView, loadTestFonts;
 import '../drawer/support.dart' show FixedPending;
 import '../plugins/native/support.dart' show FakeBridge, contributions;
-import '../plugins/support/fake_plugin_host.dart' show bundleJson, sampleIndex;
+import '../plugins/support/fake_plugin_host.dart' show bundleJson, sampleIndex, emptyOfficialMarket;
 import '../shell/golden_harness.dart' show FakeRuntime, FakeSettings, runningStatus;
 import 'read_list_refresh_test.dart'
     show FixedHost, SwitchConnection, switchConnectionProvider, SwitchWorkspaces, SwitchWorkspacePrefs;
@@ -224,6 +224,7 @@ List<Override> _overrides(DshClient client) => [
   pendingInteractionsProvider.overrideWith(() => FixedPending(const {})),
   unreadSessionIdsProvider.overrideWithValue(const {}),
   marketIndexFetcherProvider.overrideWithValue((uri) async => parseMarketIndex(sampleIndex, uri)),
+  officialMarketFetcherProvider.overrideWithValue(() async => emptyOfficialMarket),
 ];
 
 Future<void> _until(WidgetTester tester, bool Function() condition) async {

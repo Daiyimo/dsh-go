@@ -16,8 +16,10 @@ import '../crypto/noise_ik.dart';
 import '../protocol/control.dart' show maxRemoteCapabilityEntries;
 import '../server/server_api.dart';
 import '../state.dart';
+import '../transport/peer_connection.dart';
 import '../transport/relay_transport.dart';
 import '../transport/transport.dart';
+import '../transport/webrtc_transport.dart';
 import '../util/bytes.dart';
 import 'secret_store.dart';
 
@@ -259,6 +261,9 @@ class RemoteAccount {
     ControlSocketConnector? socketConnector,
     this.loginPollInterval = const Duration(seconds: 2),
     this.controlTracer,
+    this.peerConnector,
+    this.onDirectFallback,
+    this.directTimeout = const Duration(seconds: 8),
   }) : serverUrl = normalizeServerUrl(serverUrl ?? defaultRemoteServer),
        _secrets = secrets,
        _socketConnector = socketConnector {
@@ -276,6 +281,18 @@ class RemoteAccount {
 
   /// Optional Control-frame tracer (tokens and ciphertext redacted).
   final ControlTracer? controlTracer;
+
+  /// WebRTC stack for the direct path (LAN / P2P / TURN); `null` keeps every
+  /// connection on the Relay. Read at each (re)connect, so a change applies
+  /// from the next connection on.
+  RemotePeerConnector? peerConnector;
+
+  /// Why a direct attempt fell back to the Relay (diagnostics).
+  void Function(String reason)? onDirectFallback;
+
+  /// How long a direct attempt may take to open its DataChannel before the
+  /// Relay takes over (the Server's `webrtcFallbackTimeoutMs` wins when longer).
+  final Duration directTimeout;
   late final RemoteServerApi api;
   final SecretStore _secrets;
   final ControlSocketConnector? _socketConnector;
@@ -691,10 +708,11 @@ class RemoteAccount {
   /// The client of the active connection, if any.
   DshClient? get activeClient => _active?.client;
 
-  /// Connects to [host] through the Server Relay with end-to-end Noise
-  /// encryption and returns a ready [DshClient] (first `$events` generation
-  /// received). The client reconnects by itself after drops; [onState] and
-  /// [connectionStates] report progress and failures.
+  /// Connects to [host] with end-to-end Noise encryption, directly
+  /// ([peerConnector]) or through the Server Relay, and returns a ready
+  /// [DshClient] (first `$events` generation received). The client
+  /// reconnects by itself after drops; [onState] and [connectionStates]
+  /// report progress and failures.
   ///
   /// Trust: the Host's identity key is pinned on first connect (after
   /// [confirmNewHost] approves, when given) and must never change afterwards
@@ -804,14 +822,15 @@ class RemoteAccount {
     }
     final hostKey = await _checkPin(host, peer, confirm);
 
-    // 2. Relay connection (refresh once when the token is refused).
-    RelayTransport transport;
+    // 2. Data plane: direct when enabled and negotiated, else the Relay
+    // (refresh once when the token is refused).
+    SecureHandshakeTransport transport;
     try {
-      transport = await _connectRelay(token, host.id);
+      transport = await _connectTransport(token, host.id);
     } on RemoteTransportException catch (error) {
       if (error.code != 'AUTH_INVALID' && error.code != 'TOKEN_EXPIRED') rethrow;
       token = await accessToken(forceRefresh: true);
-      transport = await _connectRelay(token, host.id);
+      transport = await _connectTransport(token, host.id);
     }
 
     // 3. Noise IK (client = initiator) against the pinned key.
@@ -891,7 +910,33 @@ class RemoteAccount {
     }
   }
 
-  Future<RelayTransport> _connectRelay(String token, String hostId) => RelayTransport.connect(
+  /// LAN / P2P / TURN over WebRTC when [peerConnector] is set and the Server
+  /// and Host negotiate it, else the Relay as before. A failed direct attempt
+  /// falls back to the Relay on a new connection: the Host may still hold
+  /// WebRTC state for the old one (upstream Android does the same), and the
+  /// Noise session always starts after the data plane is chosen.
+  Future<SecureHandshakeTransport> _connectTransport(String token, String hostId) async {
+    final connector = peerConnector;
+    final control = await _connectRelay(token, hostId, direct: connector != null);
+    if (connector == null || control.directTransports.isEmpty) return control;
+    try {
+      return await WebRtcTransport.negotiate(
+        control: control,
+        connector: connector,
+        iceServers: (connectionId) => api.turnCredentials(token, connectionId),
+        timeout: directTimeout,
+      );
+    } on WebRtcUnavailable catch (error) {
+      try {
+        onDirectFallback?.call(error.message);
+      } on Object {
+        // Diagnostics must not prevent the Relay fallback.
+      }
+      return _connectRelay(token, hostId);
+    }
+  }
+
+  Future<RelayTransport> _connectRelay(String token, String hostId, {bool direct = false}) => RelayTransport.connect(
     url: controlSocketUrl(serverUrl),
     deviceId: _identity!.deviceId,
     accessToken: token,
@@ -899,6 +944,7 @@ class RemoteAccount {
     clientVersion: clientVersion,
     connector: _socketConnector,
     tracer: controlTracer,
+    offerDirect: direct,
   );
 
   Future<String> _checkPin(RemoteHost host, AuthorizedPeer peer, HostTrustPrompt? confirm) async {

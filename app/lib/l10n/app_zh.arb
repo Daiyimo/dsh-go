@@ -1,5 +1,16 @@
 {
   "@@locale": "zh",
+  "a11yRestoreTitle": "自动恢复无障碍",
+  "searchKwA11yRestore": "无障碍,恢复,重连,自动恢复,掉线,授权,ADB,Shizuku",
+  "a11yRestoreNeedsGrant": "需要授权",
+  "a11yRestoreNotice": "开启后，在系统设置里关掉无障碍会被自动打开；要关闭手机操控，请在 DSH Go 里关。",
+  "a11yRestoreForceStop": "被强制停止后，重新打开 DSH Go 才能恢复。",
+  "a11yRestoreGrant": "授权并开启",
+  "a11yRestoreSetup": "配置 Shizuku 或无线调试",
+  "a11yRestoreWaiting": "请在 Shizuku 中允许授权",
+  "a11yRestoreComputer": "也可以连接电脑，执行一次：",
+  "a11yRestoreCopy": "复制授权命令",
+  "a11yRestoreCopied": "授权命令已复制",
   "accessPickTitle": "想让 DSH Go 帮你做哪些事",
   "accessPickMessage": "选好后逐项开启",
   "accessPickConfirm": "开启所选",
@@ -4842,6 +4853,111 @@
   "localEnvPhoneNeedsRuntime": "安装本机运行环境后可用",
   "localEnvSignInNeedsRuntime": "需要本机运行环境",
   "localEnvSignInInstallFirst": "安装后即可登录",
+  "marketSectionOfficial": "官方",
+  "marketSectionAdapted": "适配 DSH Go",
+  "marketSectionAll": "全部",
+  "marketSectionLoading": "正在载入…",
+  "marketSectionFailed": "官方目录没打开",
+  "marketSectionEmpty": "暂无",
+  "marketTierOfficial": "官方",
+  "marketTierAdapted": "适配 DSH Go",
+  "marketRiskMedium": "中风险",
+  "marketRiskHigh": "高风险",
+  "marketFlagInstallScripts": "安装时运行脚本",
+  "marketFlagInstallScriptsBody": "安装时会自动运行包里的脚本（preinstall、install 或 postinstall）",
+  "marketFlagNativeCode": "含原生程序",
+  "marketFlagNativeCodeBody": "包里有编译好的原生程序（.node、binding.gyp 或二进制文件），没法直接阅读",
+  "marketFlagShell": "执行命令",
+  "marketFlagShellBody": "代码里会调用系统命令（child_process）",
+  "marketFlagNetwork": "联网",
+  "marketFlagNetworkBody": "代码里会发起网络请求（fetch、http、WebSocket）",
+  "marketFlagFilesystem": "写工作区外的文件",
+  "marketFlagFilesystemBody": "会写入工作区以外的路径",
+  "marketFlagObfuscated": "代码难以审阅",
+  "marketFlagObfuscatedBody": "有压缩或混淆过的大文件，看不出它做什么",
+  "marketFlagNotAdapted": "未适配 DSH Go",
+  "marketFlagNotAdaptedBody": "没有声明 DSH Go 原生协议，在 App 里没有原生界面",
+  "marketFlagOtherBody": "自动检查报告的其他特征",
+  "marketChecksTitle": "自动检查",
+  "marketChecksClean": "没有发现风险特征",
+  "marketChecksNote": "自动检查发现的特征，不代表插件有恶意",
+  "marketCheckedOn": "检查于 {date}",
+  "@marketCheckedOn": {
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "marketScreenshot": "截图 {index}",
+  "@marketScreenshot": {
+    "placeholders": {
+      "index": {
+        "type": "int"
+      }
+    }
+  },
+  "marketRiskConfirmTitle": "「{name}」有风险特征",
+  "@marketRiskConfirmTitle": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "marketRiskConfirmAction": "仍然安装",
+  "marketPinnedVersion": "锁定版本",
+  "marketRequiresApp": "需要 DSH Go",
+  "marketNeedsApp": "需要 DSH Go {version} 或更高版本",
+  "@marketNeedsApp": {
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "marketUpdateAvailable": "有更新",
+  "marketBlockedTitle": "这个版本已下架",
+  "marketBlockedMessage": "已安装的 {version} 已从插件市场下架，建议卸载",
+  "@marketBlockedMessage": {
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "marketBlockedRow": "此版本已下架，建议卸载",
+  "marketBlockedBadge": "已下架",
+  "marketVerifying": "正在核对版本…",
+  "marketMismatchTitle": "版本校验不一致",
+  "marketMismatchMessage": "npm 上的 {version} 和插件市场检查过的不是同一个包，已停止安装",
+  "@marketMismatchMessage": {
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "marketSubmit": "提交插件",
+  "marketSubmitHint": "在 GitHub 提交，通过自动检查即上架",
+  "marketLinkNotFound": "插件市场里没有 {name}",
+  "@marketLinkNotFound": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "marketVerificationUnavailableTitle": "暂时无法核对版本",
+  "marketVerificationUnavailableBody": "没能取得 npm 的版本校验信息，尚未开始安装。请检查网络后重试。",
+  "marketCombinedCount": "{count} 个插件",
+  "@marketCombinedCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "mediaGenerateTile": "生成",
   "mediaAiGenerated": "AI 生成",
   "mediaCostEstimate": "约 {amount}",
@@ -5059,6 +5175,15 @@
   "performanceSystemMotion": "同时遵循系统的移除动画设置",
   "performanceFollowMode": "效果跟随性能模式",
   "performanceRemoteHint": "推荐连接电脑或服务器，减少本机负担",
+  "petActionSending": "正在发送…",
+  "petActionTargetChanged": "主机已变化，重新打开「问一句」；文字已保留",
+  "petActionSendFailed": "没能发出，文字已保留，请重试",
+  "petActionBusy": "这个对话正在忙，请选择「新对话」",
+  "petActionVoiceMissing": "先到 App 下载离线语音模型",
+  "petActionVoiceTitle": "语音问一句",
+  "petActionVoiceReturn": "返回桌宠",
+  "petActionVoiceStop": "结束录音",
+  "petActionVoiceStart": "开始录音",
   "phoneDiagnosticsCollecting": "正在收集…",
   "phoneDiagnosticsPacking": "正在打包…",
   "phoneDiagnosticsSharing": "正在打开分享…",
@@ -6306,7 +6431,7 @@
     }
   },
   "pluginsOfflineDescription": "引擎运行后显示已装插件，插件市场现在就能逛",
-  "pluginsIconChanged": "桌面图标已更换，几秒后生效",
+  "pluginsIconChanged": "桌面图标已选择，回到桌面后更新",
   "pluginsIconChangeFailed": "没能更换，稍后再试",
   "pluginsTheme": "主题",
   "pluginsAppearance": "外观",
@@ -7158,6 +7283,8 @@
   "remoteStartupSection": "启动",
   "remoteAutoConnectOnStartup": "连接上次使用的主机",
   "remoteAutoConnectOnStartupHint": "关闭后从本机开始",
+  "remoteDirect": "直连优先（P2P）",
+  "remoteDirectHint": "能直连就不走服务器中继",
   "remoteStepConnect": "连接服务器",
   "remoteStepVerifyHostKey": "验证主机指纹",
   "remoteStepStartDsh": "启动 DSH",
@@ -7760,6 +7887,17 @@
     }
   },
   "remoteConnectedEncrypted": "已连接 · 端到端加密",
+  "remoteConnectedVia": "已连接 · {path} · 端到端加密",
+  "@remoteConnectedVia": {
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+  "remotePathDirect": "直连",
+  "remotePathTurn": "TURN",
+  "remotePathRelay": "中继",
   "remoteConnectedSsh": "已连接 · SSH {address}",
   "@remoteConnectedSsh": {
     "placeholders": {
@@ -8290,6 +8428,7 @@
   "searchKwChatLogUpload": "隐私,日志,上传日志,对话日志",
   "searchKwAddSshHost": "SSH,添加主机,连接电脑",
   "searchKwRemoteAutoConnect": "自动连接,启动时连接",
+  "searchKwRemoteDirect": "直连,P2P,点对点,局域网,中继,TURN,WebRTC",
   "searchKwPermissionCurrent": "本对话都允许,这个对话,当前权限",
   "searchKwPermissionDefault": "默认权限,只读,工作区内修改,完全权限,自动执行命令,别问我",
   "searchSettingsHint": "搜索设置",
@@ -9853,6 +9992,8 @@
   "updateOpenReleasePage": "打开发布页",
   "updateUpdateNow": "立即更新",
   "updateSkipVersion": "跳过这个版本",
+  "updateInstallWithSystem": "用系统安装器安装",
+  "updateSystemInstallerFailed": "没能打开系统安装器",
   "updateStarProject": "去 Star",
   "updateCancelDownload": "取消下载",
   "updateDownloadInBackground": "后台下载",
@@ -9978,6 +10119,8 @@
   "viewBalanceChecking": "正在查询余额…",
   "viewBalanceCheckFailed": "暂时无法查询余额",
   "viewBalanceNoAlert": "不提醒",
+  "viewBalanceBannerHidden": "本次运行不再显示余额提醒",
+  "viewBalanceTurnOff": "不再提醒",
   "viewBalanceBelow": "低于 {value}",
   "@viewBalanceBelow": {
     "placeholders": {

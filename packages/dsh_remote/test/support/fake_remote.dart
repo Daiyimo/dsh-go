@@ -1,8 +1,9 @@
 // In-process imitation of a ds-harness-remote Server (REST + Control
 // gateway, modelled on upstream apps/server, plus an optional Relay node for
-// `transport.relay.attach`) and a Host plugin (Noise responder +
-// harness.remote.* bridge, modelled on upstream
-// packages/plugin/src/server-connection.ts and harness-remote-bridge.ts).
+// `transport.relay.attach` and WebRTC signaling like the hosted Server) and a
+// Host plugin (Noise responder + harness.remote.* bridge + WebRTC answerer,
+// modelled on upstream packages/plugin/src/server-connection.ts and
+// harness-remote-bridge.ts).
 // Upstream: https://github.com/liguobao/ds-harness-remote (MIT).
 import 'dart:async';
 import 'dart:convert';
@@ -13,7 +14,10 @@ import 'package:dsh_remote/src/carrier/tunnel_carrier.dart' show harnessRemoteAl
 import 'package:dsh_remote/src/crypto/noise_ik.dart';
 import 'package:dsh_remote/src/protocol/control.dart';
 import 'package:dsh_remote/src/protocol/messages.dart';
+import 'package:dsh_remote/src/transport/rtc_chunking.dart';
 import 'package:dsh_remote/src/util/bytes.dart';
+
+import 'fake_rtc.dart';
 
 class FakeDevice {
   FakeDevice(this.descriptor);
@@ -279,6 +283,10 @@ class FakeRemoteServer {
         'nextCursor': null,
       });
     }
+    if (request.method == 'GET' && path == '/api/v1/turn/credentials') {
+      turnRequests.add(request.uri.queryParameters['connection_id'] ?? '');
+      return json(200, {'iceServers': iceServers});
+    }
     final presenceMatch = RegExp(r'^/api/v1/devices/([^/]+)/presence$').firstMatch(path);
     if (request.method == 'GET' && presenceMatch != null) {
       presenceRequests++;
@@ -312,6 +320,21 @@ class FakeRemoteServer {
   /// Raw Control frames received from client devices.
   final List<String> clientControlFrames = [];
 
+  /// `relay` frames forwarded on Control sockets.
+  int controlRelayFrames = 0;
+
+  // --- WebRTC (hosted Server) --------------------------------------------------
+
+  /// Negotiates the direct transports in [webrtcTransports] with peers that
+  /// offer them, sends `webrtcEnabled: true` and forwards signaling.
+  bool webrtc = false;
+  Set<String> webrtcTransports = {'transport.lan', 'transport.p2p', 'transport.turn'};
+  int? webrtcFallbackTimeoutMs;
+
+  /// `GET /api/v1/turn/credentials` answer, and the connection ids asked.
+  List<Map<String, Object?>> iceServers = [];
+  final List<String> turnRequests = [];
+
   // --- Relay node (`transport.relay.attach`) ---------------------------------
 
   /// Negotiates `transport.relay.attach` and assigns this node when both
@@ -326,6 +349,7 @@ class FakeRemoteServer {
 
   /// Every `relay.attach` payload the node accepted, in order.
   final List<Map<String, Object?>> relayAttaches = [];
+
   /// `<deviceId> <nonce>` of every pong the node received.
   final List<String> relayPongs = [];
   int relayFrames = 0;
@@ -460,10 +484,12 @@ class FakeRemoteServer {
               'maxControlFrameBytes': maxControlFrameBytes,
               'maxRelayFrameBytes': maxRelayFrameBytes,
               'capabilities': [
+                if (webrtc) ...webrtcTransports.where(caps.contains),
                 if (caps.contains('transport.relay')) 'transport.relay',
                 if (relayAttach && caps.contains('transport.relay.attach')) 'transport.relay.attach',
               ],
-              'webrtcEnabled': false,
+              'webrtcEnabled': webrtc,
+              'webrtcFallbackTimeoutMs': ?webrtcFallbackTimeoutMs,
             });
             return;
           }
@@ -519,7 +545,7 @@ class FakeRemoteServer {
           'clientDeviceId': peer.id,
           'clientIdentityKey': devices[peer.id]!.descriptor['identityKey'],
           'authorization': 'account',
-          'preferredTransports': ['relay'],
+          'preferredTransports': webrtc ? p['preferredTransports'] : ['relay'],
           if (attach) ..._assign(link, host.id, peer.id),
         });
         if (attach) _assign(link, peer.id, host.id);
@@ -542,7 +568,12 @@ class FakeRemoteServer {
           return;
         }
       case 'transport.selected':
-        if (peer.id != link.client || p['transport'] != 'relay') throw const ProtocolError('INVALID_MESSAGE');
+        // The Host confirms its own WebRTC selection too (plugin 0.6.0).
+        if (p['transport'] != 'relay' ? !webrtc : peer.id != link.client) {
+          throw const ProtocolError('INVALID_MESSAGE');
+        }
+      case 'signal.offer' || 'signal.answer' || 'signal.ice':
+        if (!webrtc) return;
       case 'secure.handshake':
         final step = p['step'];
         if (step == 1 && peer.id == link.client && link.stage == 'accepted') {
@@ -558,6 +589,7 @@ class FakeRemoteServer {
           throw const ProtocolError('INVALID_MESSAGE');
         }
         link.counters[peer.id] = counter;
+        controlRelayFrames++;
       default:
         return;
     }
@@ -632,6 +664,14 @@ class FakeHostConnection {
   WebSocket? dataSocket;
   bool selected = false;
   Map<String, Object?>? pendingHandshake;
+
+  /// WebRTC answer to the client's offer; ciphertext uses it once the client
+  /// selected `lan` / `p2p` / `turn`.
+  FakeHostPeer? rtc;
+  String? selectedTransport;
+  bool get viaRtc => rtc != null && selectedTransport != null && selectedTransport != 'relay';
+  final RtcChunkCodec rtcIn = RtcChunkCodec();
+  final RtcChunkCodec rtcOut = RtcChunkCodec();
   final SecureMessageCodec incoming = SecureMessageCodec();
   final SecureMessageCodec outgoing = SecureMessageCodec();
   final Map<String, FakeHostStream> streams = {};
@@ -641,6 +681,10 @@ class FakeHostConnection {
 
   void send(RemoteMessage message) {
     for (final fragment in outgoing.encode(message.encode())) {
+      if (viaRtc) {
+        rtcOut.encode(noise.encrypt(fragment)).forEach(rtc!.send);
+        continue;
+      }
       final counter = noise.sendingCounter;
       final payload = {
         'connectionId': connectionId,
@@ -712,6 +756,15 @@ class FakeRemoteHost {
   /// older Host.
   bool relayAttach = true;
 
+  /// Offers `transport.lan/p2p/turn` and answers offers over [rtcNetwork]
+  /// (a plugin with a WebRTC backend).
+  bool webrtc = false;
+  FakeRtcNetwork? rtcNetwork;
+
+  /// Candidates the Host received, by connection id, and offers in order.
+  final Map<String, int> rtcCandidates = {};
+  final List<String> rtcOffers = [];
+
   /// `harness.transport.describe` capabilities.
   List<String> capabilities = ['transport.relay', 'harness.remote.v3', 'harness.remote.transfer.v1'];
 
@@ -762,7 +815,11 @@ class FakeRemoteHost {
       'deviceId': deviceId,
       'accessToken': _tokens['accessToken'],
       'protocols': [1],
-      'capabilities': ['transport.relay', if (relayAttach) 'transport.relay.attach'],
+      'capabilities': [
+        if (webrtc) ...['transport.lan', 'transport.p2p', 'transport.turn'],
+        'transport.relay',
+        if (relayAttach) 'transport.relay.attach',
+      ],
       'clientVersion': '0.5.17',
       'harnessVersion': '0.2.1-rc.2',
     });
@@ -825,17 +882,52 @@ class FakeRemoteHost {
       case 'secure.handshake':
         final connection = connections[p['connectionId']];
         if (connection == null) return;
-        if (connection.assignment != null && !connection.selected) {
+        // Like the plugin: with a data plane still to choose, wait for the
+        // client's transport.selected.
+        if ((connection.assignment != null || connection.rtc != null) && !connection.selected) {
           connection.pendingHandshake = p;
           return;
         }
         _completeHandshake(connection, p);
+      case 'signal.offer':
+        final connection = connections[p['connectionId']];
+        if (connection == null || !webrtc) return;
+        rtcOffers.add(connection.connectionId);
+        final rtc = rtcNetwork!.answer(
+          p['sdp']! as String,
+          onMessage: (data) => unawaited(_receiveRtc(connection, data)),
+          onOpen: () => _sendControl('transport.selected', {
+            'connectionId': connection.connectionId,
+            'targetDeviceId': connection.clientId,
+            'transport': 'p2p',
+          }),
+        );
+        if (rtc == null) return;
+        connection.rtc = rtc;
+        _sendControl('signal.answer', {
+          'connectionId': connection.connectionId,
+          'targetDeviceId': connection.clientId,
+          'sdp': 'v=0 fake-answer',
+        });
+        _sendControl('signal.ice', {
+          'connectionId': connection.connectionId,
+          'targetDeviceId': connection.clientId,
+          'candidate': {'candidate': 'candidate:2 1 udp 2122260223 192.168.1.30 40000 typ host', 'sdpMid': '0'},
+        });
+      case 'signal.ice':
+        final id = p['connectionId']! as String;
+        rtcCandidates[id] = (rtcCandidates[id] ?? 0) + 1;
       case 'transport.selected':
         final connection = connections[p['connectionId']];
         if (connection == null) return;
-        // The plugin serializes Control frames, so a handshake that arrives
-        // while it attaches still waits for the data socket.
-        if (connection.assignment != null) await _attach(connection);
+        connection.selectedTransport = p['transport']! as String;
+        if (!connection.viaRtc) {
+          connection.rtc?.close();
+          connection.rtc = null;
+          // The plugin serializes Control frames, so a handshake that arrives
+          // while it attaches still waits for the data socket.
+          if (connection.assignment != null) await _attach(connection);
+        }
         connection.selected = true;
         final pending = connection.pendingHandshake;
         if (pending != null) _completeHandshake(connection, pending);
@@ -845,7 +937,26 @@ class FakeRemoteHost {
         await _receiveRelay(connection, p);
       case 'error':
         final id = p['connectionId'];
-        if (id != null) unawaited(connections.remove(id)?.dataSocket?.close());
+        if (id == null) return;
+        final connection = connections.remove(id);
+        connection?.rtc?.close();
+        unawaited(connection?.dataSocket?.close());
+    }
+  }
+
+  Future<void> _receiveRtc(FakeHostConnection connection, Uint8List data) async {
+    if (!connection.viaRtc) throw StateError('ciphertext on a DataChannel the client did not select');
+    final ciphertext = connection.rtcIn.decode(data);
+    if (ciphertext == null) return;
+    final plain = connection.incoming.decode(connection.noise.decrypt(ciphertext));
+    if (plain == null) return;
+    await _onMessage(connection, RemoteMessage.decode(plain));
+  }
+
+  /// Closes every client's DataChannel from the Host side.
+  void closeRtc() {
+    for (final connection in connections.values) {
+      connection.rtc?.close();
     }
   }
 

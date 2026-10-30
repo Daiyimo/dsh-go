@@ -2,6 +2,24 @@
 
 每个版本先中文、后英文。发版时把对应版本的正文（不含版本标题）作为 Release 正文，见 `docs/release.md`。
 
+## 1.0.3 · 2026-10-31
+
+### 中文
+
+- 修复更换桌面图标后出现两个入口的问题：保留正在使用的页面，回到桌面后完成切换；连续更换、强停后重开和刚切换就重启也能恢复最后选择。
+- 手机操控新增无障碍自动恢复设置。授予系统设置权限后，手机操控开启期间会尝试恢复被关闭或断开的服务，并保留其他无障碍服务。Android 强制停止 App 后仍需手动重新打开。
+- 桌宠新增「问一句」和新会话入口，可直接在气泡里处理支持的工具审批与简单问题；语音识别结果先回填草稿，由你确认发送。修复无障碍浮窗异常时的窗口创建、频繁重试，以及键盘遮挡输入栏的问题。
+- DSH Remote 新增可选 P2P 直连和 TURN 配置，默认关闭；直连不可用时回退中继。需服务端与主机支持相应协议。
+- 插件市场支持官方目录、固定版本更新、风险说明和分享链接，媒体生成设置也可跳转到对应插件。插件仍需单独安装，未上架的插件不会显示为可安装。
+
+### English
+
+- Fixed duplicate launcher entries after changing the app icon. The current page stays open, and the switch finishes when you return home. Rapid changes, relaunches after force-stop, and reboots immediately after a change retain the saved choice.
+- Added optional accessibility recovery for Phone Control. After granting secure-settings access, the app can restore a disabled or disconnected service while Phone Control is enabled, preserving other accessibility services. Android force-stop still requires reopening the app.
+- Added quick asks and new chats from the floating pet, supported approval and simple-question actions in bubbles, and voice input that fills a draft for explicit sending. Fixed accessibility-overlay window creation, excessive retries after a window failure, and the keyboard covering the input bar.
+- Added opt-in P2P and TURN configuration for DSH Remote, off by default, with Relay fallback when direct connection is unavailable. Compatible server and Host support is required.
+- The plugin market now supports an official catalog, pinned-version updates, risk notices and share links. Media generation settings link to the relevant plugin. Plugins remain separate installs; unpublished packages are not offered as installable.
+
 ## 1.0.2 · 2026-10-30
 
 ### 中文

@@ -11,7 +11,6 @@ import java.util.zip.Inflater
 import kotlin.math.abs
 import kotlin.math.ceil
 import kotlin.math.floor
-import kotlin.math.roundToInt
 
 /**
  * The alpha of a palette PNG (how the bundled sheets are stored: 4- or 8-bit indices with a tRNS
@@ -337,11 +336,6 @@ class PetFramesTest {
                         val again = EdgeSnap.dockFor(rest, f.rest.width, f.reach, area, m)
                         assertEquals(dock.side, again.side)
                         assertEquals(y, again.yFraction, 0.01f)
-                        // Tucked: the same height, 40 % of the rest frame past the edge.
-                        val t = EdgeSnap.tucked(dock, f.rest.width, f.reach, area, m)
-                        assertEquals(rest.y, t.y)
-                        val hidden = (f.rest.width * EdgeSnap.TUCK_SHARE).roundToInt()
-                        assertEquals(if (side == Side.LEFT) -hidden else area.screenW - f.rest.width + hidden, t.x)
                     }
                 }
             }
@@ -356,7 +350,6 @@ class PetFramesTest {
         for (side in Side.values()) for (y in listOf(0f, 0.5f, 1f)) {
             val dock = Dock(side, y)
             assertEquals(EdgeSnap.position(dock, w, h, portrait, 22), EdgeSnap.position(dock, reach, portrait, 22))
-            assertEquals(EdgeSnap.tucked(dock, w, h, portrait, 22), EdgeSnap.tucked(dock, w, reach, portrait, 22))
         }
         for ((x, y) in listOf(10 to 300, 900 to 1200, 500 to 5000)) {
             assertEquals(EdgeSnap.dockFor(x, y, w, h, portrait, 22, 300f), EdgeSnap.dockFor(WindowPos(x, y), w, reach, portrait, 22, 300f))

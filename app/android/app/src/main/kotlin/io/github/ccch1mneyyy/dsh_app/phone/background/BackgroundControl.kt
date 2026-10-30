@@ -5,6 +5,7 @@ import io.github.ccch1mneyyy.dsh_app.R
 import android.content.Context
 import android.os.Build
 import android.os.Bundle
+import android.os.Process
 import io.github.ccch1mneyyy.dsh_app.phone.PhoneRegistry
 import java.util.concurrent.atomic.AtomicLong
 
@@ -99,6 +100,35 @@ class BackgroundControl private constructor(context: Context) {
         val reason = runGateProbe()
         return mapOf("ok" to (reason == null), "reason" to reason)
     }
+
+    // ---- 自动恢复无障碍 (WRITE_SECURE_SETTINGS through the engine) -------------
+
+    /** The one-tap way to the permission right now ([SecureSettingsGrant.path]). */
+    fun grantPath(granted: Boolean): String =
+        if (granted) SecureSettingsGrant.GRANTED else SecureSettingsGrant.path(false, shizuku.status(), adb.status())
+
+    /**
+     * Has the engine grant the permission over [via] (`shizuku` / `adb`): 不打扰模式's channel when it
+     * uses the same starter, else one opened for this and closed after. Blocks (an adb connect can
+     * take seconds); true when the engine says it granted.
+     */
+    fun grantSecureSettings(via: String): Boolean {
+        val shared = mode == via
+        val ch = when {
+            shared -> activeChannel()
+            via == SecureSettingsGrant.SHIZUKU -> shizuku.connect()
+            else -> adb.connect()
+        }
+        val request = Bundle().apply {
+            putString(Proto.OP, Proto.OP_GRANT_SECURE_SETTINGS)
+            putInt(Proto.USER, Process.myUid() / PER_USER_RANGE)
+        }
+        val ok = ch != null && runCatching { ch.execute(request).getBoolean(Proto.OK) }.getOrDefault(false)
+        if (!shared) if (via == SecureSettingsGrant.SHIZUKU) shizuku.disconnect() else adb.disconnect()
+        return ok
+    }
+
+    fun requestShizukuPermission(then: () -> Unit): Boolean = shizuku.requestPermission(then)
 
     // ---- task lifecycle (called by the bridge/core) ------------------------
 
@@ -198,6 +228,8 @@ class BackgroundControl private constructor(context: Context) {
     }
 
     companion object {
+        /** UserHandle.PER_USER_RANGE: a uid's user is uid / this. */
+        private const val PER_USER_RANGE = 100_000
 
         @Volatile private var instance: BackgroundControl? = null
         fun get(context: Context): BackgroundControl =

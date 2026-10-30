@@ -190,6 +190,8 @@ class PhoneController extends Notifier<PhoneState> {
 
   Future<bool> openAccessibilitySettings() => _channel.openAccessibilitySettings();
 
+  Future<PhoneResult> grantSecureSettings() => _thenRefresh(_channel.grantSecureSettings());
+
   Future<bool> openAppDetails() => _channel.openAppDetails();
 
   Future<ScreenTestResult> testScreen() => _channel.testScreen();

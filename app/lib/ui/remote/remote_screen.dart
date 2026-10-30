@@ -231,7 +231,9 @@ class _ActiveCard extends ConsumerWidget {
       return why == null ? appL10n.remoteReconnectingEllipsis : appL10n.remoteReconnectReason(why);
     }
     if (status.phase == HostLinkPhase.connected) {
-      return address == null ? appL10n.remoteConnectedEncrypted : appL10n.remoteConnectedSsh(address);
+      if (address != null) return appL10n.remoteConnectedSsh(address);
+      final path = status.path;
+      return path == null ? appL10n.remoteConnectedEncrypted : appL10n.remoteConnectedVia(path.label);
     }
     return view.label;
   }
@@ -423,6 +425,15 @@ class _RelaySection extends ConsumerWidget {
               active: active == HostRef.relay(h.id),
               onTap: h.online || active == HostRef.relay(h.id) ? () => onUse(HostRef.relay(h.id, name: h.name)) : null,
             ),
+        SettingsSwitchTile(
+          key: const ValueKey('remote-direct'),
+          icon: AppIcons.link,
+          spot: Spots.remoteDirect,
+          tinted: false,
+          subtitle: l10n.remoteDirectHint,
+          value: ref.watch(remoteDirectProvider),
+          onChanged: (value) => unawaited(ref.read(remoteDirectProvider.notifier).set(value)),
+        ),
       ],
     );
   }

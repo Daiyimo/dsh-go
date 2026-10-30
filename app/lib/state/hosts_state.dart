@@ -10,6 +10,7 @@ import '../remote/link_status.dart';
 import '../remote/relay/dsh_remote_backend.dart';
 import 'app_info.dart';
 import '../remote/relay/relay_backend.dart';
+import '../remote/relay/webrtc_peer.dart';
 import '../remote/secret_store.dart';
 import '../remote/ssh/ssh_host_config.dart';
 import '../remote/ssh/ssh_transport.dart';
@@ -261,6 +262,37 @@ class RemoteAutoConnectController extends Notifier<bool> {
 
 final remoteAutoConnectProvider = NotifierProvider<RemoteAutoConnectController, bool>(RemoteAutoConnectController.new);
 
+/// 直连优先: DSH Remote connections try LAN / P2P / TURN (WebRTC) before the
+/// Server's relay. Off by default.
+class RemoteDirectController extends Notifier<bool> {
+  static const prefsKey = 'remote_direct_p2p';
+  late Future<void> _loaded;
+
+  @override
+  bool build() {
+    _loaded = _load();
+    return false;
+  }
+
+  Future<void> _load() async {
+    try {
+      final stored = (await SharedPreferences.getInstance()).getBool(prefsKey);
+      if (stored != null && ref.mounted) state = stored;
+    } catch (_) {}
+  }
+
+  Future<void> set(bool value) async {
+    await _loaded;
+    if (!ref.mounted) return;
+    state = value;
+    try {
+      await (await SharedPreferences.getInstance()).setBool(prefsKey, value);
+    } catch (_) {}
+  }
+}
+
+final remoteDirectProvider = NotifierProvider<RemoteDirectController, bool>(RemoteDirectController.new);
+
 /// Which host the chat, session list and new chats use. Persisted.
 class ActiveHostController extends Notifier<HostRef> {
   static const prefsKey = 'active_host';
@@ -379,7 +411,11 @@ final relayBackendProvider = Provider<RelayBackend>((ref) {
     secrets: ref.watch(secretStoreProvider),
     serverUrl: ref.watch(relayServerProvider),
     clientVersion: AppInfo.version.split('+').first,
+    peerConnector: flutterPeerConnector,
+    direct: ref.read(remoteDirectProvider),
   );
+  // A toggle applies from the next connect; it doesn't drop the current one.
+  ref.listen(remoteDirectProvider, (_, direct) => backend.direct = direct);
   ref.onDispose(() => unawaited(backend.close()));
   return backend;
 });

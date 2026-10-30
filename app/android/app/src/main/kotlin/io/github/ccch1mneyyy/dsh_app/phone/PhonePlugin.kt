@@ -102,6 +102,7 @@ class PhonePlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCallHandle
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
         when (call.method) {
             "status" -> async(result) { control.status() }
+            "grantSecureSettings" -> async(result) { control.grantSecureSettings() }
             "setEnabled" -> async(result) { control.setEnabled(call.argument<Boolean>("enabled") == true) }
             "openAccessibilitySettings" -> result.success(startActivity(control.accessibilitySettingsIntent()))
             "openAppDetails" -> result.success(startActivity(control.appDetailsIntent()))

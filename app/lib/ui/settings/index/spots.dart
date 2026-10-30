@@ -640,6 +640,13 @@ abstract final class Spots {
   );
 
   // 手机操控.
+  static final phoneA11yRestore = SettingSpot(
+    'phone-a11y-restore',
+    page: SettingsPageId.phone,
+    title: (l) => l.a11yRestoreTitle,
+    keywords: (l) => l.searchKwA11yRestore,
+    condition: SpotCondition.phoneControlOn,
+  );
   static final phoneConfirm = SettingSpot(
     'phone-confirm',
     page: SettingsPageId.phone,
@@ -933,6 +940,12 @@ abstract final class Spots {
     title: (l) => l.remoteAutoConnectOnStartup,
     keywords: (l) => l.searchKwRemoteAutoConnect,
   );
+  static final remoteDirect = SettingSpot(
+    'remote-direct',
+    page: SettingsPageId.remote,
+    title: (l) => l.remoteDirect,
+    keywords: (l) => l.searchKwRemoteDirect,
+  );
 
   // 引擎参数 and its pages (drawn from the engine's schema).
   static final subagentDepth = SettingSpot(
@@ -1005,6 +1018,7 @@ final _rows = <SettingSpot>[
   Spots.phoneFiles,
   Spots.permissionPhoneConfirm,
   Spots.visualReplies,
+  Spots.phoneA11yRestore,
   Spots.phoneConfirm,
   Spots.phoneAutoCollapse,
   Spots.phoneReturn,
@@ -1047,6 +1061,7 @@ final _rows = <SettingSpot>[
   Spots.engineUninstall,
   Spots.addSshHost,
   Spots.remoteAutoConnect,
+  Spots.remoteDirect,
   Spots.subagentDepth,
   Spots.parallelCalls,
   Spots.commandTimeout,

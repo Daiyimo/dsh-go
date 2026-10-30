@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:dsh_client/dsh_client.dart';
 import 'package:dsh_remote/dsh_remote.dart' as remote;
+import 'package:flutter/foundation.dart';
 
 import '../../l10n/l10n.dart';
 import '../link_status.dart';
@@ -14,12 +15,17 @@ import 'relay_backend.dart';
 /// Host trust works like SSH: a Host seen for the first time is only pinned
 /// after the person confirmed its fingerprint in the UI ([approveHost]); a
 /// changed key fails closed until [forgetHost].
+///
+/// [direct] (直连优先) lets connections try LAN / P2P / TURN over
+/// [peerConnector] (flutter_webrtc) before the Server's relay.
 class DshRemoteRelayBackend implements RelayBackend {
   DshRemoteRelayBackend({
     required SecretStore secrets,
     Object? serverUrl,
     String clientVersion = '0.1.0',
     remote.RemoteAccount? account,
+    this.peerConnector,
+    bool direct = false,
   }) : account =
            account ??
            remote.RemoteAccount(
@@ -28,9 +34,18 @@ class DshRemoteRelayBackend implements RelayBackend {
              deviceName: 'DSH App (Android)',
              platform: 'dsh-app-android',
              clientVersion: clientVersion,
-           );
+             onDirectFallback: (reason) => debugPrint('[dsh-remote] direct path unavailable, using the relay: $reason'),
+           ) {
+    this.direct = direct;
+  }
 
   final remote.RemoteAccount account;
+
+  /// The WebRTC stack [direct] connections use.
+  final remote.RemotePeerConnector? peerConnector;
+
+  /// Applies from the next (re)connect.
+  set direct(bool enabled) => account.peerConnector = enabled ? peerConnector : null;
 
   /// Reconnects back off to a minute: a sleeping computer isn't polled every
   /// few seconds (network changes and 重试 still connect at once).
@@ -150,6 +165,14 @@ class DshRemoteRelayBackend implements RelayBackend {
   Future<bool> probe(DshClient client) => client.remoteCarrier?.probe() ?? Future.value(true);
 
   @override
+  RelayPath? pathOf(DshClient client) => switch (client.remoteCarrier?.session?.transport) {
+    'lan' || 'p2p' => RelayPath.direct,
+    'turn' => RelayPath.turn,
+    'relay' => RelayPath.relay,
+    _ => null,
+  };
+
+  @override
   Future<DshClient> connectHost(RelayHost host, {RelayStateCallback? onState}) => _map(() async {
     var target = _hosts[host.id];
     if (target == null) {
@@ -228,7 +251,11 @@ class DshRemoteRelayBackend implements RelayBackend {
       'MEMBERSHIP_REQUIRED' => e(HostLinkErrorKind.other, appL10n.remoteErrHostNotOwned),
       // Version and protocol mismatches fail the same way on every attempt:
       // no reconnect loop (network changes don't fix them), 重试 still works.
-      'HARNESS_VERSION_INCOMPATIBLE' => e(HostLinkErrorKind.other, appL10n.remoteErrVersionIncompatible, retryable: false),
+      'HARNESS_VERSION_INCOMPATIBLE' => e(
+        HostLinkErrorKind.other,
+        appL10n.remoteErrVersionIncompatible,
+        retryable: false,
+      ),
       // PROTOCOL_MISMATCH: a relay Control frame this app cannot parse.
       // (INVALID_MESSAGE also covers REST replies that were not JSON, e.g. a
       // captive portal, so it keeps the generic text below.)

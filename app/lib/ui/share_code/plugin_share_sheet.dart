@@ -24,16 +24,18 @@ import 'share_code_panel.dart';
 import 'share_code_widgets.dart';
 
 /// 「分享插件」 from a market entry ([version] defaults to the newest); [card]
-/// adds 「图片」.
+/// adds 「图片」. [webLink] (the official market's page for it) is the link
+/// copied, shown as a QR code and shared in place of the share code's.
 Future<void> shareMarketPlugin(
   BuildContext context,
   MarketPlugin plugin, {
   MarketVersion? version,
   MarketEntry? card,
+  String? webLink,
 }) {
   final shared = sharedPluginFromMarket(plugin, version: version);
   if (shared == null) return _cannotShare(context);
-  return showSharePluginSheet(context, plugin: shared, icon: plugin.icon, card: card);
+  return showSharePluginSheet(context, plugin: shared, icon: plugin.icon, card: card, webLink: webLink);
 }
 
 /// 「分享插件」 from an installed bundle (local installs can't be shared);
@@ -54,12 +56,13 @@ Future<void> showSharePluginSheet(
   required SharedPlugin plugin,
   String? icon,
   MarketEntry? card,
+  String? webLink,
 }) => showAppSheet<void>(
   context,
   dismissal: SheetDismissal.drag,
   isScrollControlled: true,
   builder: (_) => SheetNavigator(
-    root: (_) => PluginShareSheet(plugin: plugin, icon: icon, card: card),
+    root: (_) => PluginShareSheet(plugin: plugin, icon: icon, card: card, webLink: webLink),
   ),
 );
 
@@ -72,13 +75,16 @@ String pluginSourceText(SharedPlugin p, {String? publisher}) => switch (p.source
 };
 
 class PluginShareSheet extends ConsumerStatefulWidget {
-  const PluginShareSheet({super.key, required this.plugin, this.icon, this.card});
+  const PluginShareSheet({super.key, required this.plugin, this.icon, this.card, this.webLink});
 
   final SharedPlugin plugin;
   final String? icon;
 
   /// The market's entry: its picture card is 「图片」.
   final MarketEntry? card;
+
+  /// The official market's page, in place of the share code's link.
+  final String? webLink;
 
   @override
   ConsumerState<PluginShareSheet> createState() => _PluginShareSheetState();
@@ -136,9 +142,13 @@ class _PluginShareSheetState extends ConsumerState<PluginShareSheet> {
             child: ShareCodePanel(
               payload: _payload,
               title: p.displayTitle,
+              webLink: widget.webLink,
               onImage: switch (widget.card) {
                 final card? => () => SheetNavigator.of(context).push(
-                  (page) => ShareImagePage(content: pluginCardContent(page, card), linkText: pluginShareText(card)),
+                  (page) => ShareImagePage(
+                    content: pluginCardContent(page, card, webLink: widget.webLink),
+                    linkText: pluginShareText(card, webLink: widget.webLink),
+                  ),
                 ),
                 null => null,
               },

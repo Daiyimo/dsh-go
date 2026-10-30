@@ -124,7 +124,7 @@ class PluginBadge extends StatelessWidget {
     final colors = DshColors.of(context);
     final (bg, fg) = switch (tone) {
       PluginBadgeTone.official => (scheme.primaryContainer, scheme.onPrimaryContainer),
-      PluginBadgeTone.featured => (colors.warningContainer, colors.onWarningContainer),
+      PluginBadgeTone.featured || PluginBadgeTone.warning => (colors.warningContainer, colors.onWarningContainer),
       PluginBadgeTone.danger => (colors.dangerContainer, colors.onDangerContainer),
       PluginBadgeTone.neutral => (scheme.surfaceContainerHighest, scheme.onSurfaceVariant),
     };
@@ -141,7 +141,7 @@ class PluginBadge extends StatelessWidget {
   }
 }
 
-enum PluginBadgeTone { neutral, official, featured, danger }
+enum PluginBadgeTone { neutral, official, featured, warning, danger }
 
 /// The app-store capsule at the end of a market row: 获取 / 更新 / 已安装,
 /// or a small ring with 安装中 while an install runs. Every state opens the

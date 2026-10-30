@@ -204,6 +204,20 @@ class PhoneDevice {
   };
 }
 
+class A11yKeeperStatus {
+  const A11yKeeperStatus({this.granted = false, this.path = 'setup', this.command = ''});
+
+  factory A11yKeeperStatus.fromMap(Map<Object?, Object?> m) => A11yKeeperStatus(
+    granted: _flag(m['granted']),
+    path: _text(m['path']) ?? 'setup',
+    command: _text(m['command']) ?? '',
+  );
+
+  final bool granted;
+  final String path;
+  final String command;
+}
+
 /// Snapshot of the native phone-control module (`status` / status events).
 class PhoneStatus {
   const PhoneStatus({
@@ -212,6 +226,7 @@ class PhoneStatus {
     this.enabled = false,
     this.bridgeListening = false,
     this.a11y = const PhoneA11yStatus(),
+    this.a11yKeeper = const A11yKeeperStatus(),
     this.overlay = false,
     this.notifications = false,
     this.confirmationNotifications,
@@ -226,6 +241,7 @@ class PhoneStatus {
       enabled = false,
       bridgeListening = false,
       a11y = const PhoneA11yStatus(),
+      a11yKeeper = const A11yKeeperStatus(),
       overlay = false,
       notifications = false,
       confirmationNotifications = null,
@@ -237,6 +253,7 @@ class PhoneStatus {
     enabled: _flag(m['enabled']),
     bridgeListening: _flag(m['bridgeListening']),
     a11y: PhoneA11yStatus.fromMap(_map(m['a11y'])),
+    a11yKeeper: A11yKeeperStatus.fromMap(_map(m['a11yKeeper'])),
     overlay: _flag(m['overlay']),
     notifications: _flag(m['notifications']),
     confirmationNotifications: _maybeFlag(m['confirmationNotifications']),
@@ -255,6 +272,7 @@ class PhoneStatus {
   final bool enabled;
   final bool bridgeListening;
   final PhoneA11yStatus a11y;
+  final A11yKeeperStatus a11yKeeper;
   final bool overlay;
 
   /// The app may post notifications (confirmations, 停止, ADB pairing code).
@@ -273,6 +291,7 @@ class PhoneStatus {
     enabled: enabled ?? this.enabled,
     bridgeListening: bridgeListening,
     a11y: a11y,
+    a11yKeeper: a11yKeeper,
     overlay: overlay,
     notifications: notifications,
     confirmationNotifications: confirmationNotifications,
@@ -402,12 +421,14 @@ class PhoneFinish {
 
 /// `{ok, reason?}` replies.
 class PhoneResult {
-  const PhoneResult(this.ok, [this.reason]);
+  const PhoneResult(this.ok, [this.reason, this.pending = false]);
 
-  factory PhoneResult.fromMap(Map<Object?, Object?> m) => PhoneResult(_flag(m['ok']), _text(m['reason']));
+  factory PhoneResult.fromMap(Map<Object?, Object?> m) =>
+      PhoneResult(_flag(m['ok']), _text(m['reason']), _flag(m['pending']));
 
   final bool ok;
   final String? reason;
+  final bool pending;
 }
 
 /// Reply of `testScreen`: the main screen read once.
@@ -761,6 +782,8 @@ class PhoneChannel {
   Future<bool> setEnabled(bool enabled) => _bool('setEnabled', {'enabled': enabled});
 
   Future<bool> openAccessibilitySettings() => _bool('openAccessibilitySettings');
+
+  Future<PhoneResult> grantSecureSettings() => _result('grantSecureSettings');
 
   /// This app's system "App info" page (restricted settings, notifications).
   Future<bool> openAppDetails() => _bool('openAppDetails');

@@ -129,4 +129,14 @@ class FakeInstaller implements UpdateInstaller {
     installed.add(path);
     return pending?.future ?? result;
   }
+
+  /// What `openWithSystemInstaller` answers.
+  bool systemInstallerOpens = true;
+
+  @override
+  Future<bool> openWithSystemInstaller(String path) async {
+    calls.add('openWithSystemInstaller');
+    installed.add(path);
+    return systemInstallerOpens;
+  }
 }

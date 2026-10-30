@@ -251,10 +251,22 @@ void main() {
         expect(c.read(balanceProvider).showBanner, isFalse);
         await c.read(balanceProvider.notifier).setThreshold(0);
         expect(c.read(balanceProvider).isLow, isFalse);
+        expect(c.read(balanceProvider).showBanner, isFalse);
         await c.read(balanceProvider.notifier).setThreshold(10);
         expect(c.read(balanceProvider).showBanner, isTrue);
         final prefs = await SharedPreferences.getInstance();
         expect(prefs.getDouble('low_balance_threshold'), 10);
+      });
+
+      test('「不提醒」 also silences a balance that can no longer pay', () async {
+        answer = const BalanceOk(DeepSeekBalance(currency: 'CNY', total: 0, available: false));
+        final c = container();
+        await settle();
+        expect(c.read(balanceProvider).isLow, isTrue);
+        expect(c.read(balanceProvider).showBanner, isTrue);
+        await c.read(balanceProvider.notifier).setThreshold(0);
+        expect(c.read(balanceProvider).isLow, isTrue);
+        expect(c.read(balanceProvider).showBanner, isFalse);
       });
 
       test('invalid key and offline are told apart, quietly', () async {

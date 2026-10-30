@@ -23,7 +23,9 @@
 // e.g. `dshgo://forum/auth?payload=…`), `open` (a page of the app,
 // links/page_links.dart), and the share host's own name for
 // hosted conversation links (`dshgo://go.dshtui.com/c/…`, the same as its
-// https links; registered by [LinkHost] itself, lib/ui/share_hosted/).
+// https links; registered by [LinkHost] itself, lib/ui/share_hosted/) and
+// the official market's plugin pages (`dshgo://go.dshtui.com/p/…`,
+// links/plugin_links.dart).
 //
 // ── Delivery ────────────────────────────────────────────────────────────────
 //
@@ -49,6 +51,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../state/sessions_state.dart' show currentSessionProvider;
 import '../ui/share_hosted/hosted_link_host.dart' show registerHostedLinks;
 import 'page_links.dart' show pageLinkResolverProvider, registerPageLinks;
+import 'plugin_links.dart' show registerPluginLinks;
 
 import '../l10n/l10n.dart';
 
@@ -338,6 +341,7 @@ class LinkHost extends ConsumerStatefulWidget {
 class _LinkHostState extends ConsumerState<LinkHost> {
   late final LinkRouter _router;
   late final VoidCallback _offHosted;
+  late final VoidCallback _offPlugins;
   late final VoidCallback _offPages;
 
   @override
@@ -346,6 +350,8 @@ class _LinkHostState extends ConsumerState<LinkHost> {
     _router = ref.read(linkRouterProvider);
     // Hosted conversation links: no feature page owns them, the replay opens.
     _offHosted = registerHostedLinks(_router);
+    // A plugin's page in the official market: its detail sheet.
+    _offPlugins = registerPluginLinks(_router);
     // `dshgo://open/<page>`: the guide's links to the app's own pages.
     _offPages = registerPageLinks(
       _router,
@@ -366,6 +372,7 @@ class _LinkHostState extends ConsumerState<LinkHost> {
   @override
   void dispose() {
     _offHosted();
+    _offPlugins();
     _offPages();
     _router.detach(context);
     super.dispose();

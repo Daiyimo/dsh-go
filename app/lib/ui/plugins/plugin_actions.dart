@@ -10,6 +10,7 @@ import '../../state/hosts_state.dart';
 import '../../state/plugins_state.dart';
 import '../common/app_sheet.dart';
 import '../theme/theme.dart';
+import 'market_widgets.dart';
 import 'plugin_widgets.dart';
 import '../common/brief_notice.dart';
 import '../common/undo_notice_window.dart';
@@ -55,6 +56,128 @@ Future<PluginInstallJob> runPluginInstall(BuildContext context, PluginInstallReq
       break;
   }
   return job;
+}
+
+/// Installs [entry]'s pinned version on the active host. A medium or high
+/// risk asks first, listing what the checks found. Null when declined.
+Future<PluginInstallJob?> installMarketEntry(BuildContext context, MarketEntry entry) async {
+  final container = ProviderScope.containerOf(context, listen: false);
+  final host = container.read(pluginHostProvider);
+  if (marketNeedsApp(entry, container.read(appVersionProvider)) != null) return null;
+  if (!await confirmMarketRisk(context, entry) || !context.mounted) return null;
+  if (!identical(container.read(pluginHostProvider), host)) return null;
+  return runPluginInstall(context, marketInstallRequest(entry));
+}
+
+/// Replaces the installed copy with [entry]'s pinned version: the risk first
+/// (when there is one to confirm), then what an update costs.
+Future<void> updateMarketEntry(BuildContext context, MarketEntry entry, {String? from}) async {
+  final container = ProviderScope.containerOf(context, listen: false);
+  final host = container.read(pluginHostProvider);
+  if (marketNeedsApp(entry, container.read(appVersionProvider)) != null) return;
+  if (!await confirmMarketRisk(context, entry) || !context.mounted) return;
+  if (!identical(container.read(pluginHostProvider), host)) return;
+  final ok = await confirmPluginUpdate(
+    context,
+    name: entry.title(Localizations.localeOf(context).languageCode),
+    bundleName: entry.name,
+    from: from,
+    to: entry.plugin.latest.version,
+  );
+  if (ok && context.mounted && identical(container.read(pluginHostProvider), host)) {
+    await runPluginInstall(context, marketInstallRequest(entry, replace: true));
+  }
+}
+
+/// 「安装前确认」 for a medium or high risk entry: each flag in plain words
+/// and the note that they are features, not a verdict. True straight away
+/// for everything else.
+Future<bool> confirmMarketRisk(BuildContext context, MarketEntry entry) async {
+  final listing = entry.listing;
+  if (listing == null || !listing.needsConfirm) return true;
+  final l10n = context.l10n;
+  final colors = DshColors.of(context);
+  final container = ProviderScope.containerOf(context, listen: false);
+  final messenger = ScaffoldMessenger.maybeOf(context);
+  final host = container.read(pluginHostProvider);
+  final selected = container.read(activeHostProvider);
+  final generation = host?.client.mux.generation;
+  final ready = host?.client.mux.lastReadyGenerationNumber;
+  var current = host != null;
+  final selection = container.listen(activeHostProvider, (_, next) {
+    if (next != selected) current = false;
+  });
+  final connection = container.listen(pluginHostProvider, (_, next) {
+    if (!identical(next, host)) current = false;
+  });
+  final ok =
+      await showDialog<bool>(
+        context: context,
+        builder: (dialog) {
+          final theme = Theme.of(dialog);
+          return AlertDialog(
+            title: Text(l10n.marketRiskConfirmTitle(entry.title(Localizations.localeOf(context).languageCode))),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  for (final flag in listing.flags) ...[
+                    Text.rich(
+                      TextSpan(
+                        children: [
+                          TextSpan(
+                            text: '● ',
+                            style: TextStyle(color: marketFlagColor(dialog, flag)),
+                          ),
+                          TextSpan(
+                            text: marketFlagText(l10n, flag).$1,
+                            style: const TextStyle(fontWeight: FontWeight.w600),
+                          ),
+                        ],
+                      ),
+                      style: theme.textTheme.bodyMedium,
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.only(left: 16, top: 2, bottom: 10),
+                      child: Text(
+                        marketFlagText(l10n, flag).$2,
+                        style: theme.textTheme.bodySmall?.copyWith(height: 1.55),
+                      ),
+                    ),
+                  ],
+                  Text(
+                    l10n.marketChecksNote,
+                    style: theme.textTheme.bodySmall?.copyWith(color: colors.textTertiary, height: 1.55),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(dialog, false), child: Text(l10n.commonCancel)),
+              FilledButton(
+                style: listing.risk == MarketRisk.high
+                    ? FilledButton.styleFrom(backgroundColor: colors.danger, foregroundColor: colors.onDanger)
+                    : null,
+                onPressed: () => Navigator.pop(dialog, true),
+                child: Text(l10n.marketRiskConfirmAction),
+              ),
+            ],
+          );
+        },
+      ).whenComplete(() {
+        selection.close();
+        connection.close();
+      });
+  if (ok != true || !context.mounted) return false;
+  if (!current ||
+      !identical(container.read(pluginHostProvider), host) ||
+      !identical(host?.client.mux.generation, generation) ||
+      host?.client.mux.lastReadyGenerationNumber != ready) {
+    _hostChangedNotice(context, messenger, l10n.pluginsOperationHostChanged);
+    return false;
+  }
+  return true;
 }
 
 /// Restart dialog for the on-device engine after `restart-required`.
@@ -104,40 +227,41 @@ Future<void> approveBuildsAndRetry(BuildContext context, PluginInstallJob job) a
   final connection = container.listen(pluginHostProvider, (_, next) {
     if (!identical(next, host)) current = false;
   });
-  final ok = await showDialog<bool>(
-    context: context,
-    builder: (dialog) {
-      final theme = Theme.of(dialog);
-      return AlertDialog(
-        title: Text(l10n.pluginsAllowBuildScripts),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(l10n.pluginsBuildScriptPackages),
-            const SizedBox(height: 8),
-            for (final name in builds)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 4),
-                child: Text('• $name', style: AppType.monoLabel(color: theme.colorScheme.onSurface)),
-              ),
-            const SizedBox(height: 8),
-            Text(
-              l10n.pluginsBuildScriptWarning(host?.label ?? l10n.pluginsThisDevice),
-              style: theme.textTheme.bodySmall?.copyWith(height: 1.6),
+  final ok =
+      await showDialog<bool>(
+        context: context,
+        builder: (dialog) {
+          final theme = Theme.of(dialog);
+          return AlertDialog(
+            title: Text(l10n.pluginsAllowBuildScripts),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(l10n.pluginsBuildScriptPackages),
+                const SizedBox(height: 8),
+                for (final name in builds)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 4),
+                    child: Text('• $name', style: AppType.monoLabel(color: theme.colorScheme.onSurface)),
+                  ),
+                const SizedBox(height: 8),
+                Text(
+                  l10n.pluginsBuildScriptWarning(host?.label ?? l10n.pluginsThisDevice),
+                  style: theme.textTheme.bodySmall?.copyWith(height: 1.6),
+                ),
+              ],
             ),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(dialog, false), child: Text(l10n.commonCancel)),
-          FilledButton(onPressed: () => Navigator.pop(dialog, true), child: Text(l10n.pluginsAllowRetry)),
-        ],
-      );
-    },
-  ).whenComplete(() {
-    selection.close();
-    connection.close();
-  });
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(dialog, false), child: Text(l10n.commonCancel)),
+              FilledButton(onPressed: () => Navigator.pop(dialog, true), child: Text(l10n.pluginsAllowRetry)),
+            ],
+          );
+        },
+      ).whenComplete(() {
+        selection.close();
+        connection.close();
+      });
   if (ok != true || !context.mounted) return;
   if (!current ||
       !identical(container.read(pluginHostProvider), host) ||
@@ -187,20 +311,23 @@ Future<bool> confirmPluginUpdate(
         (latest.installed || latest.availability == 'profile');
   }
 
-  final ok = await showDialog<bool>(
-    context: context,
-    builder: (dialog) => AlertDialog(
-      title: Text(l10n.pluginsUpdateNamed(name)),
-      content: Text(from == null ? l10n.pluginsUpdateCurrentWarning(to) : l10n.pluginsUpdateVersionWarning(from, to)),
-      actions: [
-        TextButton(onPressed: () => Navigator.pop(dialog, false), child: Text(l10n.commonCancel)),
-        FilledButton(onPressed: () => Navigator.pop(dialog, true), child: Text(l10n.commonUpdate)),
-      ],
-    ),
-  ).whenComplete(() {
-    selection.close();
-    connection.close();
-  });
+  final ok =
+      await showDialog<bool>(
+        context: context,
+        builder: (dialog) => AlertDialog(
+          title: Text(l10n.pluginsUpdateNamed(name)),
+          content: Text(
+            from == null ? l10n.pluginsUpdateCurrentWarning(to) : l10n.pluginsUpdateVersionWarning(from, to),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dialog, false), child: Text(l10n.commonCancel)),
+            FilledButton(onPressed: () => Navigator.pop(dialog, true), child: Text(l10n.commonUpdate)),
+          ],
+        ),
+      ).whenComplete(() {
+        selection.close();
+        connection.close();
+      });
   // Keep the original package/version intent; never turn an old confirmation
   // into removal of a newer installation or a retry on another host.
   if (ok != true || !context.mounted) return false;
@@ -385,9 +512,7 @@ Future<bool> removePluginBundle(BuildContext context, PluginBundle bundle, {Rout
       );
       return true;
     }
-    await publishFailure(
-      _failed(l10n.pluginsUninstallFailed, describeOperationFailure(result, isLocal: host.isLocal)),
-    );
+    await publishFailure(_failed(l10n.pluginsUninstallFailed, describeOperationFailure(result, isLocal: host.isLocal)));
   } on Object catch (error) {
     await publishFailure(_failed(l10n.pluginsUninstallFailed, describePluginError(error)));
   } finally {

@@ -12,9 +12,12 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.ApplicationInfo
 import android.content.res.Configuration
+import android.hardware.display.DisplayManager
 import android.os.Build
 import android.provider.Settings
 import android.util.Log
+import android.view.Display
+import android.view.WindowManager
 import android.view.accessibility.AccessibilityEvent
 import io.github.ccch1mneyyy.dsh_app.phone.PhoneRegistry
 
@@ -30,6 +33,20 @@ class PhoneA11yService : AccessibilityService() {
     private var driver: MainScreenDriver? = null
     private var probe: A11yProbe? = null
     private var receiverRegistered = false
+    private var overlayContext: Context? = null
+
+    /** A dedicated manager whose default token comes from the live accessibility connection. */
+    internal fun overlayWindowContext(): Context = overlayContext ?: run {
+        val context = if (Build.VERSION.SDK_INT >= 30) {
+            val display = getSystemService(DisplayManager::class.java).getDisplay(Display.DEFAULT_DISPLAY)
+            // AccessibilityService's display/window wrappers obtain getOverlayWindowToken(displayId).
+            // An application-derived window context cannot supply that accessibility token.
+            createDisplayContext(display).createWindowContext(WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY, null)
+        } else this
+        context.also { overlayContext = it }
+    }
+
+    internal fun invalidateOverlayWindowContext() { overlayContext = null }
 
     private val screenOff = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -40,6 +57,7 @@ class PhoneA11yService : AccessibilityService() {
 
     override fun onServiceConnected() {
         super.onServiceConnected()
+        invalidateOverlayWindowContext()
         val o = ControlOverlay(this)
         val d = MainScreenDriver(this, o)
         overlay = o
@@ -101,6 +119,7 @@ class PhoneA11yService : AccessibilityService() {
         if (PhoneRegistry.mainDriver === d) PhoneRegistry.mainDriver = null
         if (PhoneRegistry.overlayGate === o) PhoneRegistry.overlayGate = null
         if (instance === this) instance = null
+        invalidateOverlayWindowContext()
         d?.abort()
         o?.destroy()
         d?.close()

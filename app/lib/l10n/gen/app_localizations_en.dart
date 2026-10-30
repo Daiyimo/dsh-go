@@ -10,6 +10,40 @@ class L10nEn extends L10n {
   L10nEn([String locale = 'en']) : super(locale);
 
   @override
+  String get a11yRestoreTitle => 'Restore accessibility automatically';
+
+  @override
+  String get searchKwA11yRestore => 'accessibility,restore,reconnect,automatic recovery,permission,ADB,Shizuku';
+
+  @override
+  String get a11yRestoreNeedsGrant => 'Authorization required';
+
+  @override
+  String get a11yRestoreNotice =>
+      'Once authorized, accessibility will be turned back on if disabled in system settings. To stop phone control, turn it off in DSH Go.';
+
+  @override
+  String get a11yRestoreForceStop => 'After a force stop, reopen DSH Go to restore the service.';
+
+  @override
+  String get a11yRestoreGrant => 'Authorize and enable';
+
+  @override
+  String get a11yRestoreSetup => 'Set up Shizuku or wireless debugging';
+
+  @override
+  String get a11yRestoreWaiting => 'Allow the request in Shizuku';
+
+  @override
+  String get a11yRestoreComputer => 'Or connect to a computer and run once:';
+
+  @override
+  String get a11yRestoreCopy => 'Copy command';
+
+  @override
+  String get a11yRestoreCopied => 'Command copied';
+
+  @override
   String get accessPickTitle => 'What should DSH Go help with?';
 
   @override
@@ -7871,6 +7905,172 @@ class L10nEn extends L10n {
   String get localEnvSignInInstallFirst => 'Install it to sign in';
 
   @override
+  String get marketSectionOfficial => 'Official';
+
+  @override
+  String get marketSectionAdapted => 'Made for DSH Go';
+
+  @override
+  String get marketSectionAll => 'All';
+
+  @override
+  String get marketSectionLoading => 'Loading…';
+
+  @override
+  String get marketSectionFailed => 'The official catalogue didn\'t load';
+
+  @override
+  String get marketSectionEmpty => 'None yet';
+
+  @override
+  String get marketTierOfficial => 'Official';
+
+  @override
+  String get marketTierAdapted => 'Made for DSH Go';
+
+  @override
+  String get marketRiskMedium => 'Medium risk';
+
+  @override
+  String get marketRiskHigh => 'High risk';
+
+  @override
+  String get marketFlagInstallScripts => 'Runs install scripts';
+
+  @override
+  String get marketFlagInstallScriptsBody =>
+      'Runs the package\'s own scripts while installing (preinstall, install or postinstall)';
+
+  @override
+  String get marketFlagNativeCode => 'Native code';
+
+  @override
+  String get marketFlagNativeCodeBody =>
+      'Contains compiled native code (.node, binding.gyp or binaries) that can\'t be read as source';
+
+  @override
+  String get marketFlagShell => 'Runs commands';
+
+  @override
+  String get marketFlagShellBody => 'Its code runs system commands (child_process)';
+
+  @override
+  String get marketFlagNetwork => 'Network access';
+
+  @override
+  String get marketFlagNetworkBody => 'Its code makes network requests (fetch, http, WebSocket)';
+
+  @override
+  String get marketFlagFilesystem => 'Writes outside the workspace';
+
+  @override
+  String get marketFlagFilesystemBody => 'Writes to paths outside the workspace';
+
+  @override
+  String get marketFlagObfuscated => 'Hard to review';
+
+  @override
+  String get marketFlagObfuscatedBody => 'Has large minified or obfuscated files; hard to tell what they do';
+
+  @override
+  String get marketFlagNotAdapted => 'Not made for DSH Go';
+
+  @override
+  String get marketFlagNotAdaptedBody => 'Declares no DSH Go native protocol, so it has no native screens in the app';
+
+  @override
+  String get marketFlagOtherBody => 'Another trait the automatic checks reported';
+
+  @override
+  String get marketChecksTitle => 'Automatic checks';
+
+  @override
+  String get marketChecksClean => 'No risky traits found';
+
+  @override
+  String get marketChecksNote => 'Traits the automatic checks found; they don\'t mean the plugin is malicious';
+
+  @override
+  String marketCheckedOn(String date) {
+    return 'Checked $date';
+  }
+
+  @override
+  String marketScreenshot(int index) {
+    return 'Screenshot $index';
+  }
+
+  @override
+  String marketRiskConfirmTitle(String name) {
+    return '$name has risky traits';
+  }
+
+  @override
+  String get marketRiskConfirmAction => 'Install anyway';
+
+  @override
+  String get marketPinnedVersion => 'Pinned version';
+
+  @override
+  String get marketRequiresApp => 'Requires DSH Go';
+
+  @override
+  String marketNeedsApp(String version) {
+    return 'Needs DSH Go $version or later';
+  }
+
+  @override
+  String get marketUpdateAvailable => 'Update available';
+
+  @override
+  String get marketBlockedTitle => 'This version was withdrawn';
+
+  @override
+  String marketBlockedMessage(String version) {
+    return 'The installed $version was withdrawn from the plugin market. Uninstalling it is recommended.';
+  }
+
+  @override
+  String get marketBlockedRow => 'Withdrawn version: uninstall recommended';
+
+  @override
+  String get marketBlockedBadge => 'Withdrawn';
+
+  @override
+  String get marketVerifying => 'Checking the version…';
+
+  @override
+  String get marketMismatchTitle => 'Version check failed';
+
+  @override
+  String marketMismatchMessage(String version) {
+    return '$version on npm isn\'t the package the plugin market checked. Nothing was installed.';
+  }
+
+  @override
+  String get marketSubmit => 'Submit a plugin';
+
+  @override
+  String get marketSubmitHint => 'On GitHub; listed once the automatic checks pass';
+
+  @override
+  String marketLinkNotFound(String name) {
+    return '$name isn\'t in the plugin market';
+  }
+
+  @override
+  String get marketVerificationUnavailableTitle => 'Could not verify the version';
+
+  @override
+  String get marketVerificationUnavailableBody =>
+      'npm did not return integrity information. Installation has not started. Check your connection and try again.';
+
+  @override
+  String marketCombinedCount(int count) {
+    return '$count plugins';
+  }
+
+  @override
   String get mediaGenerateTile => 'Create';
 
   @override
@@ -8211,6 +8411,33 @@ class L10nEn extends L10n {
 
   @override
   String get performanceRemoteHint => 'Connect to a computer or server to reduce work on this phone';
+
+  @override
+  String get petActionSending => 'Sending…';
+
+  @override
+  String get petActionTargetChanged => 'Host changed. Reopen Quick ask; your text is kept.';
+
+  @override
+  String get petActionSendFailed => 'Couldn’t send. Your text is kept; try again.';
+
+  @override
+  String get petActionBusy => 'This chat is busy. Choose New chat.';
+
+  @override
+  String get petActionVoiceMissing => 'Download the offline voice model in the app first.';
+
+  @override
+  String get petActionVoiceTitle => 'Voice for Quick ask';
+
+  @override
+  String get petActionVoiceReturn => 'Back to pet';
+
+  @override
+  String get petActionVoiceStop => 'Finish recording';
+
+  @override
+  String get petActionVoiceStart => 'Record';
 
   @override
   String get phoneDiagnosticsCollecting => 'Collecting…';
@@ -10636,7 +10863,7 @@ class L10nEn extends L10n {
       'Installed plugins appear when the engine is running. You can browse the market now.';
 
   @override
-  String get pluginsIconChanged => 'Icon changed. Your home screen updates in a few seconds.';
+  String get pluginsIconChanged => 'Icon selected. Return to your home screen to see the change.';
 
   @override
   String get pluginsIconChangeFailed => 'Couldn’t change the icon. Try again later.';
@@ -11786,6 +12013,12 @@ class L10nEn extends L10n {
   String get remoteAutoConnectOnStartupHint => 'When off, start on this phone';
 
   @override
+  String get remoteDirect => 'Prefer direct (P2P)';
+
+  @override
+  String get remoteDirectHint => 'Skip the Server\'s relay when a direct path works';
+
+  @override
   String get remoteStepConnect => 'Connect to server';
 
   @override
@@ -12647,6 +12880,20 @@ class L10nEn extends L10n {
 
   @override
   String get remoteConnectedEncrypted => 'Connected · End-to-end encrypted';
+
+  @override
+  String remoteConnectedVia(String path) {
+    return 'Connected · $path · End-to-end encrypted';
+  }
+
+  @override
+  String get remotePathDirect => 'Direct';
+
+  @override
+  String get remotePathTurn => 'TURN';
+
+  @override
+  String get remotePathRelay => 'Relay';
 
   @override
   String remoteConnectedSsh(String address) {
@@ -13565,6 +13812,9 @@ class L10nEn extends L10n {
 
   @override
   String get searchKwRemoteAutoConnect => 'auto connect,on launch';
+
+  @override
+  String get searchKwRemoteDirect => 'direct,P2P,peer to peer,LAN,relay,TURN,WebRTC';
 
   @override
   String get searchKwPermissionCurrent => 'allow for this chat,this chat';
@@ -16161,6 +16411,12 @@ class L10nEn extends L10n {
   String get updateSkipVersion => 'Skip this version';
 
   @override
+  String get updateInstallWithSystem => 'Install with the system installer';
+
+  @override
+  String get updateSystemInstallerFailed => 'Couldn\'t open the system installer';
+
+  @override
   String get updateStarProject => 'Star it';
 
   @override
@@ -16347,6 +16603,12 @@ class L10nEn extends L10n {
 
   @override
   String get viewBalanceNoAlert => 'Off';
+
+  @override
+  String get viewBalanceBannerHidden => 'Balance alert hidden until DSH Go restarts';
+
+  @override
+  String get viewBalanceTurnOff => 'Turn off';
 
   @override
   String viewBalanceBelow(String value) {

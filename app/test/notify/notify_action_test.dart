@@ -1,3 +1,5 @@
+import 'package:dsh_app/pets/pet_signals.dart';
+import 'package:dsh_app/pets/pet_mood.dart';
 import 'package:dsh_app/state/connection_state.dart';
 import 'package:dsh_app/state/hosts_state.dart';
 import 'package:dsh_app/state/notify_state.dart';
@@ -8,10 +10,39 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'support.dart';
 
+class _Mux extends DshMux {
+  _Mux(super.carrier);
+  @override
+  MuxGeneration get generation => const MuxGeneration(1, 'pet-client', '/tmp');
+}
+
+class _Rpc extends DshRpc {
+  _Rpc(super.carrier);
+  final results = <Map<String, Object?>>[];
+  @override
+  Future<Object?> call(String endpoint, [Map<String, Object?> args = const {}, Duration? timeout]) async {
+    expect(endpoint, r'$events/result');
+    results.add(args);
+    return null;
+  }
+}
+
 class _Client extends DshClient {
   _Client() : super(DshConnection(Uri.parse('http://127.0.0.1:9')));
+  late final _petMux = _Mux(carrier);
+  late final _petRpc = _Rpc(carrier);
+  @override
+  DshMux get mux => _petMux;
+  @override
+  _Rpc get rpc => _petRpc;
   final replies = <(ApprovalRequest, ApprovalDecision)>[];
   bool failReply = false;
+  final answers = <(UserQuestionRequest, List<QuestionAnswer>)>[];
+
+  @override
+  Future<void> answerQuestion(UserQuestionRequest request, List<QuestionAnswer> answer) async {
+    answers.add((request, answer));
+  }
 
   @override
   Future<void> respondApproval(ApprovalRequest request, ApprovalDecision decision) async {
@@ -170,6 +201,179 @@ void main() {
       )!;
       expect(result.text, '$verb：target');
     }
+  });
+
+  test('pet answer checks session, delivery token and single-use decisions', () async {
+    final events = <PetEvent>[];
+    final sub = container.read(petEventBusProvider).events.listen(events.add);
+    await announce();
+    final token = events.single.ask!.token!;
+    final controller = container.read(chatAlertsProvider.notifier);
+    expect(
+      await controller.answerFromPet(
+        remoteHost,
+        request.eventId,
+        sessionId: 'wrong',
+        token: token,
+        decision: ApprovalDecision.allowOnce,
+      ),
+      NotifyActionResult.gone,
+    );
+    expect(
+      await controller.answerFromPet(
+        remoteHost,
+        request.eventId,
+        sessionId: 'r1',
+        token: token + 1,
+        decision: ApprovalDecision.allowOnce,
+      ),
+      NotifyActionResult.gone,
+    );
+    expect(remoteClient.replies, isEmpty);
+    expect(
+      await controller.answerFromPet(
+        remoteHost,
+        request.eventId,
+        sessionId: 'r1',
+        token: token,
+        decision: ApprovalDecision.allowOnce,
+      ),
+      NotifyActionResult.handled,
+    );
+    expect(remoteClient.rpc.results.single, {
+      'clientId': 'pet-client',
+      'eventId': request.eventId,
+      'outcome': {'kind': 'result', 'value': 'allowed-once'},
+    });
+    remote.emit(const HostRequestCancelledEvent('approval-1'));
+    expect(
+      await controller.answerFromPet(
+        remoteHost,
+        request.eventId,
+        sessionId: 'r1',
+        token: token,
+        decision: ApprovalDecision.reject,
+      ),
+      NotifyActionResult.gone,
+    );
+    await sub.cancel();
+  });
+
+  test('reconnect invalidates the old pet approval even when event id is redelivered', () async {
+    final events = <PetEvent>[];
+    final sub = container.read(petEventBusProvider).events.listen(events.add);
+    await announce();
+    final token = events.single.ask!.token!;
+    remote.emit(const HostReadyEvent('next-client', '/home'));
+    await announce();
+    expect(
+      await container
+          .read(chatAlertsProvider.notifier)
+          .answerFromPet(
+            remoteHost,
+            request.eventId,
+            sessionId: 'r1',
+            token: token,
+            decision: ApprovalDecision.allowOnce,
+          ),
+      NotifyActionResult.gone,
+    );
+    expect(remoteClient.replies, isEmpty);
+    await sub.cancel();
+  });
+
+  test('pet shows all tool arguments and rejects abbreviated or sensitive actions', () {
+    const write = ApprovalRequest(eventId: 'write', sessionId: 's', toolName: 'write', callId: 'w');
+    final text = petApprovalText(
+      write,
+      const ToolCallPart(id: 'w', name: 'write', arguments: '{"file_path":"config","content":"enabled=false"}'),
+    );
+    expect(text, contains('enabled=false'));
+    expect(
+      petApprovalText(
+        write,
+        ToolCallPart(id: 'w', name: 'write', arguments: '{"file_path":"config","content":"${'x' * 200}"}'),
+      ),
+      isNull,
+    );
+    expect(
+      petApprovalText(
+        request,
+        const ToolCallPart(
+          id: 'call-1',
+          name: 'bash',
+          arguments: '{"command":"echo sk-1234567890abcdefghijklmnopqrstuvwxyz"}',
+        ),
+      ),
+      isNull,
+    );
+    const phone = ApprovalRequest(eventId: 'p', sessionId: 's', toolName: 'phone_click', callId: 'p');
+    expect(petApprovalText(phone, const ToolCallPart(id: 'p', name: 'phone_click', arguments: '{"x":1}')), isNull);
+  });
+
+  test('pet question answers only a displayed choice and retains the original question id', () async {
+    const q = UserQuestionRequest(
+      eventId: 'q1',
+      sessionId: 'r1',
+      questions: [
+        UserQuestion(
+          id: 'question-id',
+          question: 'Pick a color',
+          options: [QuestionOption('Blue', null), QuestionOption('Red', null)],
+        ),
+      ],
+    );
+    final events = <PetEvent>[];
+    final sub = container.read(petEventBusProvider).events.listen(events.add);
+    remote.emit(const UserQuestionRequestedEvent(q));
+    await settle();
+    final token = events.single.ask!.token!;
+    final controller = container.read(chatAlertsProvider.notifier);
+    expect(
+      await controller.answerFromPet(remoteHost, 'q1', sessionId: 'r1', token: token, choice: 'Other'),
+      NotifyActionResult.failed,
+    );
+    expect(
+      await controller.answerFromPet(remoteHost, 'q1', sessionId: 'r1', token: token, choice: 'Blue'),
+      NotifyActionResult.handled,
+    );
+    expect(remoteClient.rpc.results.single, {
+      'clientId': 'pet-client',
+      'eventId': 'q1',
+      'outcome': {
+        'kind': 'result',
+        'value': {
+          'answers': [
+            QuestionAnswer('question-id', selected: ['Blue']).toJson(),
+          ],
+        },
+      },
+    });
+    await sub.cancel();
+  });
+
+  test('question option descriptions and plan reviews require opening the full chat', () {
+    const withDetail = UserQuestionRequest(
+      eventId: 'q',
+      sessionId: 's',
+      questions: [
+        UserQuestion(id: 'q', question: 'Pick', options: [QuestionOption('Proceed', 'Deletes saved files')]),
+      ],
+    );
+    const plan = UserQuestionRequest(
+      eventId: 'q',
+      sessionId: 's',
+      questions: [
+        UserQuestion(
+          id: 'q',
+          question: 'Approve',
+          intent: {'kind': 'plan-review'},
+          options: [QuestionOption('Yes', null)],
+        ),
+      ],
+    );
+    expect(petChoices(withDetail), isNull);
+    expect(petChoices(plan), isNull);
   });
 
   test('native action parser accepts only explicit one-shot decisions', () {

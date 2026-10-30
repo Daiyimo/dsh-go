@@ -88,11 +88,11 @@ class _SystemEntryHostState extends ConsumerState<SystemEntryHost> {
 
   Future<void> _onEntry(LauncherEntry entry) async {
     switch (entry) {
-      case NewChatEntry(:final voice):
+      case NewChatEntry(:final voice, :final text):
         // The microphone opens only for an app on screen; the shortcut's
         // intent can arrive a beat before Flutter hears it is resumed.
         if (voice) await _untilResumed();
-        if (mounted) await _compose(ComposeRequest.newChat(voice: voice));
+        if (mounted) await _compose(ComposeRequest(text: text, voice: voice));
       case OpenChatEntry(:final host, :final sessionId):
         if (!await _showChat() || !mounted) return;
         final hosts = ref.read(hostsProvider);

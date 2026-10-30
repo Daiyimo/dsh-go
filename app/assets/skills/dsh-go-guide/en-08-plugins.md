@@ -56,3 +56,11 @@ Turn off any of these places in the plugin's details. To turn off the whole plug
 The first time a plugin reads your draft, clipboard or a reply, it asks first. It reads only after you tap **Allow**, and only when you tap it. Once allowed, it can't be revoked separately; turn off that place or the plugin instead.
 
 The native UI needs the dsh-go bridge on the host: this phone's engine has it built in, remote hosts usually don't, and it never shows over DSH Remote.
+
+## DSH Go market
+
+The market offers Official, Adapted for DSH Go and All sections. When an official index lists a package, its checked, pinned version takes precedence over other listings of the same name. Details include risk flags, native features, minimum app version, screenshots and localized descriptions. Risk flags describe capabilities rather than a guarantee of safety. Medium- and high-risk installations ask for confirmation.
+
+Before installation or an update, the app compares the declared digest with npm registry metadata. An unavailable or mismatching digest stops the operation before removing an old version. This does not verify the bytes eventually downloaded by the host; that requires host protocol support. Changing host or connection invalidates pending consent. Withdrawn installed versions show a warning.
+
+Share a plugin page from its details. Opening a shared link leads to the matching details so you can choose the installation host. If image and video generation is not installed, its entry also leads to installation on the current host.

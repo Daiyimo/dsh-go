@@ -62,6 +62,20 @@ class HostLinkError implements Exception {
   String toString() => detail == null ? message : appL10n.remoteErrorDetail(message, detail!);
 }
 
+/// How a DSH Remote tunnel travels: straight to the computer (LAN or P2P),
+/// through a TURN server, or through the Server's relay.
+enum RelayPath {
+  direct,
+  turn,
+  relay;
+
+  String get label => switch (this) {
+    RelayPath.direct => appL10n.remotePathDirect,
+    RelayPath.turn => appL10n.remotePathTurn,
+    RelayPath.relay => appL10n.remotePathRelay,
+  };
+}
+
 enum HostLinkErrorKind {
   unreachable,
   authFailed,
@@ -90,6 +104,7 @@ class HostLinkStatus {
     this.attempt = 0,
     this.nextRetryAt,
     this.detail,
+    this.path,
   });
 
   static const idle = HostLinkStatus(HostLinkPhase.idle);
@@ -111,6 +126,9 @@ class HostLinkStatus {
 
   /// Optional one-line progress note ("复用已在运行的 DSH" …).
   final String? detail;
+
+  /// DSH Remote, connected: how the tunnel travels.
+  final RelayPath? path;
 
   bool get isConnected => phase == HostLinkPhase.connected;
   bool get isBusy => phase == HostLinkPhase.connecting || phase == HostLinkPhase.reconnecting;

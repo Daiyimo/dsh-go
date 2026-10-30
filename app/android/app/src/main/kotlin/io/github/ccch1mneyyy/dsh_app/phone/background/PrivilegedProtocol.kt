@@ -50,6 +50,11 @@ object Proto {
     const val OP_DESTROY = "destroy"
     const val OP_GATE = "gate"
 
+    /** 自动恢复无障碍: grants [APP_PACKAGE] WRITE_SECURE_SETTINGS in [USER]; nothing else is grantable. */
+    const val OP_GRANT_SECURE_SETTINGS = "grantSecureSettings"
+    const val USER = "user"
+    const val APP_PACKAGE = "io.github.ccch1mneyyy.dsh_app"
+
     const val INJECT_OK = "injectOk"
 
     // response keys
