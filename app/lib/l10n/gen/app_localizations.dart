@@ -16103,7 +16103,7 @@ abstract class L10n {
   /// No description provided for @phoneDisclosureWhoBody.
   ///
   /// In zh, this message translates to:
-  /// **'发给你选的 DeepSeek 模型（云端）。银行卡号、身份证号会先打码。'**
+  /// **'任务中的屏幕信息可能发送给你配置的第三方模型提供方。部分卡号、证件号会尝试遮盖，但不保证全部识别；截图可能包含敏感内容。'**
   String get phoneDisclosureWhoBody;
 
   /// No description provided for @phoneDisclosureNeverTitle.
@@ -16115,7 +16115,7 @@ abstract class L10n {
   /// No description provided for @phoneDisclosureNeverBody.
   ///
   /// In zh, this message translates to:
-  /// **'不输密码和验证码，不改系统设置，遇到就交还给你。银行、支付类 App 也不碰。'**
+  /// **'默认不代填密码和验证码、不改系统设置，银行及支付类 App 默认不碰；这些限制可由你在设置里主动放宽。'**
   String get phoneDisclosureNeverBody;
 
   /// No description provided for @phoneDisclosureStopTitle.
@@ -16139,7 +16139,7 @@ abstract class L10n {
   /// No description provided for @phoneDisclosureIntro.
   ///
   /// In zh, this message translates to:
-  /// **'DSH 会像你一样看屏幕、点按，帮你把事办完。开启前，先了解这几点：'**
+  /// **'手机操控可读取屏幕、点按和输入。请只在自有或获授权的设备上使用，并先了解以下事项：'**
   String get phoneDisclosureIntro;
 
   /// No description provided for @phoneDisclosureRestartNote.
@@ -16157,7 +16157,7 @@ abstract class L10n {
   /// No description provided for @phoneDisclosureAgreeEnable.
   ///
   /// In zh, this message translates to:
-  /// **'同意并开启'**
+  /// **'我了解并同意开启'**
   String get phoneDisclosureAgreeEnable;
 
   /// No description provided for @phoneCheckUnknown.
@@ -17477,7 +17477,7 @@ abstract class L10n {
   /// No description provided for @phoneUnlockFootnote.
   ///
   /// In zh, this message translates to:
-  /// **'开启后的后果由你承担。建议只在需要时开启，用完关闭。'**
+  /// **'解除限制会扩大 AI 的操作权限，可能造成不可逆损失。仅在需要时开启，用完关闭。'**
   String get phoneUnlockFootnote;
 
   /// No description provided for @phoneUnlockBanks.
@@ -17633,31 +17633,31 @@ abstract class L10n {
   /// No description provided for @phoneUnlockDisclaimer1.
   ///
   /// In zh, this message translates to:
-  /// **'开启后，AI 可以在无人确认的情况下执行上述操作。'**
+  /// **'解除限制后，AI 可能不经逐步确认便执行上述高风险操作。'**
   String get phoneUnlockDisclaimer1;
 
   /// No description provided for @phoneUnlockDisclaimer2.
   ///
   /// In zh, this message translates to:
-  /// **'AI 可能被网页、消息或文件中的内容误导。'**
+  /// **'AI 可能误判界面，或被网页、消息与文件中的恶意指令诱导。'**
   String get phoneUnlockDisclaimer2;
 
   /// No description provided for @phoneUnlockDisclaimer3.
   ///
   /// In zh, this message translates to:
-  /// **'由此造成的账号、资金、数据或设备损失由你自行承担，DSH Go 及其开发者不承担责任。'**
+  /// **'可能造成账号、资金、数据、设备或隐私损失，请自行核对重要操作及结果。'**
   String get phoneUnlockDisclaimer3;
 
   /// No description provided for @phoneUnlockDisclaimer4.
   ///
   /// In zh, this message translates to:
-  /// **'建议只在需要时临时开启，用完关闭。'**
+  /// **'软件按现状提供；免责仅在适用法律允许范围内有效，不影响依法不得排除的责任。'**
   String get phoneUnlockDisclaimer4;
 
   /// No description provided for @phoneUnlockDisclaimer5.
   ///
   /// In zh, this message translates to:
-  /// **'不建议在存有支付或银行信息的设备上开启。'**
+  /// **'仅在自有或获授权的设备上临时开启，用后关闭；请勿在存有真实支付信息的主力机上测试。'**
   String get phoneUnlockDisclaimer5;
 
   /// No description provided for @phoneUnlockHold.
