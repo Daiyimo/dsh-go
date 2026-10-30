@@ -15346,6 +15346,9 @@ class L10nZh extends L10n {
   String get updateSkipVersion => '跳过这个版本';
 
   @override
+  String get updateStarProject => '去 Star';
+
+  @override
   String get updateCancelDownload => '取消下载';
 
   @override

@@ -8,6 +8,7 @@ import 'dart:convert';
 
 import 'package:dsh_app/runtime/runtime_state.dart';
 import 'package:dsh_app/state/settings_state.dart';
+import 'package:dsh_app/state/star_prompt.dart';
 import 'package:dsh_app/state/update_state.dart';
 import 'package:dsh_app/ui/settings/about_page.dart';
 import 'package:dsh_app/ui/settings/settings_screen.dart';
@@ -148,6 +149,20 @@ void main() {
     },
   );
 
+  // Public builds: 稍后 / 去 Star / 立即更新.
+  goldenBoth(
+    'update_sheet_star',
+    () => const _AboutPage(),
+    overrides: () => [
+      ..._overrides(FakeUpdate(_offer())),
+      starPromptGateProvider.overrideWithValue(true),
+      starPromptStoreProvider.overrideWithValue(_StarStore()),
+    ],
+    before: (tester) async {
+      await _openSheet(tester);
+    },
+  );
+
   goldenBoth(
     'update_sheet_downloading',
     () => const _AboutPage(),
@@ -193,6 +208,7 @@ void main() {
       expect(find.text('发现新版本'), findsOneWidget);
       expect(find.text('DSH 1.2.0'), findsOneWidget);
       expect(find.textContaining('171.8 MB'), findsOneWidget);
+      expect(find.byKey(const ValueKey('update-star')), findsNothing);
       await tester.tap(find.text('立即更新'));
       await tester.pump();
       expect(update.calls, ['startDownload']);
@@ -201,6 +217,38 @@ void main() {
       await tester.pump();
       expect(update.calls, ['startDownload', 'cancelDownload']);
       expect(find.text('立即更新'), findsOneWidget);
+    });
+
+    testWidgets('public builds ask for a star too: 去 Star opens the project, then the button goes', (tester) async {
+      final opened = <Uri>[];
+      final update = FakeUpdate(_offer());
+      usePhoneSurface(tester);
+      await tester.pumpWidget(
+        goldenApp(
+          home: const _AboutPage(),
+          brightness: Brightness.light,
+          overrides: [
+            ..._overrides(update),
+            starPromptGateProvider.overrideWithValue(true),
+            starPromptStoreProvider.overrideWithValue(_StarStore()),
+            starLinkOpenerProvider.overrideWithValue((uri) async {
+              opened.add(uri);
+              return true;
+            }),
+          ],
+        ),
+      );
+      await tester.pump();
+      await _openSheet(tester);
+      expect(find.text('去 Star'), findsOneWidget);
+      expect(find.text('稍后'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('update-star')));
+      await tester.pump();
+      expect(opened, [starProjectPage]);
+      expect(find.byKey(const ValueKey('update-star')), findsNothing);
+      await tester.tap(find.text('立即更新'));
+      await tester.pump();
+      expect(update.calls, ['startDownload']);
     });
 
     testWidgets('跳过这个版本 records the skip and closes the sheet', (tester) async {
@@ -311,4 +359,14 @@ void main() {
       expect(update.calls, contains('resumed'));
     });
   });
+}
+
+class _StarStore implements StarPromptStore {
+  StarPromptRecord? record;
+
+  @override
+  Future<StarPromptRecord?> read() async => record;
+
+  @override
+  Future<void> write(StarPromptRecord r) async => record = r;
 }

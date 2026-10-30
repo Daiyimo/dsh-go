@@ -112,6 +112,24 @@ class MainActivity : FlutterActivity() {
     override fun onResume() {
         super.onResume()
         inForeground = true
+        preferFastestDisplayMode()
+    }
+
+    /**
+     * Asks for the screen's fastest mode at its current resolution. Apps that don't ask stay at
+     * 60 or 90 Hz on some 120 Hz phones (OriginOS, HyperOS, ColorOS). The user's refresh-rate
+     * setting and power saving still cap it. On resume: the resolution may have changed in
+     * Settings meanwhile (density changes don't recreate this activity).
+     */
+    private fun preferFastestDisplayMode() {
+        @Suppress("DEPRECATION")
+        val display = windowManager.defaultDisplay
+        val now = display.mode
+        val fastest = display.supportedModes
+            .filter { it.physicalWidth == now.physicalWidth && it.physicalHeight == now.physicalHeight }
+            .maxByOrNull { it.refreshRate } ?: return
+        if (window.attributes.preferredDisplayModeId == fastest.modeId) return
+        window.attributes = window.attributes.apply { preferredDisplayModeId = fastest.modeId }
     }
 
     override fun onPause() {

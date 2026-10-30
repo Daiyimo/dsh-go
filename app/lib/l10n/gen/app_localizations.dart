@@ -28022,6 +28022,12 @@ abstract class L10n {
   /// **'跳过这个版本'**
   String get updateSkipVersion;
 
+  /// No description provided for @updateStarProject.
+  ///
+  /// In zh, this message translates to:
+  /// **'去 Star'**
+  String get updateStarProject;
+
   /// No description provided for @updateCancelDownload.
   ///
   /// In zh, this message translates to:

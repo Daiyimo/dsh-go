@@ -84,7 +84,7 @@ versionCode = (年 - 2026) × 10^8 + MMDDhhmm      时钟固定按 UTC+8
    ```
 
    提示的触发条件见 `docs/design/star-prompt.md`；使用时长从装上这个包算起。
-3. **确认签名**：分别对 arm64、x64 的 APK 执行 `apksigner verify --print-certs`。证书主题不得含 `CN=Android Debug`，两个 flavor 的证书 SHA-256 必须一致，并与上一版一致。验证失败时不要生成或上传 `dist/`、`update.json`。
+3. **确认签名**：分别对 arm64、x64 的 APK 执行 `apksigner verify -v --min-sdk-version 21 --print-certs`。v1、v2、v3 三种签名都要是 `true`（v1 给仍读 JAR 签名的安装器和安全扫描；不加 `--min-sdk-version` 时 apksigner 按 minSdk 26 不查 v1），证书主题不得含 `CN=Android Debug`，两个 flavor 的证书 SHA-256 必须一致，并与上一版一致。验证失败时不要生成或上传 `dist/`、`update.json`。
 4. **生成资产**（改名、算校验和、写 `update.json`）。版本名取 pubspec，构建号用 `aapt2` 从 APK 里读；两个 flavor 的构建号或版本名对不上、或者还是占位的 `1`，脚本直接报错：
 
    ```sh
@@ -246,7 +246,7 @@ scripts/publish-release.sh ../../dist --github
 |---|---|
 | 1 R2 | APK、`SHA256SUMS` → `dshgo-share/beta/<版本>/`（rclone 分片续传，没有就 wrangler） |
 | 2 国内 | 同样两样 → 香港桶 `<版本>/`（`ossutil cp` / `coscli cp`，带 Content-Type 和 Cache-Control）。`CN_BASE_URL` 为空时跳过 |
-| 3 GitHub | `gh release create v<版本> … --draft`：APK、`SHA256SUMS`、`update.json`（不带 `url`，App 自己拼 GitHub 地址），正文是更新日志里这一版的「中文」「English」两节 |
+| 3 GitHub | `gh release create v<版本> … --draft`：arm64 APK、`SHA256SUMS`、`update.json`（不带 `url`，App 自己拼 GitHub 地址），正文是更新日志里这一版的「中文」「English」两节，末尾折叠的「其他版本下载」链到 `go.dshtui.com/download/<版本>/` 下的 x64 包（多数人用 arm64，两个包并排容易选错） |
 | 4 核对 | 每条线路、每个文件下载回来比大小和 SHA-256：R2 用通道令牌，香港桶用公开地址，GitHub 草稿用 API |
 | 5 上线 | 全部一致才：发布 GitHub 草稿（并确认公开地址可下）→ 传 `beta/<版本>/update.json` → 最后换 `beta/update.json` |
 | 之后 | 确认线上页面（`/download` 或 `/beta`）给出这一版和每条线路的链接，再从页面的海外线路下载一次 |

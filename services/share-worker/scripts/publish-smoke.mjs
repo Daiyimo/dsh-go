@@ -30,6 +30,7 @@ const dryOnly = process.argv.includes('--dry-run-only');
 // The two newest versions in the changelog: the script takes notes from there.
 const changelog = readFileSync(join(worker, '../../docs/changelog.md'), 'utf8');
 const [VERSION, OLDER] = [...changelog.matchAll(/^## (\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)\b/gm)].map((m) => m[1]);
+const GH_LATEST = 'https://github.com/ccch1mneyyy/dsh-go/releases/latest';
 
 function makeDist(version) {
   const dir = join(state, `dist-${version}`);
@@ -177,7 +178,7 @@ async function realRun(mode, provider) {
   const origin = `http://127.0.0.1:${wport}`;
   const server = spawn('python3', [join(fakes, 'static_server.py'), served, String(sport)], { stdio: 'ignore' });
   const dev = spawn('npx', ['wrangler', 'dev', '--local', '--ip', '127.0.0.1', '--port', String(wport), '--persist-to', persist,
-    '--var', `BETA_SECRET:${betaSecret}`, '--var', `DOWNLOAD_ACCESS:${mode}`, '--var', `CN_BASE_URL:${cnBase}`, '--show-interactive-dev-session=false'],
+    '--var', `BETA_SECRET:${betaSecret}`, '--var', `DOWNLOAD_ACCESS:${mode === 'key' ? 'key' : 'public'}`, '--var', `DOWNLOAD_REDIRECT:${mode === 'redirect' ? GH_LATEST : ''}`, '--var', `CN_BASE_URL:${cnBase}`, '--show-interactive-dev-session=false'],
   { ...workerEnv, stdio: ['ignore', 'pipe', 'pipe'] });
   let devOut = '';
   dev.stdout.on('data', (d) => (devOut += d));
@@ -200,13 +201,16 @@ async function realRun(mode, provider) {
     const first = publish(dist, ['--github'], env);
     console.log(first.out.replace(/^/gm, '  | '));
     check(first.code === 0 && first.out.includes(`published ${VERSION}: global cn github`), `${mode}/${provider}: publishes to R2, China and GitHub`, first.out);
-    check(first.out.includes(mode === 'public' ? `${origin}/download offers ${VERSION}` : `${origin}/beta (access key) offers ${VERSION}`), `${mode}: the live page offers it on every route`);
+    check(first.out.includes({ public: `${origin}/download offers ${VERSION}`, redirect: `${origin}/download sends people to ${GH_LATEST}`, key: `${origin}/beta (access key) offers ${VERSION}` }[mode]), `${mode}: the live page offers it on every route`);
+    if (mode === 'redirect') check(first.out.includes(`ok - public link dsh-go-${VERSION}-x64.apk`), 'redirect: the x86_64 link in the GitHub notes works');
     check(noSecrets(first.out + readFileSync(log, 'utf8')), `${mode}: no secret in the output or on any command line`);
     check(readdirSync(join(served, 'cn', VERSION)).sort().join(' ') === `SHA256SUMS dsh-go-${VERSION}-arm64.apk dsh-go-${VERSION}-x64.apk`, `${mode}: China has both APKs and SHA256SUMS`);
     const gh = JSON.parse(readFileSync(join(served, 'gh', tag, 'update.json'), 'utf8'));
     const release = JSON.parse(readFileSync(join(served, 'gh', tag, '.release.json'), 'utf8'));
     check(!existsSync(join(served, 'gh', '_drafts', tag)) && release.title === `DSH Go ${VERSION}` && /^### 中文\n[\s\S]+\n### English\n/.test(release.notes), `${mode}: GitHub release published, notes from the changelog`);
     check(!('url' in gh.assets.arm64) && !('routes' in gh) && gh.notesByLocale.en, `${mode}: GitHub's update.json lets the app use GitHub URLs`);
+    check(!existsSync(join(served, 'gh', tag, `dsh-go-${VERSION}-x64.apk`)) && existsSync(join(served, 'gh', tag, `dsh-go-${VERSION}-arm64.apk`))
+      && release.notes.includes(`### 其他版本下载`) && release.notes.includes(`${origin}/download/${VERSION}/dsh-go-${VERSION}-x64.apk`), `${mode}: GitHub offers arm64; x86_64 is linked under "Other builds"`);
     const latest = await feed();
     check(JSON.stringify(latest.routes) === '["global","cn","github"]' && latest.assets.arm64.url === `${origin}/beta/${VERSION}/dsh-go-${VERSION}-arm64.apk`, `${mode}: beta/update.json lists the routes; the app's URLs are as before`);
     const calls = readFileSync(log, 'utf8');
@@ -233,7 +237,7 @@ async function realRun(mode, provider) {
 
     const again = publish(dist, ['--github'], env);
     const skipped = (again.out.match(/already there/g) ?? []).length;
-    check(again.code === 0 && skipped === 8, `${mode}: publishing again skips what's there (${skipped} files)`, again.out);
+    check(again.code === 0 && skipped === 7, `${mode}: publishing again skips what's there (${skipped} files)`, again.out);
 
     const apk = join(dist, `dsh-go-${VERSION}-arm64.apk`);
     appendFileSync(apk, 'changed');
@@ -269,6 +273,7 @@ try {
   dryRuns();
   if (!dryOnly) {
     await realRun('public', 'oss');
+    await realRun('redirect', 'oss');
     await realRun('key', 'cos');
   }
   console.log(`publish smoke: all ${passed} passed`);

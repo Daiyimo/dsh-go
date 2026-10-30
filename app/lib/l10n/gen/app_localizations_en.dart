@@ -16161,6 +16161,9 @@ class L10nEn extends L10n {
   String get updateSkipVersion => 'Skip this version';
 
   @override
+  String get updateStarProject => 'Star it';
+
+  @override
   String get updateCancelDownload => 'Cancel download';
 
   @override

@@ -2,6 +2,22 @@
 
 每个版本先中文、后英文。发版时把对应版本的正文（不含版本标题）作为 Release 正文，见 `docs/release.md`。
 
+## 1.0.1 · 2026-10-30
+
+### 中文
+
+- 高刷新率：在支持 90Hz、120Hz 的手机上，DSH Go 会用屏幕最高的刷新率运行。之前部分系统（例如 OriginOS、HyperOS、ColorOS）会把它限制在 60Hz 或 90Hz。系统设置里选的刷新率和省电模式仍然优先。
+- 安装包同时带 v1、v2、v3 三种签名，只认旧式签名的安装器和安全检测也能正常安装。签名证书没有变，可以直接覆盖 1.0.0 升级，对话和设置都会保留。
+- 应用内更新的弹窗里多了一个「去 Star」按钮，可以顺手去 GitHub 给项目点个 Star。
+- GitHub 发布页只放常见手机用的 arm64 安装包；模拟器和 x86 设备用的版本在发布说明末尾的「其他版本下载」里。
+
+### English
+
+- High refresh rate: on 90 Hz and 120 Hz phones, DSH Go now runs at the screen's highest refresh rate. Some systems (OriginOS, HyperOS and ColorOS, for example) used to hold it at 60 or 90 Hz. The refresh rate you choose in system settings and power saving still come first.
+- The APK now carries v1, v2 and v3 signatures, so installers and security checks that only read the older signature accept it too. The signing certificate hasn't changed: it installs over 1.0.0 and keeps your chats and settings.
+- The in-app update sheet has a Star it button for a quick star on GitHub.
+- The GitHub release page offers the arm64 APK for most phones; the build for emulators and x86 devices is under "Other builds" at the end of the release notes.
+
 ## 1.0.0 · 2026-10-30
 
 ### 中文

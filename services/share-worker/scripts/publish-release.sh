@@ -172,6 +172,11 @@ TYPE[SHA256SUMS]='text/plain; charset=utf-8'
 CACHE[SHA256SUMS]='public, max-age=3600'
 FILES=("${APKS[@]}" SHA256SUMS)
 ARM64=$(jq -r '.assets.arm64.name' "$MANIFEST")
+# GitHub's release page offers arm64 only: two APKs side by side made most people
+# stop and pick. The x86_64 one is linked under "Other builds" in its notes.
+X64=$(jq -r '.assets.x64.name // empty' "$MANIFEST")
+GH_FILES=()
+for name in "${FILES[@]}"; do [[ "$name" == "$X64" ]] || GH_FILES+=("$name"); done
 
 ROUTES=(global)
 [[ $CN_ON == 1 ]] && ROUTES+=(cn)
@@ -210,6 +215,23 @@ print(json.dumps({"zh": parts["zh"], "en": parts["en"],
 PY
 jq -r .all "$TMP/notes.json" >"$TMP/notes.md"
 echo "notes: ## $VERSION of $CHANGELOG, $(wc -l <"$TMP/notes.md") lines (中文 + English)"
+cp "$TMP/notes.md" "$TMP/gh-notes.md"
+if [[ -n "$X64" ]]; then cat >>"$TMP/gh-notes.md" <<NOTES
+
+### 其他版本下载 · Other builds
+
+<details>
+<summary>x86_64 版（安卓模拟器、x86 设备）· x86_64 build (emulators, x86 devices)</summary>
+
+绝大多数手机请直接下载下面 Assets 里的 \`$ARM64\`。x86_64 版只用于安卓模拟器和少数 x86 设备。
+
+Most phones should use \`$ARM64\` from the Assets below. The x86_64 build is only for Android emulators and the few x86 devices.
+
+[$X64]($ORIGIN/download/$VERSION/$X64) · $(( (SIZE[$X64] + 524288) / 1048576 )) MB · SHA-256 \`${SHA[$X64]}\`
+
+</details>
+NOTES
+fi
 
 # R2's manifest: downloads through /beta/<version>/ (the app's channel), the
 # routes the files are on. GitHub's: the app derives GitHub URLs itself.
@@ -227,16 +249,20 @@ jq --slurpfile n "$TMP/notes.json" --arg page "https://github.com/$REPO/releases
   | .notes = $n[0].all
   | .notesByLocale = {zh: $n[0].zh, en: $n[0].en}' "$MANIFEST" >"$TMP/github/update.json"
 
-# Which page is live: /download answers once DOWNLOAD_ACCESS=public.
+# Which page is live: /download answers once DOWNLOAD_ACCESS=public, and with
+# DOWNLOAD_REDIRECT it sends people to GitHub instead.
 MODE=unknown
+REDIRECT=
 if [[ $DRY == 0 && $VERIFY == 1 && $LATEST == 1 ]]; then
-  case "$(curl -sS -o /dev/null -w '%{http_code}' "$ORIGIN/download" || true)" in
+  read -r code REDIRECT < <(curl -sS -o /dev/null -w '%{http_code} %{redirect_url}\n' "$ORIGIN/download" || echo 000)
+  case "$code" in
     200) MODE=public ;;
+    302) MODE=redirect ;;
     404) MODE=key ;;
     *) die "can't tell whether $ORIGIN/download is up" ;;
   esac
-  echo "page: $([[ $MODE == public ]] && echo "$ORIGIN/download (public)" || echo "$ORIGIN/beta (access key)")"
-  [[ $MODE == public || -s "${BETA_KEY_FILE:-}" ]] || die "the page wants a key: set BETA_KEY_FILE to a file holding a live access key"
+  echo "page: $(case $MODE in public) echo "$ORIGIN/download (public)" ;; redirect) echo "$ORIGIN/download → $REDIRECT" ;; *) echo "$ORIGIN/beta (access key)" ;; esac)"
+  [[ $MODE != key || -s "${BETA_KEY_FILE:-}" ]] || die "the page wants a key: set BETA_KEY_FILE to a file holding a live access key"
 fi
 
 # ── 1. R2 ────────────────────────────────────────────────────────────────
@@ -362,7 +388,7 @@ step "3/5 GitHub $([[ $GITHUB == 1 ]] && echo "$REPO $TAG" || echo '(off; --gith
 gh_() { if [[ -n "${GH_TOKEN_FILE:-}" ]]; then GH_TOKEN="$(tr -d '[:space:]' <"$GH_TOKEN_FILE")" gh "$@"; else gh "$@"; fi; }
 run_gh() { if [[ $DRY == 1 ]]; then printf '  [dry-run] gh %s\n' "$(quote "$@")"; else gh_ "$@"; fi; }
 GH_PATHS=()
-for name in "${FILES[@]}"; do GH_PATHS+=("$DIST/$name"); done
+for name in "${GH_FILES[@]}"; do GH_PATHS+=("$DIST/$name"); done
 GH_PATHS+=("$TMP/github/update.json")
 GH_DRAFT=1
 if [[ $GITHUB == 1 ]]; then
@@ -372,7 +398,7 @@ if [[ $GITHUB == 1 ]]; then
   if [[ -z "$info" ]]; then
     pre=()
     [[ "$VERSION" == *-* ]] && pre=(--prerelease)
-    run_gh release create "$TAG" "${GH_PATHS[@]}" --repo "$REPO" --title "DSH Go $VERSION" --notes-file "$TMP/notes.md" --draft "${pre[@]}" \
+    run_gh release create "$TAG" "${GH_PATHS[@]}" --repo "$REPO" --title "DSH Go $VERSION" --notes-file "$TMP/gh-notes.md" --draft "${pre[@]}" \
       || die "gh release create failed"
   else
     GH_DRAFT=$(jq -r 'if .isDraft then 1 else 0 end' <<<"$info")
@@ -419,7 +445,7 @@ else
   fi
   if [[ $GITHUB == 1 ]]; then
     mkdir -p "$TMP/gh"
-    for name in "${FILES[@]}"; do
+    for name in "${GH_FILES[@]}"; do
       if [[ $DRY == 1 ]]; then plan "gh release download $TAG --pattern $name (the draft, through the API), expect ${SIZE[$name]} bytes, sha256 ${SHA[$name]:0:12}…"; continue; fi
       rm -f "$TMP/gh/$name"
       gh_ release download "$TAG" --repo "$REPO" --pattern "$name" --dir "$TMP/gh" --clobber >/dev/null || die "gh release download $name failed"
@@ -472,7 +498,11 @@ echo "ok - /beta/update.json (channel token) is $FULL"
 CN_URL="$CN_BASE_URL$VERSION/$ARM64"
 GH_URL="https://github.com/$REPO/releases/download/$TAG/$ARM64"
 # The Worker remembers the latest manifest for 30 s per isolate.
-if [[ $MODE == public ]]; then
+if [[ $MODE == redirect ]]; then
+  # No page to check; the x86_64 link in the GitHub notes points here.
+  echo "ok - $ORIGIN/download sends people to $REDIRECT"
+  [[ -z "$X64" ]] || check 'public link' "$X64" "$ORIGIN/download/$VERSION/$X64"
+elif [[ $MODE == public ]]; then
   for attempt in 1 2 3 4 5 6 7 8; do
     curl -fsS "$ORIGIN/download?lang=zh" >"$TMP/page.html" || true
     grep -qF "${SHA[$ARM64]}" "$TMP/page.html" && break
