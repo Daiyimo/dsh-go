@@ -215,7 +215,17 @@ print(json.dumps({"zh": parts["zh"], "en": parts["en"],
 PY
 jq -r .all "$TMP/notes.json" >"$TMP/notes.md"
 echo "notes: ## $VERSION of $CHANGELOG, $(wc -l <"$TMP/notes.md") lines (中文 + English)"
-cp "$TMP/notes.md" "$TMP/gh-notes.md"
+cat >"$TMP/gh-notes.md" <<NOTES
+**手机安装：只需下载 [\`$ARM64\`]($GITHUB_DOWNLOAD_BASE/$TAG/$ARM64)。**
+
+\`update.json\` 和 \`SHA256SUMS\` 供自动更新与校验使用，无需手动下载。GitHub 自动生成的 Source code 是源码包，不是安装包。
+
+**Install on your phone: download [\`$ARM64\`]($GITHUB_DOWNLOAD_BASE/$TAG/$ARM64).**
+
+\`update.json\` and \`SHA256SUMS\` support automatic updates and verification. You do not need to download them manually. GitHub's Source code archives are not installers.
+
+NOTES
+cat "$TMP/notes.md" >>"$TMP/gh-notes.md"
 if [[ -n "$X64" ]]; then cat >>"$TMP/gh-notes.md" <<NOTES
 
 ### 其他版本下载 · Other builds

@@ -83,7 +83,6 @@
   "searchKwChatLogUpload": "privacy,logs,upload logs,telemetry",
   "searchKwAddSshHost": "ssh,add host,connect computer",
   "searchKwRemoteAutoConnect": "auto connect,on launch",
-  "searchKwRemoteDirect": "direct,P2P,peer to peer,LAN,relay,TURN,WebRTC",
   "searchKwPermissionCurrent": "allow for this chat,this chat",
   "searchKwPermissionDefault": "default permission,read only,workspace,full access,auto-run commands,don't ask",
   "searchSettingsHint": "Search settings",

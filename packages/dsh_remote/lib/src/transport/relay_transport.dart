@@ -59,6 +59,7 @@ class RelayTransport implements SecureHandshakeTransport {
     this._connector,
     this._timeout,
     this._offered,
+    this._preferredTransports,
   );
 
   /// Connects and waits for `connect.accepted`.
@@ -78,6 +79,7 @@ class RelayTransport implements SecureHandshakeTransport {
     ControlSocketConnector? connector,
     ControlTracer? tracer,
     bool offerDirect = false,
+    List<RemoteTransportMode>? preferredTransports,
   }) async {
     final connect = connector ?? _defaultConnector;
     final WebSocket socket;
@@ -106,6 +108,7 @@ class RelayTransport implements SecureHandshakeTransport {
       connect,
       timeout,
       offerDirect ? _directOffered : _relayOffered,
+      preferredTransports,
     );
     try {
       await transport._open(accessToken, clientVersion).timeout(timeout);
@@ -135,6 +138,7 @@ class RelayTransport implements SecureHandshakeTransport {
   final ControlSocketConnector _connector;
   final Duration _timeout;
   final List<String> _offered;
+  final List<RemoteTransportMode>? _preferredTransports;
   ControlFrameLimits _limits = const ControlFrameLimits();
   String? _connectionId;
   List<String> _direct = const [];
@@ -159,8 +163,8 @@ class RelayTransport implements SecureHandshakeTransport {
   /// Negotiated `hello.ack` heartbeat.
   Duration get heartbeatInterval => Duration(milliseconds: _heartbeatMs);
 
-  /// Direct paths both sides negotiated (`lan`, `p2p`, `turn`, in that
-  /// order); empty when this connection uses the Relay.
+  /// Direct paths both sides negotiated, in the configured preference order;
+  /// empty when this connection uses the Relay.
   List<String> get directTransports => _direct;
 
   /// `hello.ack.webrtcFallbackTimeoutMs`, when the Server sets one.
@@ -286,8 +290,9 @@ class RelayTransport implements SecureHandshakeTransport {
         _heartbeatMs = asInt(p['heartbeatIntervalMs']) ?? _heartbeatMs;
         if (p['webrtcEnabled'] != false) {
           _direct = [
-            for (final t in const ['lan', 'p2p', 'turn'])
-              if (negotiated.contains('transport.$t')) t,
+            for (final t in (_preferredTransports?.map((t) => t.name) ?? const ['lan', 'p2p', 'turn']))
+              if (t != 'relay')
+                if (negotiated.contains('transport.$t')) t,
           ];
           _webrtcFallbackMs = asInt(p['webrtcFallbackTimeoutMs']);
         }

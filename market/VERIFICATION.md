@@ -65,3 +65,29 @@ Worker 测试覆盖十分钟缓存及剩余有效期、上游失败/坏 JSON/超
 | 部署脚本真实分享链路 E2E | 上传、读取、解密、页面及安全头、token/admin 删除全部通过 |
 
 默认 `npm test` 亦通过，共 115 项，其中另外 2 项为临时的 Pages/Worker 真实目录配对校验。以上确认公开市场接口和既有分享链路运行正常；没有扩大到 App 插件安装、宿主安装字节一致性、依赖树安全性或真机适配验证。
+
+## 2026-10-31 媒体插件 0.2.1 正式发布与市场收录
+
+正式收录包为 `@ccch1mneyyy/dsh-media@0.2.1`。2026-10-30 19:55:51 UTC 已验证匿名精确版本 HTTP 200、公开 tarball 完整下载；19 个文件、压缩 48019 字节，SHA-256 为 `9829f5106dec8cb354c203c74cc0510656f0f94538c36abf0fb80226388d13c9`，内容与本地发布包一致。注册表 SHA-512 为：
+
+```text
+sha512-OCm2F4PwrCaNptn2TLTiZvlcK2RY7vmSNW8Qa3uu8YlUzt49pMSS9VdHQ3sKUUB9VEvST3+bjxs0TlfR4wdbmg==
+```
+
+媒体源码此前通过 306 项 Node 测试；`0.2.1` 与该已测包只有 package.json 版本号差异。市场在 19:56 UTC 起重新读取真实 npm 发布物：解包 163812 字节，MIT/OSI 许可、归档安全、包身份和 DSH bundle patch 均通过，精确版本公告为空。识别为 `adapted: true`、`minApp: 1.0.2`、`features: [media]`，风险为 medium，保留 shell、network、filesystem 特征及实际文件证据。
+
+`plugins/` 只加入这个媒体条目，维护者 policy 将其标为 official；总目录为 5 个固定版本。原计划 `@dsh-go/media` 发布失败；备用包 `0.2.0` 曾成功暂存并核对下载内容，但审批接口返回 404，根因未定。新发布凭据获得直发权限后，`0.2.0` 因已暂存返回 409，因此只升级版本号到 `0.2.1` 完成正式发布。未将旧包名、暂存版本或占位版本加入市场。
+
+本轮市场 `npm test` 24 项离线测试通过，`npm run check` 与 `npm run build` 通过全部 5 个精确版本；构建重新下载并检查 npm tarball、核对 SHA-512 和公告，再调用官方格式 1 validator。市场静态检查不执行插件、不解析依赖树，也不证明 App 安装字节一致性、真实付费生成或设备完整媒体链路。
+
+### 媒体目录线上验收
+
+公开市场提交 `4d822e9735e00e39b72b433af26608d5d93c9c82` 已发布到 main，使用既有 owner bypass 推送，没有修改分支保护。GitHub Pages 工作流 [41119356203](https://github.com/ccch1mneyyy/dsh-go-market/actions/runs/41119356203) 的依赖安装、24 项测试、完整在线构建和部署均成功，部署于 2026-10-30 19:57:38 UTC 完成。
+
+| 验证时间（UTC） | 对象 | 真实结果 |
+| --- | --- | --- |
+| 2026-10-30 19:57:57 | Pages `index.json` 与 `dsh-go.json` | 两份均 HTTP 200，5 个插件，媒体条目为 `@ccch1mneyyy/dsh-media@0.2.1`、official |
+| 2026-10-30 19:58:47 | Worker `/market/index.json` 与 `/market/dsh-go.json` | 两份均 HTTP 200、`X-Market-Stale: false`，5 个插件，正确媒体版本与官方身份 |
+| 上述两组真实响应 | 实际 Worker `validateCatalog` 与官方 `parseMarketIndex` | 均通过；索引与 sidecar 名称、版本配对，媒体 SHA-512 与 npm 精确版本元数据一致；adapted、minApp、features、风险标记均符合扫描结果 |
+
+Worker 首次请求命中尚未过期的旧 4 条缓存，响应剩余有效期为 28 秒；等待自然过期后完成上述验收，没有清空 KV 或重部署 Worker。最终目录不包含原包名、暂存的 0.2.0 或占位版本。以上验证市场的真实公开分发，仍不扩展为 App 设备安装或付费供应商生成的验证。

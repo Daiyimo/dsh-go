@@ -1,0 +1,209 @@
+import 'dart:async';
+
+import 'package:dsh_app/l10n/l10n.dart';
+import 'package:dsh_app/remote/link_status.dart';
+import 'package:dsh_app/remote/secret_store.dart';
+import 'package:dsh_app/runtime/runtime_state.dart';
+import 'package:dsh_app/state/connection_state.dart';
+import 'package:dsh_app/state/hosts_state.dart';
+import 'package:dsh_app/ui/remote/network_details_sheet.dart';
+import 'package:dsh_app/ui/remote/remote_screen.dart';
+import 'package:dsh_app/ui/settings/index/spots.dart';
+import 'package:dsh_client/dsh_client.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import '../shell/golden_harness.dart';
+import 'support/fake_relay.dart';
+
+const _host = HostRef.relay('mac');
+
+class _InspectableLink extends HostLink implements NetworkInspectableHostLink {
+  _InspectableLink(this.status);
+
+  @override
+  HostLinkStatus status;
+  final changes = StreamController<HostLinkStatus>.broadcast(sync: true);
+  int inspections = 0;
+  Future<RemoteNetworkStatus?> Function()? inspect;
+
+  void emit(HostLinkStatus next) {
+    status = next;
+    changes.add(next);
+  }
+
+  @override
+  Future<RemoteNetworkStatus?> inspectNetwork() async {
+    inspections++;
+    final result = await inspect?.call();
+    if (result != null && status.isConnected) {
+      emit(HostLinkStatus(HostLinkPhase.connected, path: result.path, network: result));
+    }
+    return result;
+  }
+
+  @override
+  Stream<HostLinkStatus> get statuses => changes.stream;
+  @override
+  DshClient? get currentClient => null;
+  @override
+  Stream<DshClient> get clients => const Stream.empty();
+  @override
+  Future<DshClient> open() => throw UnimplementedError();
+  @override
+  void kick() {}
+  @override
+  void retry() {}
+  @override
+  Future<void> close() async {}
+}
+
+void main() {
+  setUp(() {
+    AppLocale.use(AppLocale.zhCN);
+    SharedPreferences.setMockInitialValues({ActiveHostController.prefsKey: _host.encode()});
+  });
+
+  Future<void> frames(WidgetTester tester) async {
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+  }
+
+  Future<void> pump(WidgetTester tester, _InspectableLink link, {bool page = false}) async {
+    usePhoneSurface(tester);
+    addTearDown(link.changes.close);
+    await tester.pumpWidget(
+      goldenApp(
+        home: page ? const RemoteScreen() : const Scaffold(body: RemoteNetworkDetailsSheet(host: _host)),
+        brightness: Brightness.light,
+        overrides: [
+          secretStoreProvider.overrideWithValue(MemorySecretStore()),
+          networkKicksProvider.overrideWithValue(const Stream.empty()),
+          relayBackendProvider.overrideWithValue(FakeRelayBackend(user: sampleRelayUser)),
+          hostLinkProvider.overrideWith((ref, host) => link),
+          localRuntimeProvider.overrideWith(
+            () => FakeRuntime(const LocalRuntimeState(loaded: true, status: runningStatus)),
+          ),
+        ],
+      ),
+    );
+    await frames(tester);
+  }
+
+  testWidgets('automatic routing has no direct toggle or stale search setting', (tester) async {
+    await pump(tester, _InspectableLink(HostLinkStatus.idle), page: true);
+    expect(find.byKey(const ValueKey('remote-direct')), findsNothing);
+    expect(SettingsIndex.spot('remote-direct'), isNull);
+    expect(SettingsIndex.spot('remote-auto-connect'), isNotNull);
+    expect(find.byKey(const ValueKey('remote-auto-connect')), findsOneWidget);
+  });
+
+  for (final path in [RelayPath.lan, RelayPath.p2p, RelayPath.turn, RelayPath.relay]) {
+    testWidgets('connected host shows ${path.name} and opens network details', (tester) async {
+      final link = _InspectableLink(HostLinkStatus(HostLinkPhase.connected, path: path));
+      await pump(tester, link, page: true);
+      expect(find.text('已连接 · ${path.label} · 端到端加密'), findsOneWidget);
+      final entry = find.byKey(const ValueKey('remote-network-mac'));
+      await tester.ensureVisible(entry);
+      await tester.tap(entry);
+      await frames(tester);
+      expect(find.byType(RemoteNetworkDetailsSheet), findsOneWidget);
+      expect(find.text(path.label), findsWidgets);
+      expect(find.text('未测量'), findsNWidgets(2));
+      expect(link.inspections, 0, reason: 'opening details does not continuously probe the connection');
+    });
+  }
+
+  testWidgets('measurement is on demand and shows actual timing', (tester) async {
+    final link = _InspectableLink(
+      const HostLinkStatus(
+        HostLinkPhase.connected,
+        path: RelayPath.lan,
+        network: RemoteNetworkStatus(path: RelayPath.lan, connectDuration: Duration(milliseconds: 315)),
+      ),
+    );
+    final pending = Completer<RemoteNetworkStatus?>();
+    link.inspect = () => pending.future;
+    await pump(tester, link);
+    expect(find.text('315 毫秒'), findsOneWidget);
+    expect(find.text('未测量'), findsOneWidget);
+    await tester.tap(find.text('刷新网络信息 / 测量延迟'));
+    await frames(tester);
+    expect(find.text('正在测量…'), findsOneWidget);
+    expect(link.inspections, 1);
+    pending.complete(
+      const RemoteNetworkStatus(
+        path: RelayPath.p2p,
+        connectDuration: Duration(milliseconds: 315),
+        roundTripTime: Duration(milliseconds: 47),
+      ),
+    );
+    await frames(tester);
+    expect(find.text('47 毫秒'), findsOneWidget);
+    expect(find.text(RelayPath.p2p.label), findsOneWidget);
+    expect(link.status.isConnected, isTrue);
+  });
+
+  testWidgets('unknown fallback and measurement failure never expose technical data', (tester) async {
+    final link = _InspectableLink(
+      const HostLinkStatus(
+        HostLinkPhase.connected,
+        path: RelayPath.relay,
+        network: RemoteNetworkStatus(path: RelayPath.relay, fallbackReason: 'token=secret 192.168.0.1 SDP'),
+      ),
+    );
+    link.inspect = () async => throw StateError('token=secret 192.168.0.1 SDP');
+    await pump(tester, link);
+    expect(find.text('回落原因'), findsOneWidget);
+    expect(find.textContaining('token='), findsNothing);
+    await tester.tap(find.text('刷新网络信息 / 测量延迟'));
+    await frames(tester);
+    expect(find.text('暂时无法测量，可以稍后重试'), findsOneWidget);
+    expect(find.textContaining('192.168'), findsNothing);
+    expect(find.textContaining('SDP'), findsNothing);
+    expect(link.status.isConnected, isTrue);
+  });
+
+  testWidgets('fallback codes are explained in the current language', (tester) async {
+    final link = _InspectableLink(
+      const HostLinkStatus(
+        HostLinkPhase.connected,
+        path: RelayPath.relay,
+        network: RemoteNetworkStatus(path: RelayPath.relay, fallbackReason: 'turnTimeout'),
+      ),
+    );
+    await pump(tester, link);
+    expect(find.text('TURN 连接超时，已使用 Relay 中继'), findsOneWidget);
+    expect(find.text('turnTimeout'), findsNothing);
+    AppLocale.use(AppLocale.en);
+    await tester.pumpWidget(const SizedBox.shrink());
+    await frames(tester);
+    await tester.pumpWidget(
+      goldenApp(
+        home: const Scaffold(body: RemoteNetworkDetailsSheet(host: _host)),
+        brightness: Brightness.light,
+        overrides: [hostLinkProvider.overrideWith((ref, host) => link)],
+      ),
+    );
+    await frames(tester);
+    expect(find.text('TURN timed out; using Relay.'), findsOneWidget);
+  });
+
+  testWidgets('disconnect clears measurements and ignores a late result', (tester) async {
+    final pending = Completer<RemoteNetworkStatus?>();
+    final link = _InspectableLink(const HostLinkStatus(HostLinkPhase.connected, path: RelayPath.lan));
+    link.inspect = () => pending.future;
+    await pump(tester, link);
+    await tester.tap(find.text('刷新网络信息 / 测量延迟'));
+    await frames(tester);
+    link.emit(const HostLinkStatus(HostLinkPhase.reconnecting));
+    await frames(tester);
+    pending.complete(const RemoteNetworkStatus(path: RelayPath.lan, roundTripTime: Duration(milliseconds: 12)));
+    await frames(tester);
+    expect(find.text('12 毫秒'), findsNothing);
+    expect(find.text('连接已断开，重新连接后可测量'), findsOneWidget);
+    expect(find.text('尚未确认'), findsOneWidget);
+    expect(tester.widget<FilledButton>(find.byType(FilledButton)).onPressed, isNull);
+  });
+}

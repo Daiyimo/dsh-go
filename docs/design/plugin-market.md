@@ -16,7 +16,7 @@
 
 | 分区 | 收录 | 来源 | 卡片标记 |
 |---|---|---|---|
-| 官方 | 补全 DSH Go 功能的插件（首个：`@dsh-go/media`） | 官方索引，`tier: official` | 「官方」 |
+| 官方 | 补全 DSH Go 功能的插件（首个：`@ccch1mneyyy/dsh-media`） | 官方索引，`tier: official` | 「官方」 |
 | 适配 DSH Go | 声明并通过 DSH Go 原生协议检查的社区插件 | 官方索引，`tier: community` | 「适配 DSH Go」 |
 | 全部 | dshfind 全量 | dshfind 格式 1 索引，照旧 | 无 |
 
@@ -35,7 +35,7 @@
   "schema": 1,
   "generatedAt": "2026-10-30T12:00:00Z",
   "plugins": {
-    "@dsh-go/media": {
+    "@ccch1mneyyy/dsh-media": {
       "version": "0.2.0",              // 与 index.json 里锁定的版本一致
       "tier": "official",              // official | community
       "title": { "zh": "生图生视频", "en": "Images & video" },
@@ -129,7 +129,7 @@ App 在删除旧版本或开始安装之前，通过现有 `ShareNet.npmFacts` �
 
 | 部分 | 谁做 |
 |---|---|
-| `@dsh-go/media`：补视频生成、编辑图片、国内服务商，整理发包 | Pro（后端） |
+| `@ccch1mneyyy/dsh-media`：补视频生成、编辑图片、国内服务商，整理发包 | Pro（后端） |
 | 市场仓库、检查与生成脚本、GitHub Actions、Worker 的 `/market/*` 和 `/p/<包名>` | Pro（后端） |
 | App 市场页、风险展示、安装与更新、媒体入口 | Claude（前端） |
 | npm 组织 `dsh-go` 和发包令牌、市场仓库的创建 | owner |

@@ -9,6 +9,7 @@
 # It installs the probe build, hands it the Server (10.0.2.2 is the build
 # machine's loopback) and waits for its verdict in logcat. Passes only when the
 # tunnel took a direct path and the Host bound its Noise channel to WebRTC.
+# PROBE_EXPECT_TRANSPORT=relay verifies fallback with automatic direct still enabled.
 # Env: ANDROID_SERIAL (default emulator-5554), PROBE_DIRECT=0 to force the Relay.
 set -euo pipefail
 export ANDROID_SERIAL="${ANDROID_SERIAL:-emulator-5554}"
@@ -38,7 +39,10 @@ verdict=$(adb logcat -d -s flutter | grep -o '\[p2p-probe\] ok transport=[a-z0-9
 [[ -n "$verdict" ]] || { echo "probe failed or timed out" >&2; exit 1; }
 hostlog="$WORK/host.log"
 grep 'authenticated peer channel ready' "$hostlog" | tail -1 >&2 || true
-if [[ "$direct" == true ]]; then
+if [[ -n "${PROBE_EXPECT_TRANSPORT:-}" ]]; then
+  [[ "$verdict" == *"transport=$PROBE_EXPECT_TRANSPORT" ]] ||
+    { echo "expected $PROBE_EXPECT_TRANSPORT, got: $verdict" >&2; exit 1; }
+elif [[ "$direct" == true ]]; then
   [[ "$verdict" == *transport=lan || "$verdict" == *transport=p2p || "$verdict" == *transport=turn ]] ||
     { echo "expected a direct path, got: $verdict" >&2; exit 1; }
   grep 'authenticated peer channel ready' "$hostlog" | tail -1 | grep -q "LAN\|P2P\|TURN" ||

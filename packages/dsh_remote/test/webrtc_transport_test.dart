@@ -75,6 +75,20 @@ void main() {
       expect(servers.single.urls, ['stun:stun.example:3478']);
       expect(servers.single.username, isNull);
     });
+
+    test('RTT uses the current selected pair and rejects stale or invalid measurements', () {
+      final stats = pairStats('host', '192.168.1.20', 'host', '192.168.1.30');
+      stats[2]['currentRoundTripTime'] = 0.0125;
+      expect(selectedPeerRoundTripTime(stats), const Duration(microseconds: 12500));
+      for (final invalid in [-1, double.nan, double.infinity, '0.1']) {
+        stats[2]['currentRoundTripTime'] = invalid;
+        expect(selectedPeerRoundTripTime(stats), isNull, reason: '$invalid');
+      }
+      stats[2]['currentRoundTripTime'] = 0.05;
+      stats.last['selectedCandidatePairId'] = 'missing-new-pair';
+      expect(selectedPeerRoundTripTime(stats), isNull);
+      expect(selectedPeerPath(stats), isNull, reason: 'old nominated pairs must not replace a missing current pair');
+    });
   });
 
   group('connectHost', () {
@@ -160,7 +174,7 @@ void main() {
       expect(selected, {'connectionId': link.id, 'targetDeviceId': host.deviceId, 'transport': 'lan'});
 
       expect(server.turnRequests, [link.id]);
-      expect(network.iceServers.single.single.urls, ['stun:stun.example:3478', 'turn:turn.example:3478?transport=udp']);
+      expect(network.iceServers.single.single.urls, ['stun:stun.example:3478']);
       expect(network.clients.single.channelLabel, 'dsh');
       expect(host.rtcCandidates[link.id], 1);
       expect(host.handshakes, [link.id]);
@@ -183,7 +197,7 @@ void main() {
       final client = await connect();
       expect(await client.listSessions(), isEmpty);
       expect(client.remoteCarrier!.state!.transport, 'relay');
-      expect(fallbacks, ['ICE failed']);
+      expect(fallbacks, ['directFailed']);
       expect(network.clients.single.closed, isTrue);
 
       final requests = [
@@ -207,7 +221,7 @@ void main() {
       final client = await connect();
       expect(await client.listSessions(), isEmpty);
       expect(client.remoteCarrier!.state!.transport, 'relay');
-      expect(fallbacks.single, contains('No DataChannel'));
+      expect(fallbacks.single, 'directTimeout');
       expect(host.handshakes, hasLength(1));
       expect(host.handshakes.single, isNot(host.rtcOffers.single));
     });
@@ -218,7 +232,7 @@ void main() {
       final client = await connect();
       expect(client.remoteCarrier!.state!.transport, 'relay');
       expect(await client.listSessions(), isEmpty);
-      expect(fallbacks.single, contains('No DataChannel'));
+      expect(fallbacks.single, 'directTimeout');
       expect(network.clients.single.closed, isFalse);
       gate.complete();
       await _eventually(() => network.clients.single.closed);
@@ -234,7 +248,7 @@ void main() {
       final client = await connect();
       expect(client.remoteCarrier!.state!.transport, 'relay');
       expect(await client.listSessions(), isEmpty);
-      expect(fallbacks.single, contains('No DataChannel'));
+      expect(fallbacks.single, 'directTimeout');
       expect(network.clients.single.closed, isTrue);
       gate.complete();
       await Future<void>.delayed(const Duration(milliseconds: 20));
@@ -260,21 +274,25 @@ void main() {
       expect(host.handshakes, hasLength(1));
     });
 
-    test('a closed DataChannel ends the connection; the reconnect negotiates afresh', () async {
+    test('a closed DataChannel reconnects over Relay instead of retrying the recently failed direct path', () async {
       final client = await connect();
       expect(await client.listSessions(), isEmpty);
       final first = server.links.values.single.id;
       host.closeRtc();
-      await _eventually(() => host.handshakes.length == 2);
+      await _eventually(() => host.handshakes.length == 2 && client.remoteCarrier!.state!.transport == 'relay');
       expect(await client.listSessions(), isEmpty);
       final second = server.links.values.single.id;
       expect(second, isNot(first));
       expect(host.handshakes, [first, second]);
-      expect(host.rtcOffers, [first, second]);
-      expect(network.clients, hasLength(2));
+      expect(host.rtcOffers, [first]);
+      expect(network.clients, hasLength(1));
       expect(network.clients.first.closed, isTrue);
-      expect(client.remoteCarrier!.state!.transport, 'lan');
-      expect(server.controlRelayFrames, 0);
+      expect(client.remoteCarrier!.state!.transport, 'relay');
+      expect(
+        client.remoteCarrier!.session!.networkDiagnostics!.fallbackReason,
+        RemoteNetworkFallbackReason.directRecentlyFailed,
+      );
+      expect(server.controlRelayFrames, greaterThan(0));
     });
 
     test('after an established direct path fails, Relay attach gets a fresh Noise session', () async {
@@ -289,12 +307,12 @@ void main() {
       expect(await client.listSessions(), isEmpty);
       final relayConnection = host.handshakes.last;
       expect(relayConnection, isNot(directConnection));
-      expect(host.rtcOffers, hasLength(2));
+      expect(host.rtcOffers, hasLength(1));
       expect(host.rtcOffers, isNot(contains(relayConnection)));
       expect(server.relayAttaches, hasLength(2));
       expect(server.relayFrames, greaterThan(0));
       expect(server.controlRelayFrames, 0);
-      expect(fallbacks, ['ICE failed']);
+      expect(fallbacks, ['directRecentlyFailed']);
     });
 
     test('TURN servers are dropped unless transport.turn was negotiated', () async {
@@ -316,7 +334,12 @@ void main() {
       expect(client.remoteCarrier!.state!.transport, 'p2p');
     });
 
-    test('a selected relay candidate is announced and reported as TURN', () async {
+    test('a selected remote relay cannot bypass the direct stage and TURN is retried on a fresh connection', () async {
+      server.iceServers = [
+        {
+          'urls': ['stun:stun.example:3478', 'turn:turn.example:3478'],
+        },
+      ];
       network.stats = pairStats('host', '192.168.1.20', 'relay', '198.51.100.9');
       final client = await connect();
       expect(await client.listSessions(), isEmpty);
@@ -324,7 +347,144 @@ void main() {
       expect(selected['transport'], 'turn');
       expect(client.remoteCarrier!.state!.transport, 'turn');
       expect(server.controlRelayFrames, 0);
+      expect(fallbacks, ['directFailed']);
+      expect(network.policies, [RemoteIceTransportPolicy.all, RemoteIceTransportPolicy.relay]);
+      expect(host.handshakes, hasLength(1));
+      expect(host.rtcOffers, hasLength(2));
+    });
+
+    test('direct ICE gets its own window before TURN, and a failed live TURN goes straight to Relay', () async {
+      server.iceServers = [
+        {
+          'urls': ['stun:stun.example:3478', 'turn:turn.example:3478'],
+        },
+      ];
+      network.policyOutcomes[RemoteIceTransportPolicy.all] = FakeRtcOutcome.fail;
+      final client = await connect();
+      expect(await client.listSessions(), isEmpty);
+      expect(network.policies, [RemoteIceTransportPolicy.all, RemoteIceTransportPolicy.relay]);
+      expect(network.iceServers.first.single.urls, ['stun:stun.example:3478']);
+      expect(network.iceServers.last.single.urls, contains('turn:turn.example:3478'));
+      expect(client.remoteCarrier!.session!.networkDiagnostics!.transportMode, RemoteTransportMode.turn);
+      expect(host.handshakes, [host.rtcOffers.last], reason: 'Noise starts only on the selected final connection');
+      final offers = host.rtcOffers.length;
+      host.closeRtc();
+      await _eventually(() => client.remoteCarrier!.state!.transport == 'relay' && host.handshakes.length == 2);
+      expect(await client.listSessions(), isEmpty);
+      expect(host.rtcOffers, hasLength(offers), reason: 'neither failed path is renegotiated during cooldown');
+      expect(
+        client.remoteCarrier!.session!.networkDiagnostics!.fallbackReason,
+        RemoteNetworkFallbackReason.directRecentlyFailed,
+      );
+    });
+
+    test('failed direct and TURN attempts reach Relay with exactly one Noise handshake', () async {
+      server.iceServers = [
+        {
+          'urls': ['stun:stun.example:3478', 'turn:turn.example:3478'],
+        },
+      ];
+      network.outcome = FakeRtcOutcome.fail;
+      final client = await connect();
+      expect(await client.listSessions(), isEmpty);
+      expect(network.policies, [RemoteIceTransportPolicy.all, RemoteIceTransportPolicy.relay]);
+      expect(client.remoteCarrier!.state!.transport, 'relay');
+      expect(fallbacks, ['directFailed', 'turnFailed']);
+      expect(client.remoteCarrier!.session!.networkDiagnostics!.fallbackReason, RemoteNetworkFallbackReason.turnFailed);
+      expect(host.handshakes, hasLength(1));
+      expect(host.rtcOffers, isNot(contains(host.handshakes.single)));
+      expect(network.clients.every((p) => p.closed), isTrue);
+    });
+
+    test('direct negotiation filters remote SDP and trickled relay candidates and local relay trickle', () async {
+      final relay = <String, Object?>{
+        'candidate': 'candidate:3 1 udp 1234 198.51.100.9 50000 typ relay raddr 192.168.1.30 rport 40000',
+        'sdpMid': '0',
+      };
+      host.rtcAnswerSdp = 'v=0 fake-answer\r\na=candidate:3 1 udp 1234 198.51.100.9 50000 typ relay\r\n';
+      host.extraRtcCandidates.add(relay);
+      network.extraLocalCandidates.add(relay);
+      final client = await connect();
+      expect(await client.listSessions(), isEmpty);
+      final peer = network.clients.single;
+      expect(peer.answer, isNot(contains('typ relay')));
+      expect(peer.remoteCandidates.every((c) => !(c['candidate']! as String).contains('typ relay')), isTrue);
+      final candidates = clientFrames().where((f) => f['type'] == 'signal.ice');
+      expect(candidates, hasLength(1));
+      expect(jsonEncode(candidates.toList()), isNot(contains('typ relay')));
+      expect(network.policies, [RemoteIceTransportPolicy.all]);
+    });
+
+    test('on-demand diagnostics follow the actual current pair and RTT without sending a probe', () async {
+      server.iceServers = [
+        {
+          'urls': ['stun:stun.example:3478', 'turn:turn.example:3478'],
+        },
+      ];
+      network.stats[2]['currentRoundTripTime'] = 0.023;
+      final client = await connect();
+      final session = client.remoteCarrier!.session!;
+      final initial = session.networkDiagnostics!;
+      expect(initial.transportMode, RemoteTransportMode.lan);
+      expect(initial.connectionDuration!.inMicroseconds, greaterThan(0));
+      expect(initial.roundTripTime, const Duration(milliseconds: 23));
+      final framesBefore = server.clientControlFrames.length;
+      network.stats = pairStats('host', '192.168.1.20', 'relay', '198.51.100.9');
+      network.stats[2]['currentRoundTripTime'] = 0.087;
+      final observed = await session.inspectNetwork!();
+      expect(observed.transportMode, RemoteTransportMode.turn);
+      expect(observed.roundTripTime, const Duration(milliseconds: 87));
+      expect(observed.connectionDuration, initial.connectionDuration);
+      expect(observed.observedAt.isBefore(initial.observedAt), isFalse);
+      expect(session.transport, 'lan', reason: 'wire selection is separate from the currently observed pair');
+      expect(server.clientControlFrames, hasLength(framesBefore));
+      network.stats = [];
+      final unknown = await session.inspectNetwork!();
+      expect(unknown.transportMode, isNull);
+      expect(unknown.roundTripTime, isNull);
+      expect(unknown.fallbackReason, RemoteNetworkFallbackReason.pathUnverified);
+      network.stats = pairStats('host', '192.168.1.20', 'relay', '198.51.100.9');
+      await session.inspectNetwork!();
+      host.closeRtc();
+      await _eventually(() => client.remoteCarrier!.state!.transport == 'relay' && host.handshakes.length == 2);
+      expect(network.clients, hasLength(1), reason: 'the actually failed TURN pair must not be retried as initial LAN');
+    });
+
+    test('a known native network-route change clears the failed direct-path cooldown', () async {
+      var nativeRoute = [
+        RemoteTransportMode.lan,
+        RemoteTransportMode.p2p,
+        RemoteTransportMode.turn,
+        RemoteTransportMode.relay,
+      ];
+      account.preferredTransports = () async => nativeRoute;
+      final client = await connect();
+      expect(await client.listSessions(), isEmpty);
+      nativeRoute = [RemoteTransportMode.p2p, RemoteTransportMode.turn, RemoteTransportMode.relay];
+      host.closeRtc();
+      await _eventually(() => host.handshakes.length == 2);
+      expect(await client.listSessions(), isEmpty);
+      expect(network.policies, [RemoteIceTransportPolicy.all, RemoteIceTransportPolicy.all]);
+      expect(client.remoteCarrier!.state!.transport, 'p2p');
+      expect(client.remoteCarrier!.session!.networkDiagnostics!.transportMode, RemoteTransportMode.lan);
+      final lastRequest = clientFrames().lastWhere((f) => f['type'] == 'connect.request');
+      expect((lastRequest['payload']! as Map)['preferredTransports'], ['p2p', 'turn', 'relay']);
+    });
+
+    test('authorization revocation during negotiation ends the attempt without transport fallback', () async {
+      network.offerGate = Completer<void>().future;
+      final rejected = expectLater(
+        connect(),
+        throwsA(isA<RemoteConnectException>().having((e) => e.code, 'code', 'DEVICE_REVOKED')),
+      );
+      await _eventually(() => network.clients.isNotEmpty);
+      server.disconnectPeer(await clientId(), 'DEVICE_REVOKED');
+      await rejected;
+      expect(network.clients, hasLength(1));
+      expect(network.clients.single.closed, isTrue);
       expect(fallbacks, isEmpty);
+      expect(types().where((t) => t == 'connect.request'), hasLength(1));
+      expect(host.handshakes, isEmpty);
     });
 
     test('an unnegotiated selected path falls back before Noise begins', () async {
@@ -333,7 +493,7 @@ void main() {
       final client = await connect();
       expect(await client.listSessions(), isEmpty);
       expect(client.remoteCarrier!.state!.transport, 'relay');
-      expect(fallbacks.single, contains('unnegotiated transport p2p'));
+      expect(fallbacks.single, 'directFailed');
       expect(host.handshakes, hasLength(1));
       expect(host.handshakes.single, isNot(host.rtcOffers.single));
     });

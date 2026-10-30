@@ -11450,12 +11450,6 @@ class L10nZh extends L10n {
   String get remoteAutoConnectOnStartupHint => '关闭后从本机开始';
 
   @override
-  String get remoteDirect => '直连优先（P2P）';
-
-  @override
-  String get remoteDirectHint => '能直连就不走服务器中继';
-
-  @override
   String get remoteStepConnect => '连接服务器';
 
   @override
@@ -12298,7 +12292,7 @@ class L10nZh extends L10n {
   String get remotePathTurn => 'TURN';
 
   @override
-  String get remotePathRelay => '中继';
+  String get remotePathRelay => 'Relay 中继';
 
   @override
   String remoteConnectedSsh(String address) {
@@ -12802,6 +12796,86 @@ class L10nZh extends L10n {
   }
 
   @override
+  String get remotePathLan => 'LAN 局域网';
+
+  @override
+  String get remotePathP2p => 'P2P 点对点';
+
+  @override
+  String get remoteNetworkDetails => '网络详情';
+
+  @override
+  String get remoteNetworkAutomatic => '自动依次尝试 LAN → P2P → TURN → Relay，连接全程端到端加密。';
+
+  @override
+  String get remoteNetworkCurrentPath => '当前路径';
+
+  @override
+  String get remoteNetworkConnectDuration => '连接耗时';
+
+  @override
+  String get remoteNetworkRoundTripTime => '往返延迟（RTT）';
+
+  @override
+  String get remoteNetworkUnmeasured => '未测量';
+
+  @override
+  String get remoteNetworkUnknownPath => '尚未确认';
+
+  @override
+  String remoteNetworkMilliseconds(int value) {
+    return '$value 毫秒';
+  }
+
+  @override
+  String get remoteNetworkMeasure => '刷新网络信息 / 测量延迟';
+
+  @override
+  String get remoteNetworkMeasuring => '正在测量…';
+
+  @override
+  String get remoteNetworkMeasureFailed => '暂时无法测量，可以稍后重试';
+
+  @override
+  String get remoteNetworkDisconnected => '连接已断开，重新连接后可测量';
+
+  @override
+  String get remoteNetworkFallback => '回落原因';
+
+  @override
+  String get remoteNetworkFallbackUnknown => '直连未能建立，已自动使用可用路径';
+
+  @override
+  String get remoteNetworkFallbackWebrtcUnavailable => '设备暂不支持 WebRTC，已使用 Relay 中继';
+
+  @override
+  String get remoteNetworkFallbackDirectFailed => 'LAN / P2P 直连未成功，已自动尝试后续路径';
+
+  @override
+  String get remoteNetworkFallbackDirectTimeout => 'LAN / P2P 直连超时，已自动尝试后续路径';
+
+  @override
+  String get remoteNetworkFallbackDirectRecentlyFailed => '近期直连未成功，本次先使用可用中继';
+
+  @override
+  String get remoteNetworkFallbackTurnUnavailable => 'TURN 服务暂不可用，已使用 Relay 中继';
+
+  @override
+  String get remoteNetworkFallbackTurnFailed => 'TURN 未能连接，已使用 Relay 中继';
+
+  @override
+  String get remoteNetworkFallbackTurnTimeout => 'TURN 连接超时，已使用 Relay 中继';
+
+  @override
+  String get remoteNetworkFallbackPathUnverified => '尚未确认 WebRTC 路径类型';
+
+  @override
+  String get remoteNetworkSnapshotHint => '显示最近一次确认的路径与延迟，刷新可重新检测。';
+
+  @override
+  String get remoteNetworkObservedAt => '最近观测';
+
+  @override
   String get riskDontShowAgain => '不再提示';
 
   @override
@@ -13153,9 +13227,6 @@ class L10nZh extends L10n {
 
   @override
   String get searchKwRemoteAutoConnect => '自动连接,启动时连接';
-
-  @override
-  String get searchKwRemoteDirect => '直连,P2P,点对点,局域网,中继,TURN,WebRTC';
 
   @override
   String get searchKwPermissionCurrent => '本对话都允许,这个对话,当前权限';

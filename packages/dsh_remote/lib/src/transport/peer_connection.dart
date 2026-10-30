@@ -47,6 +47,7 @@ class RemotePeerHandlers {
     required this.onOpen,
     required this.onMessage,
     required this.onClosed,
+    this.iceTransportPolicy = RemoteIceTransportPolicy.all,
   });
 
   /// A local ICE candidate (`{candidate, sdpMid, sdpMLineIndex}`) to trickle
@@ -61,7 +62,14 @@ class RemotePeerHandlers {
 
   /// ICE or DTLS failed, or the connection or DataChannel closed.
   final void Function(String reason) onClosed;
+
+  /// The TURN retry must gather relay candidates only so that a recently
+  /// broken direct path cannot win ICE again. Platforms pass this into their
+  /// RTCConfiguration as `iceTransportPolicy`.
+  final RemoteIceTransportPolicy iceTransportPolicy;
 }
+
+enum RemoteIceTransportPolicy { all, relay }
 
 /// One WebRTC peer connection with a single ordered DataChannel, as the
 /// offering side. The app implements it over flutter_webrtc; the package
@@ -113,7 +121,8 @@ RemoteTransportMode? selectedPeerPath(List<JsonMap> stats) {
         if (entry['selectedCandidatePairId'] case final String pairId) selectedIds.add(pairId);
     }
   }
-  for (final pair in [...selectedIds.map((id) => pairs[id]).nonNulls, ...flagged]) {
+  for (final pair in selectedIds.isNotEmpty ? selectedIds.map((id) => pairs[id]).nonNulls : flagged) {
+    if (pair['state'] == 'failed') continue;
     final local = candidates['${pair['localCandidateId']}'];
     final remote = candidates['${pair['remoteCandidateId']}'];
     if (local == null && remote == null) continue;
@@ -122,6 +131,30 @@ RemoteTransportMode? selectedPeerPath(List<JsonMap> stats) {
     if (localType == 'relay' || remoteType == 'relay') return RemoteTransportMode.turn;
     final lan = _isLanPair(localType, remoteType, _scope(local), _scope(remote));
     return lan ? RemoteTransportMode.lan : RemoteTransportMode.p2p;
+  }
+  return null;
+}
+
+/// RTT from the selected candidate pair only, in the WebRTC stats unit
+/// (seconds). Never substitute a previous or merely nominated pair.
+Duration? selectedPeerRoundTripTime(List<JsonMap> stats) {
+  final pairs = {
+    for (final e in stats)
+      if (e['type'] == 'candidate-pair') e['id']: e,
+  };
+  final ids = [
+    for (final e in stats)
+      if (e['type'] == 'transport' && e['selectedCandidatePairId'] is String) e['selectedCandidatePairId'],
+  ];
+  final selected = ids.isNotEmpty
+      ? ids.map((id) => pairs[id]).nonNulls
+      : pairs.values.where((e) => e['selected'] == true || (e['nominated'] == true && e['state'] == 'succeeded'));
+  for (final pair in selected) {
+    if (pair['state'] == 'failed') continue;
+    final rtt = pair['currentRoundTripTime'];
+    if (rtt is num && rtt.isFinite && rtt >= 0 && rtt <= 3600) {
+      return Duration(microseconds: (rtt * Duration.microsecondsPerSecond).round());
+    }
   }
   return null;
 }

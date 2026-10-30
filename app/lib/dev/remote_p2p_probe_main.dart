@@ -47,11 +47,11 @@ Future<void> _probe() async {
     serverUrl: config['server'],
     deviceName: 'DSH Go P2P probe',
     peerConnector: config['direct'] == false ? null : flutterPeerConnector,
-    onDirectFallback: (reason) => _log('fallback to relay: $reason'),
+    onDirectFallback: (reason) => _log('automatic fallback: $reason'),
     controlTracer: (direction, frame) {
       final type = frame['type'];
       if (type is String && (type.startsWith('signal.') || type.startsWith('transport.') || type == 'hello.ack')) {
-        _log('$direction $type ${jsonEncode(frame['payload'])}');
+        _log('$direction $type');
       }
     },
   );
@@ -60,7 +60,7 @@ Future<void> _probe() async {
     final host = (await account.listHosts()).firstWhere((h) => h.online);
     _log('host ${host.name} plugin ${host.pluginVersion}');
     final started = DateTime.now();
-    final client = await account.connectHost(host);
+    final client = await account.connectHost(host, timeout: const Duration(seconds: 45));
     final state = client.remoteCarrier!.state!;
     _log('connected via ${state.transport} in ${DateTime.now().difference(started).inMilliseconds} ms');
     _log('sessions: ${(await client.listSessions()).length}');
@@ -83,7 +83,16 @@ Future<void> _probe() async {
       await client.listSessions();
     }
     _log('20 round trips ok; still via ${client.remoteCarrier!.state!.transport}');
-    _log('ok transport=${client.remoteCarrier!.session!.transport}');
+    final session = client.remoteCarrier!.session!;
+    final inspect = session.inspectNetwork;
+    final network = inspect == null ? session.networkDiagnostics : await inspect();
+    _log(
+      'network ${jsonEncode({'transport': network?.transportMode?.name, 'connectDurationMs': network?.connectionDuration?.inMilliseconds, 'roundTripTimeMs': network?.roundTripTime?.inMilliseconds, 'fallbackReason': network?.fallbackReason?.name})}',
+    );
+    if (config['direct'] != false && network?.transportMode == null) {
+      throw StateError('The actual ICE path was not observable.');
+    }
+    _log('ok transport=${network?.transportMode?.name ?? session.transport}');
     await client.close();
   } on Object catch (error) {
     _log('FAILED: $error');

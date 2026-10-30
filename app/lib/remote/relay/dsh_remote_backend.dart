@@ -8,6 +8,7 @@ import '../../l10n/l10n.dart';
 import '../link_status.dart';
 import '../secret_store.dart';
 import 'relay_backend.dart';
+import 'network_route.dart';
 
 /// [RelayBackend] over `packages/dsh_remote` (ds-harness-remote by 李国宝:
 /// account login, Host directory with key pinning, Noise IK over the Relay).
@@ -18,15 +19,17 @@ import 'relay_backend.dart';
 ///
 /// [direct] (直连优先) lets connections try LAN / P2P / TURN over
 /// [peerConnector] (flutter_webrtc) before the Server's relay.
-class DshRemoteRelayBackend implements RelayBackend {
+class DshRemoteRelayBackend implements RelayBackend, RelayNetworkBackend {
   DshRemoteRelayBackend({
     required SecretStore secrets,
     Object? serverUrl,
     String clientVersion = '0.1.0',
     remote.RemoteAccount? account,
     this.peerConnector,
-    bool direct = false,
-  }) : account =
+    bool direct = true,
+    Future<RemoteNetworkRoute> Function()? resolveNetworkRoute,
+  }) : _resolveNetworkRoute = resolveNetworkRoute ?? resolveRemoteNetworkRoute,
+       account =
            account ??
            remote.RemoteAccount(
              secrets: _Secrets(secrets),
@@ -34,12 +37,24 @@ class DshRemoteRelayBackend implements RelayBackend {
              deviceName: 'DSH App (Android)',
              platform: 'dsh-app-android',
              clientVersion: clientVersion,
-             onDirectFallback: (reason) => debugPrint('[dsh-remote] direct path unavailable, using the relay: $reason'),
+             onDirectFallback: (_) => debugPrint('[dsh-remote] automatic transport fallback'),
            ) {
     this.direct = direct;
+    if (account == null) {
+      this.account.preferredTransports = () async {
+        final route = await _resolveNetworkRoute();
+        _networkRoute = route;
+        return transportsForRemoteRoute(route);
+      };
+    }
   }
 
   final remote.RemoteAccount account;
+  final Future<RemoteNetworkRoute> Function() _resolveNetworkRoute;
+  RemoteNetworkRoute _networkRoute = RemoteNetworkRoute.unknown;
+  final _sessionRoutes = Expando<RemoteNetworkRoute>('remote route');
+  final _networkProbes = Expando<Future<bool>>('remote network probe');
+  final _loggedSessions = Expando<bool>('logged remote network');
 
   /// The WebRTC stack [direct] connections use.
   final remote.RemotePeerConnector? peerConnector;
@@ -162,15 +177,87 @@ class DshRemoteRelayBackend implements RelayBackend {
   }
 
   @override
-  Future<bool> probe(DshClient client) => client.remoteCarrier?.probe() ?? Future.value(true);
+  Future<bool> probe(DshClient client) =>
+      _networkProbes[client] ??= _probeNetwork(client).whenComplete(() => _networkProbes[client] = null);
+
+  Future<bool> _probeNetwork(DshClient client) async {
+    final carrier = client.remoteCarrier;
+    final session = carrier?.session;
+    if (carrier == null || session == null || session.isClosed) return true;
+    final previous = _sessionRoutes[session] ?? _networkRoute;
+    final next = await _resolveNetworkRoute();
+    if (carrier.session != session || session.isClosed) return true;
+    if (next != RemoteNetworkRoute.unknown) _sessionRoutes[session] = next;
+    if (shouldRenegotiateRemoteRoute(previous, next)) {
+      carrier.reconnect();
+      return false;
+    }
+    return carrier.probe();
+  }
 
   @override
-  RelayPath? pathOf(DshClient client) => switch (client.remoteCarrier?.session?.transport) {
-    'lan' || 'p2p' => RelayPath.direct,
-    'turn' => RelayPath.turn,
-    'relay' => RelayPath.relay,
-    _ => null,
-  };
+  RelayPath? pathOf(DshClient client) {
+    final session = client.remoteCarrier?.session;
+    if (session == null || session.isClosed) return null;
+    if (session.networkDiagnostics case final snapshot?) return _network(snapshot).path;
+    return switch (session.transport) {
+      'lan' => RelayPath.lan,
+      'p2p' => RelayPath.p2p,
+      'turn' => RelayPath.turn,
+      'relay' => RelayPath.relay,
+      _ => null,
+    };
+  }
+
+  @override
+  RemoteNetworkStatus? networkOf(DshClient client) {
+    final session = client.remoteCarrier?.session;
+    if (session != null) _sessionRoutes[session] ??= _networkRoute;
+    final snapshot = session?.networkDiagnostics;
+    if (session == null || session.isClosed || snapshot == null) return null;
+    final value = _network(snapshot);
+    if (_loggedSessions[session] != true) {
+      _loggedSessions[session] = true;
+      _logNetwork(value);
+    }
+    return value;
+  }
+
+  @override
+  Future<RemoteNetworkStatus?> inspectNetwork(DshClient client) async {
+    final carrier = client.remoteCarrier;
+    final session = carrier?.session;
+    if (session == null || session.isClosed) return null;
+    final inspect = session.inspectNetwork;
+    final snapshot = inspect == null ? session.networkDiagnostics : await inspect();
+    if (carrier?.session != session || session.isClosed || snapshot == null) return null;
+    final value = _network(snapshot);
+    _logNetwork(value);
+    return value;
+  }
+
+  static void _logNetwork(RemoteNetworkStatus value) {
+    debugPrint(
+      '[dsh-remote] transport=${value.path?.name ?? 'unknown'} '
+      'setupMs=${value.connectDuration?.inMilliseconds ?? 'unknown'} '
+      'rttMs=${value.roundTripTime?.inMilliseconds ?? 'unmeasured'} '
+      'fallback=${value.safeFallbackReason ?? 'none'}',
+    );
+  }
+
+  static RemoteNetworkStatus _network(remote.RemoteNetworkDiagnostics snapshot) => RemoteNetworkStatus(
+    path: switch (snapshot.transportMode) {
+      remote.RemoteTransportMode.lan => RelayPath.lan,
+      remote.RemoteTransportMode.p2p => RelayPath.p2p,
+      remote.RemoteTransportMode.turn => RelayPath.turn,
+      remote.RemoteTransportMode.relay => RelayPath.relay,
+      null => null,
+    },
+    connectDuration: snapshot.connectionDuration,
+    roundTripTime: snapshot.roundTripTime,
+    fallbackReason: snapshot.fallbackReason?.name,
+    observedAt: snapshot.observedAt,
+  );
 
   @override
   Future<DshClient> connectHost(RelayHost host, {RelayStateCallback? onState}) => _map(() async {
@@ -185,6 +272,7 @@ class DshRemoteRelayBackend implements RelayBackend {
     return account.connectHost(
       target,
       muxOptions: _muxOptions,
+      timeout: const Duration(seconds: 45),
       confirmNewHost: (h) async => approves(h.id, h.fingerprint),
       onState: onState == null
           ? null

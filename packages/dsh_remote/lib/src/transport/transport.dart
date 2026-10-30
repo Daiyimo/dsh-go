@@ -24,6 +24,36 @@ import 'webrtc_transport.dart' show WebRtcTransport;
 /// Data plane in use; mirrors the `transport.selected` vocabulary.
 enum RemoteTransportMode { lan, p2p, turn, relay }
 
+/// Payload-free reasons for trying a less preferred data plane.
+enum RemoteNetworkFallbackReason {
+  webrtcUnavailable,
+  directFailed,
+  directTimeout,
+  directRecentlyFailed,
+  turnUnavailable,
+  turnFailed,
+  turnTimeout,
+  pathUnverified,
+}
+
+/// A snapshot of the actual data plane. No SDP, candidate addresses, relay
+/// URLs, credentials or exception text is exposed. Unknown stats stay null.
+class RemoteNetworkDiagnostics {
+  const RemoteNetworkDiagnostics({
+    required this.transportMode,
+    required this.observedAt,
+    this.connectionDuration,
+    this.roundTripTime,
+    this.fallbackReason,
+  });
+
+  final RemoteTransportMode? transportMode;
+  final Duration? connectionDuration;
+  final Duration? roundTripTime;
+  final RemoteNetworkFallbackReason? fallbackReason;
+  final DateTime observedAt;
+}
+
 /// Identities bound into the Noise prologue.
 class RemoteConnectionInfo {
   const RemoteConnectionInfo({required this.connectionId, required this.localDeviceId, required this.remoteDeviceId});

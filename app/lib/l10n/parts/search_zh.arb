@@ -83,7 +83,6 @@
   "searchKwChatLogUpload": "隐私,日志,上传日志,对话日志",
   "searchKwAddSshHost": "SSH,添加主机,连接电脑",
   "searchKwRemoteAutoConnect": "自动连接,启动时连接",
-  "searchKwRemoteDirect": "直连,P2P,点对点,局域网,中继,TURN,WebRTC",
   "searchKwPermissionCurrent": "本对话都允许,这个对话,当前权限",
   "searchKwPermissionDefault": "默认权限,只读,工作区内修改,完全权限,自动执行命令,别问我",
   "searchSettingsHint": "搜索设置",

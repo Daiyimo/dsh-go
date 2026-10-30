@@ -763,6 +763,8 @@ class FakeRemoteHost {
 
   /// Candidates the Host received, by connection id, and offers in order.
   final Map<String, int> rtcCandidates = {};
+  String rtcAnswerSdp = 'v=0 fake-answer';
+  final List<Map<String, Object?>> extraRtcCandidates = [];
   final List<String> rtcOffers = [];
 
   /// `harness.transport.describe` capabilities.
@@ -907,13 +909,20 @@ class FakeRemoteHost {
         _sendControl('signal.answer', {
           'connectionId': connection.connectionId,
           'targetDeviceId': connection.clientId,
-          'sdp': 'v=0 fake-answer',
+          'sdp': rtcAnswerSdp,
         });
         _sendControl('signal.ice', {
           'connectionId': connection.connectionId,
           'targetDeviceId': connection.clientId,
           'candidate': {'candidate': 'candidate:2 1 udp 2122260223 192.168.1.30 40000 typ host', 'sdpMid': '0'},
         });
+        for (final candidate in extraRtcCandidates) {
+          _sendControl('signal.ice', {
+            'connectionId': connection.connectionId,
+            'targetDeviceId': connection.clientId,
+            'candidate': candidate,
+          });
+        }
       case 'signal.ice':
         final id = p['connectionId']! as String;
         rtcCandidates[id] = (rtcCandidates[id] ?? 0) + 1;

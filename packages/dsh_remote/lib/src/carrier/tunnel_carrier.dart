@@ -13,6 +13,7 @@ import 'package:dsh_client/dsh_client.dart';
 
 import '../channel/rpc_client.dart';
 import '../state.dart';
+import '../transport/transport.dart';
 import '../util/bytes.dart';
 
 /// Fixed endpoint allow-list of the Host plugin (ds-harness-remote 0.5.17 to 0.6.0,
@@ -143,6 +144,8 @@ class RemoteHostSession {
     this.workspaceTypes,
     this.harnessVersion,
     this.transport = 'relay',
+    this.networkDiagnostics,
+    this.inspectNetwork,
   });
 
   final RemoteRpcClient rpc;
@@ -156,6 +159,11 @@ class RemoteHostSession {
   /// Fresh authorized descriptor for this connection, never a cached listing.
   final String? harnessVersion;
   final String transport;
+
+  /// Initial payload-free snapshot; [inspectNetwork] refreshes native stats
+  /// on demand without sending a health probe or starting a polling timer.
+  final RemoteNetworkDiagnostics? networkDiagnostics;
+  final Future<RemoteNetworkDiagnostics> Function()? inspectNetwork;
 
   bool get supportsTransfer => capabilities.contains('harness.remote.transfer.v1');
   bool get supportsStreamTransfer => capabilities.contains('harness.remote.stream.transfer.v1');

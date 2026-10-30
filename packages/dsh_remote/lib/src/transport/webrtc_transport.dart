@@ -18,8 +18,10 @@ import 'transport.dart';
 /// the path is not one both sides negotiated). The attempt's connection is
 /// closed; the caller falls back to the Relay on a new one.
 class WebRtcUnavailable implements Exception {
-  const WebRtcUnavailable(this.message);
+  const WebRtcUnavailable(this.message, {this.timedOut = false, this.turnUnavailable = false});
   final String message;
+  final bool timedOut;
+  final bool turnUnavailable;
 
   @override
   String toString() => 'WebRtcUnavailable: $message';
@@ -45,7 +47,7 @@ class WebRtcTransport implements SecureHandshakeTransport {
   /// or takes longer than 5 s, direct candidates are still tried. TURN is
   /// dropped unless `transport.turn` was negotiated. [timeout] is the local
   /// negotiation deadline; the Server's `webrtcFallbackTimeoutMs` wins when
-  /// longer.
+  /// longer, within a 15 s safety ceiling.
   ///
   /// Throws [WebRtcUnavailable] when no DataChannel opened, and the
   /// [RemoteTransportException] of the Control socket when that one failed;
@@ -55,8 +57,9 @@ class WebRtcTransport implements SecureHandshakeTransport {
     required RemotePeerConnector connector,
     required Future<List<RemoteIceServer>> Function(String connectionId) iceServers,
     Duration timeout = const Duration(seconds: 8),
+    bool relayOnly = false,
   }) async {
-    final transport = WebRtcTransport._(control);
+    final transport = WebRtcTransport._(control).._relayOnly = relayOnly;
     try {
       await transport._negotiate(connector, iceServers, timeout);
       return transport;
@@ -71,6 +74,10 @@ class WebRtcTransport implements SecureHandshakeTransport {
   final RelayTransport _control;
   RemotePeerConnection? _peer;
   RemoteTransportMode _mode = RemoteTransportMode.p2p;
+  RemoteTransportMode? _actualMode;
+  Duration? _roundTripTime;
+  bool _relayOnly = false;
+  bool _answering = false;
   final RtcChunkCodec _outgoing = RtcChunkCodec();
   final RtcChunkCodec _incoming = RtcChunkCodec();
   Completer<void>? _opening;
@@ -91,6 +98,25 @@ class WebRtcTransport implements SecureHandshakeTransport {
 
   @override
   RemoteTransportMode get mode => _mode;
+
+  RemoteTransportMode? get actualMode => _actualMode;
+  Duration? get roundTripTime => _roundTripTime;
+
+  /// Reads native stats only; no network probe, and a stalled platform call
+  /// cannot hold up the caller. Stats after close are never consulted.
+  Future<void> inspectNetwork() async {
+    final peer = _peer;
+    if (_closed || peer == null) return;
+    try {
+      final stats = await peer.stats().timeout(const Duration(milliseconds: 250));
+      if (_closed) return;
+      _actualMode = selectedPeerPath(stats);
+      _roundTripTime = selectedPeerRoundTripTime(stats);
+    } on Object {
+      _actualMode = null;
+      _roundTripTime = null;
+    }
+  }
 
   @override
   RemoteConnectionInfo get info => _control.info;
@@ -119,24 +145,54 @@ class WebRtcTransport implements SecureHandshakeTransport {
     } on Object {
       // No STUN / TURN: host candidates can still reach a Host on the LAN.
     }
-    if (!_control.directTransports.contains('turn')) servers = stunOnlyIceServers(servers);
+    // Preserve authorization/Control failures that arrived during the REST
+    // request before a missing TURN configuration can trigger fallback.
     _check();
+    // The first attempt must give direct ICE its own window. Even a remote
+    // relay candidate could otherwise make TURN win before P2P was tried.
+    if (!_relayOnly) servers = stunOnlyIceServers(servers);
+    if (_relayOnly &&
+        (!_control.directTransports.contains('turn') ||
+            !servers.any((s) => s.urls.any((u) => RegExp(r'^turns?:', caseSensitive: false).hasMatch(u.trim()))))) {
+      throw const WebRtcUnavailable('No negotiated TURN server is available.', turnUnavailable: true);
+    }
     final server = _control.webrtcFallbackTimeout;
-    final timeout = server != null && server > localTimeout ? server : localTimeout;
+    // Honor the Server budget only within a finite local safety ceiling.
+    final requested = server != null && server > localTimeout ? server : localTimeout;
+    final timeout = requested > const Duration(seconds: 15) ? const Duration(seconds: 15) : requested;
     final RemotePeerConnection peer;
     try {
       // The deadline includes native creation and offer generation: either
       // platform call can stall before there is a DataChannel to wait for.
-      peer = await _openPeer(connector, servers, opening).timeout(timeout);
+      final creating = _openPeer(connector, servers, opening);
+      peer = await Future.any<RemotePeerConnection>([
+        creating,
+        // Surface Control/auth/ICE failures even while the platform has not
+        // returned from creation or createOffer. Successful open still waits
+        // for the ordinary native setup sequence to finish.
+        opening.future.then((_) => creating),
+      ]).timeout(timeout);
     } on TimeoutException {
-      throw WebRtcUnavailable('No DataChannel within ${timeout.inMilliseconds} ms.');
+      // A terminal Control error can arrive while native creation or offer
+      // generation is stalled. It must not be relabeled as an ICE timeout
+      // and accidentally bypass authorization through transport fallback.
+      _check();
+      throw WebRtcUnavailable('No DataChannel within ${timeout.inMilliseconds} ms.', timedOut: true);
     }
     _check();
     final path = await _selectedPath(peer);
     _check();
+    _actualMode = path;
+    if (!_relayOnly && path == RemoteTransportMode.turn) {
+      throw const WebRtcUnavailable('TURN was selected during a direct-only attempt.');
+    }
+    if (_relayOnly && path != null && path != RemoteTransportMode.turn) {
+      throw const WebRtcUnavailable('A non-relay pair was selected during the TURN attempt.');
+    }
     final direct = _control.directTransports;
     // A Host on an older Server that only knows p2p still gets a LAN path.
-    final wire = path == RemoteTransportMode.lan && !direct.contains('lan') ? RemoteTransportMode.p2p : path;
+    final selected = path ?? (_relayOnly ? RemoteTransportMode.turn : RemoteTransportMode.p2p);
+    final wire = selected == RemoteTransportMode.lan && !direct.contains('lan') ? RemoteTransportMode.p2p : selected;
     if (!direct.contains(wire.name)) throw WebRtcUnavailable('WebRTC selected unnegotiated transport ${wire.name}.');
     _mode = wire;
     // Before the handshake: the Host binds the Noise channel to the data
@@ -153,8 +209,10 @@ class WebRtcTransport implements SecureHandshakeTransport {
     final peer = await connector(
       servers,
       RemotePeerHandlers(
+        iceTransportPolicy: _relayOnly ? RemoteIceTransportPolicy.relay : RemoteIceTransportPolicy.all,
         onIceCandidate: (candidate) {
           if (_closed) return;
+          if (!_relayOnly && _isRelayCandidate(candidate)) return;
           final early = _earlyCandidates;
           if (early != null) {
             early.add(candidate);
@@ -184,7 +242,7 @@ class WebRtcTransport implements SecureHandshakeTransport {
     _check();
     final offer = await peer.createOffer(remoteDataChannelLabel);
     _check();
-    _control.sendSignal('signal.offer', {'sdp': offer});
+    _control.sendSignal('signal.offer', {'sdp': _relayOnly ? offer : _withoutRelayCandidates(offer)});
     final early = _earlyCandidates!;
     _earlyCandidates = null;
     for (final candidate in early) {
@@ -214,19 +272,21 @@ class WebRtcTransport implements SecureHandshakeTransport {
 
   /// Native stacks can open the DataChannel a moment before the selected
   /// pair shows up in the stats; ask a few times before settling on `p2p`.
-  static Future<RemoteTransportMode> _selectedPath(RemotePeerConnection peer) async {
+  Future<RemoteTransportMode?> _selectedPath(RemotePeerConnection peer) async {
     RemoteTransportMode? path;
     for (var attempt = 0; attempt < 6; attempt++) {
       if (attempt > 0) await Future<void>.delayed(const Duration(milliseconds: 50));
       try {
         // A native getStats() that stalls must not hold up the connect.
-        path = selectedPeerPath(await peer.stats().timeout(const Duration(milliseconds: 250))) ?? path;
+        final stats = await peer.stats().timeout(const Duration(milliseconds: 250));
+        path = selectedPeerPath(stats) ?? path;
+        _roundTripTime = selectedPeerRoundTripTime(stats);
       } on Object {
         // Stats are diagnostics: the path still works without them.
       }
       if (path != null && path != RemoteTransportMode.p2p) break;
     }
-    return path ?? RemoteTransportMode.p2p;
+    return path;
   }
 
   void _onSignal(ControlFrame frame) {
@@ -235,10 +295,13 @@ class WebRtcTransport implements SecureHandshakeTransport {
     final p = frame.payload;
     switch (frame.type) {
       case 'signal.answer':
-        if (_answered) return;
-        unawaited(_applyAnswer(peer, p['sdp']! as String));
+        if (_answered || _answering) return;
+        _answering = true;
+        final answer = p['sdp']! as String;
+        unawaited(_applyAnswer(peer, _relayOnly ? answer : _withoutRelayCandidates(answer)));
       case 'signal.ice':
         final candidate = asMap(p['candidate'])!;
+        if (!_relayOnly && _isRelayCandidate(candidate)) return;
         if (_answered) {
           unawaited(peer.addIceCandidate(candidate).catchError((Object _) {}));
         } else {
@@ -249,6 +312,14 @@ class WebRtcTransport implements SecureHandshakeTransport {
         break;
     }
   }
+
+  static bool _isRelayCandidate(JsonMap candidate) =>
+      RegExp(r'(?:^|\s)typ\s+relay(?:\s|$)', caseSensitive: false).hasMatch('${candidate['candidate'] ?? ''}');
+
+  static String _withoutRelayCandidates(String sdp) => sdp
+      .split('\n')
+      .where((line) => !line.trimLeft().startsWith('a=candidate:') || !_isRelayCandidate({'candidate': line}))
+      .join('\n');
 
   Future<void> _applyAnswer(RemotePeerConnection peer, String sdp) async {
     try {

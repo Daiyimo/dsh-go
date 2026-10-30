@@ -7283,8 +7283,6 @@
   "remoteStartupSection": "启动",
   "remoteAutoConnectOnStartup": "连接上次使用的主机",
   "remoteAutoConnectOnStartupHint": "关闭后从本机开始",
-  "remoteDirect": "直连优先（P2P）",
-  "remoteDirectHint": "能直连就不走服务器中继",
   "remoteStepConnect": "连接服务器",
   "remoteStepVerifyHostKey": "验证主机指纹",
   "remoteStepStartDsh": "启动 DSH",
@@ -7897,7 +7895,7 @@
   },
   "remotePathDirect": "直连",
   "remotePathTurn": "TURN",
-  "remotePathRelay": "中继",
+  "remotePathRelay": "Relay 中继",
   "remoteConnectedSsh": "已连接 · SSH {address}",
   "@remoteConnectedSsh": {
     "placeholders": {
@@ -8285,6 +8283,39 @@
       }
     }
   },
+  "remotePathLan": "LAN 局域网",
+  "remotePathP2p": "P2P 点对点",
+  "remoteNetworkDetails": "网络详情",
+  "remoteNetworkAutomatic": "自动依次尝试 LAN → P2P → TURN → Relay，连接全程端到端加密。",
+  "remoteNetworkCurrentPath": "当前路径",
+  "remoteNetworkConnectDuration": "连接耗时",
+  "remoteNetworkRoundTripTime": "往返延迟（RTT）",
+  "remoteNetworkUnmeasured": "未测量",
+  "remoteNetworkUnknownPath": "尚未确认",
+  "remoteNetworkMilliseconds": "{value} 毫秒",
+  "@remoteNetworkMilliseconds": {
+    "placeholders": {
+      "value": {
+        "type": "int"
+      }
+    }
+  },
+  "remoteNetworkMeasure": "刷新网络信息 / 测量延迟",
+  "remoteNetworkMeasuring": "正在测量…",
+  "remoteNetworkMeasureFailed": "暂时无法测量，可以稍后重试",
+  "remoteNetworkDisconnected": "连接已断开，重新连接后可测量",
+  "remoteNetworkFallback": "回落原因",
+  "remoteNetworkFallbackUnknown": "直连未能建立，已自动使用可用路径",
+  "remoteNetworkFallbackWebrtcUnavailable": "设备暂不支持 WebRTC，已使用 Relay 中继",
+  "remoteNetworkFallbackDirectFailed": "LAN / P2P 直连未成功，已自动尝试后续路径",
+  "remoteNetworkFallbackDirectTimeout": "LAN / P2P 直连超时，已自动尝试后续路径",
+  "remoteNetworkFallbackDirectRecentlyFailed": "近期直连未成功，本次先使用可用中继",
+  "remoteNetworkFallbackTurnUnavailable": "TURN 服务暂不可用，已使用 Relay 中继",
+  "remoteNetworkFallbackTurnFailed": "TURN 未能连接，已使用 Relay 中继",
+  "remoteNetworkFallbackTurnTimeout": "TURN 连接超时，已使用 Relay 中继",
+  "remoteNetworkFallbackPathUnverified": "尚未确认 WebRTC 路径类型",
+  "remoteNetworkSnapshotHint": "显示最近一次确认的路径与延迟，刷新可重新检测。",
+  "remoteNetworkObservedAt": "最近观测",
   "riskDontShowAgain": "不再提示",
   "riskAskAi": "不确定？问 AI",
   "riskConfirmAlwaysAction": "始终免确认",
@@ -8428,7 +8459,6 @@
   "searchKwChatLogUpload": "隐私,日志,上传日志,对话日志",
   "searchKwAddSshHost": "SSH,添加主机,连接电脑",
   "searchKwRemoteAutoConnect": "自动连接,启动时连接",
-  "searchKwRemoteDirect": "直连,P2P,点对点,局域网,中继,TURN,WebRTC",
   "searchKwPermissionCurrent": "本对话都允许,这个对话,当前权限",
   "searchKwPermissionDefault": "默认权限,只读,工作区内修改,完全权限,自动执行命令,别问我",
   "searchSettingsHint": "搜索设置",

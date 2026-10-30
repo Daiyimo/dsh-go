@@ -2,6 +2,22 @@
 
 每个版本先中文、后英文。发版时把对应版本的正文（不含版本标题）作为 Release 正文，见 `docs/release.md`。
 
+## 1.0.4 · 2026-10-31
+
+### 中文
+
+- 正式下载统一为 arm64 安装包，发布页明确标出安装包和辅助更新文件的用途。
+- DSH Remote 默认自动选择连接方式，优先尝试局域网 / P2P，再尝试 TURN，最后回落 Relay。升级后不再需要打开直连开关，旧的关闭设置也会迁移到自动策略；相应路径需服务端与主机支持。
+- 新增网络详情：点击连接卡或主机旁的网络标签，查看实际路径、连接耗时、可测的往返延迟及回落原因。重连后清除旧测量，改善 Wi-Fi 与蜂窝网络切换时的连接恢复。
+- 官方插件市场已上架「生图生视频」，支持在当前主机上生成图片和视频。可从「设置 → 插件 → 插件市场 → 官方」安装；主机尚未安装时，「设置 → 图像与视频」也有安装入口。插件需单独安装并配置服务商。
+
+### English
+
+- Public downloads now provide one arm64 installer, with release-page guidance distinguishing it from update and verification files.
+- DSH Remote now selects its connection automatically, trying LAN / P2P first, then TURN, and finally Relay. Upgrading also migrates the old disabled-direct setting to the automatic policy. Compatible server and Host support is required for each path.
+- Added network details. Tap the route label on the connection card or beside a Host to see the actual route, connection time, available round-trip latency and fallback reason. Old measurements are cleared after reconnects, with improved recovery when switching between Wi-Fi and cellular networks.
+- The official plugin market now includes Images and video for generation on the selected Host. Install it from Settings → Plugins → Plugin market → Official, or from Settings → Images and video when it is missing. The plugin remains a separate install and requires provider configuration.
+
 ## 1.0.3 · 2026-10-31
 
 ### 中文

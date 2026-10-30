@@ -262,37 +262,6 @@ class RemoteAutoConnectController extends Notifier<bool> {
 
 final remoteAutoConnectProvider = NotifierProvider<RemoteAutoConnectController, bool>(RemoteAutoConnectController.new);
 
-/// 直连优先: DSH Remote connections try LAN / P2P / TURN (WebRTC) before the
-/// Server's relay. Off by default.
-class RemoteDirectController extends Notifier<bool> {
-  static const prefsKey = 'remote_direct_p2p';
-  late Future<void> _loaded;
-
-  @override
-  bool build() {
-    _loaded = _load();
-    return false;
-  }
-
-  Future<void> _load() async {
-    try {
-      final stored = (await SharedPreferences.getInstance()).getBool(prefsKey);
-      if (stored != null && ref.mounted) state = stored;
-    } catch (_) {}
-  }
-
-  Future<void> set(bool value) async {
-    await _loaded;
-    if (!ref.mounted) return;
-    state = value;
-    try {
-      await (await SharedPreferences.getInstance()).setBool(prefsKey, value);
-    } catch (_) {}
-  }
-}
-
-final remoteDirectProvider = NotifierProvider<RemoteDirectController, bool>(RemoteDirectController.new);
-
 /// Which host the chat, session list and new chats use. Persisted.
 class ActiveHostController extends Notifier<HostRef> {
   static const prefsKey = 'active_host';
@@ -412,10 +381,11 @@ final relayBackendProvider = Provider<RelayBackend>((ref) {
     serverUrl: ref.watch(relayServerProvider),
     clientVersion: AppInfo.version.split('+').first,
     peerConnector: flutterPeerConnector,
-    direct: ref.read(remoteDirectProvider),
   );
-  // A toggle applies from the next connect; it doesn't drop the current one.
-  ref.listen(remoteDirectProvider, (_, direct) => backend.direct = direct);
+  // The old default-off preference no longer controls automatic transport selection.
+  unawaited(
+    SharedPreferences.getInstance().then((prefs) => prefs.remove('remote_direct_p2p')).catchError((_) => false),
+  );
   ref.onDispose(() => unawaited(backend.close()));
   return backend;
 });

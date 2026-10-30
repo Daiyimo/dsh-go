@@ -6,7 +6,7 @@
 #
 #   tooling/build-apk.sh                       release, arm64 (phone)
 #   tooling/build-apk.sh -f x64                release, x64 (emulator)
-#   tooling/build-apk.sh -f all                both flavors with one build number (a release)
+#   tooling/build-apk.sh -f all                both flavors with one build number (local testing only)
 #   tooling/build-apk.sh --debug -f x64 -t lib/dev/runtime_probe_main.dart
 #   tooling/build-apk.sh --dry-run -f all      print the commands, build nothing
 #   tooling/build-apk.sh -- --dart-define=K=V  extra flags for `flutter build apk`

@@ -22,6 +22,7 @@ import '../web/web_view_page.dart';
 import 'host_key_dialog.dart';
 import 'host_status.dart';
 import 'link_progress.dart';
+import 'network_details_sheet.dart';
 import 'relay_credit.dart';
 import 'relay_login_sheet.dart';
 import 'ssh_host_form.dart';
@@ -176,12 +177,23 @@ class _ActiveCard extends ConsumerWidget {
     return OverviewCard(
       leading: OverviewGlyph(hostKindIcon(active.kind), tint: hostKindTint(active.kind)),
       title: Text(l10n.remoteActiveHost(name)),
-      subtitle: Row(
-        children: [
-          AnimatedStatusDot(tone: view.tone, size: 7),
-          const SizedBox(width: 6),
-          Flexible(child: Text(_statusLine(status, view, ssh?.address), maxLines: 1, overflow: TextOverflow.ellipsis)),
-        ],
+      subtitle: InkWell(
+        onTap: active.kind == HostKind.relay && status.isConnected
+            ? () => showRemoteNetworkDetails(context, active)
+            : null,
+        child: Row(
+          children: [
+            AnimatedStatusDot(tone: view.tone, size: 7),
+            const SizedBox(width: 6),
+            Flexible(
+              child: Text(_statusLine(status, view, ssh?.address), maxLines: 1, overflow: TextOverflow.ellipsis),
+            ),
+            if (active.kind == HostKind.relay && status.isConnected) ...[
+              const SizedBox(width: 6),
+              Tooltip(message: l10n.remoteNetworkDetails, child: const Icon(AppIcons.info, size: 16)),
+            ],
+          ],
+        ),
       ),
       trailing: canGoLocal
           ? _EdgeTextButton(
@@ -232,7 +244,7 @@ class _ActiveCard extends ConsumerWidget {
     }
     if (status.phase == HostLinkPhase.connected) {
       if (address != null) return appL10n.remoteConnectedSsh(address);
-      final path = status.path;
+      final path = status.network?.path ?? status.path;
       return path == null ? appL10n.remoteConnectedEncrypted : appL10n.remoteConnectedVia(path.label);
     }
     return view.label;
@@ -425,15 +437,6 @@ class _RelaySection extends ConsumerWidget {
               active: active == HostRef.relay(h.id),
               onTap: h.online || active == HostRef.relay(h.id) ? () => onUse(HostRef.relay(h.id, name: h.name)) : null,
             ),
-        SettingsSwitchTile(
-          key: const ValueKey('remote-direct'),
-          icon: AppIcons.link,
-          spot: Spots.remoteDirect,
-          tinted: false,
-          subtitle: l10n.remoteDirectHint,
-          value: ref.watch(remoteDirectProvider),
-          onChanged: (value) => unawaited(ref.read(remoteDirectProvider.notifier).set(value)),
-        ),
       ],
     );
   }
@@ -625,9 +628,9 @@ class _RelayRow extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final scheme = Theme.of(context).colorScheme;
-    final view = active
-        ? watchHostStatus(ref, HostRef.relay(host.id, name: host.name))
-        : HostStatusView.ofRelayHost(host);
+    final hostRef = HostRef.relay(host.id, name: host.name);
+    final status = active ? ref.watch(hostLinkStatusProvider(hostRef)).value : null;
+    final view = status == null ? HostStatusView.ofRelayHost(host) : HostStatusView.ofLink(status);
     return Semantics(
       key: ValueKey('remote-row-${host.id}'),
       selected: active,
@@ -638,7 +641,20 @@ class _RelayRow extends ConsumerWidget {
         title: host.name,
         subtitle: host.subtitle,
         onTap: onTap,
-        value: KeyedSubtree(key: ValueKey('remote-status-${host.id}'), child: _HostState(view)),
+        value: KeyedSubtree(
+          key: ValueKey('remote-status-${host.id}'),
+          child: status?.isConnected == true
+              ? Tooltip(
+                  message: context.l10n.remoteNetworkDetails,
+                  child: TextButton.icon(
+                    key: ValueKey('remote-network-${host.id}'),
+                    onPressed: () => showRemoteNetworkDetails(context, hostRef),
+                    icon: const Icon(AppIcons.info, size: 16),
+                    label: Text((status!.network?.path ?? status.path)?.label ?? context.l10n.remoteNetworkDetails),
+                  ),
+                )
+              : _HostState(view),
+        ),
         trailing: active ? Icon(AppIcons.selected, size: 20, color: scheme.primary) : const SizedBox(width: 20),
         chevron: false,
       ),

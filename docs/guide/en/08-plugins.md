@@ -63,4 +63,11 @@ The market offers Official, Adapted for DSH Go and All sections. When an officia
 
 Before installation or an update, the app compares the declared digest with npm registry metadata. An unavailable or mismatching digest stops the operation before removing an old version. This does not verify the bytes eventually downloaded by the host; that requires host protocol support. Changing host or connection invalidates pending consent. Withdrawn installed versions show a warning.
 
-Share a plugin page from its details. Opening a shared link leads to the matching details so you can choose the installation host. If image and video generation is not installed, its entry also leads to installation on the current host.
+Share a plugin page from its details. Opening a shared link leads to the matching details so you can choose the installation host.
+
+The Official section now includes Images and video, with no npm package name to enter. Connect to and select the target Host, then open the card to install.
+
+<!-- nav: commonSettings,mediaSettingsTitle -->
+`Settings › Images and video`
+
+When the plugin is missing, this page also offers installation on the current Host. Configure the provider and key on that page afterwards. Over DSH Remote or in Safe mode, the page explains why direct installation is unavailable.

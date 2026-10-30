@@ -5,6 +5,7 @@
 //   flutter test --update-goldens test/remote/remote_golden_test.dart
 
 import 'package:dsh_app/remote/relay/relay_backend.dart';
+import 'package:dsh_app/remote/link_status.dart';
 import 'package:dsh_app/remote/secret_store.dart';
 import 'package:dsh_app/remote/ssh/ssh_link.dart';
 import 'package:dsh_app/runtime/runtime_state.dart';
@@ -14,6 +15,7 @@ import 'package:dsh_app/state/sessions_state.dart';
 import 'package:dsh_app/ui/remote/host_key_dialog.dart';
 import 'package:dsh_app/ui/remote/host_switcher.dart';
 import 'package:dsh_app/ui/remote/remote_screen.dart';
+import 'package:dsh_app/ui/remote/network_details_sheet.dart';
 import 'package:dsh_app/ui/remote/ssh_host_form.dart';
 import 'package:dsh_app/ui/shell/home_shell.dart';
 import 'package:dsh_app/ui/theme/theme.dart';
@@ -97,6 +99,44 @@ void main() {
     'remote_relay_pending',
     () => const RemoteScreen(),
     overrides: () => _remote(hosts: const [sampleSsh], active: HostRef.local, relay: const UnavailableRelayBackend()),
+  );
+
+  goldenBoth(
+    'remote_connected_lan',
+    () => const RemoteScreen(),
+    overrides: () => _remote(
+      active: const HostRef.relay('mac'),
+      status: const HostLinkStatus(
+        HostLinkPhase.connected,
+        path: RelayPath.lan,
+        network: RemoteNetworkStatus(path: RelayPath.lan, connectDuration: Duration(milliseconds: 315)),
+      ),
+    ),
+  );
+
+  goldenBoth(
+    'remote_network_details',
+    () => const _NetworkSheetLauncher(),
+    overrides: () => _remote(
+      active: const HostRef.relay('mac'),
+      status: HostLinkStatus(
+        HostLinkPhase.connected,
+        path: RelayPath.relay,
+        network: RemoteNetworkStatus(
+          path: RelayPath.relay,
+          connectDuration: Duration(milliseconds: 2391),
+          roundTripTime: Duration(milliseconds: 81),
+          fallbackReason: 'turnTimeout',
+          observedAt: DateTime(2026, 10, 31, 14, 20),
+        ),
+      ),
+    ),
+    before: (tester) async {
+      await tester.tap(find.text('open'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 600));
+      await tester.pump(const Duration(milliseconds: 300));
+    },
   );
 
   goldenBoth('remote_key_mismatch', () => const RemoteScreen(), overrides: () => _remote(status: _mismatch));
@@ -245,4 +285,18 @@ class _DialogLauncher extends StatelessWidget {
       ),
     );
   }
+}
+
+class _NetworkSheetLauncher extends StatelessWidget {
+  const _NetworkSheetLauncher();
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    body: Center(
+      child: TextButton(
+        onPressed: () => showRemoteNetworkDetails(context, const HostRef.relay('mac')),
+        child: const Text('open'),
+      ),
+    ),
+  );
 }

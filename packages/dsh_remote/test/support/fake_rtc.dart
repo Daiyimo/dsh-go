@@ -28,6 +28,9 @@ List<JsonMap> pairStats(String localType, String localAddress, String remoteType
 
 class FakeRtcNetwork {
   FakeRtcOutcome outcome = FakeRtcOutcome.open;
+  final Map<RemoteIceTransportPolicy, FakeRtcOutcome> policyOutcomes = {};
+  final List<RemoteIceTransportPolicy> policies = [];
+  final List<JsonMap> extraLocalCandidates = [];
 
   /// Gates exercise native calls completing late or never completing.
   Future<void>? creationGate;
@@ -37,6 +40,7 @@ class FakeRtcNetwork {
 
   /// What the client's peer reports from `getStats()` once open.
   List<JsonMap> stats = pairStats('host', '192.168.1.20', 'host', '192.168.1.30');
+  List<JsonMap> turnStats = pairStats('relay', '198.51.100.9', 'host', '192.168.1.30');
 
   /// ICE servers each client peer was created with.
   final List<List<RemoteIceServer>> iceServers = [];
@@ -47,6 +51,7 @@ class FakeRtcNetwork {
   /// The [RemotePeerConnector] the client uses.
   Future<RemotePeerConnection> connector(List<RemoteIceServer> servers, RemotePeerHandlers handlers) async {
     iceServers.add(servers);
+    policies.add(handlers.iceTransportPolicy);
     final peer = FakeClientPeer._(this, handlers, ++_ids);
     clients.add(peer);
     await creationGate;
@@ -89,6 +94,7 @@ class FakeClientPeer implements RemotePeerConnection {
       'sdpMid': '0',
       'sdpMLineIndex': 0,
     });
+    network.extraLocalCandidates.forEach(handlers.onIceCandidate);
     return offer;
   }
 
@@ -107,7 +113,7 @@ class FakeClientPeer implements RemotePeerConnection {
 
   void _maybeConnect() {
     if (answer == null || remoteCandidates.isEmpty || open || closed) return;
-    switch (network.outcome) {
+    switch (network.policyOutcomes[handlers.iceTransportPolicy] ?? network.outcome) {
       case FakeRtcOutcome.open:
         open = true;
         scheduleMicrotask(() {
@@ -138,7 +144,7 @@ class FakeClientPeer implements RemotePeerConnection {
   @override
   Future<List<JsonMap>> stats() async {
     await network.statsGate;
-    return network.stats;
+    return handlers.iceTransportPolicy == RemoteIceTransportPolicy.relay ? network.turnStats : network.stats;
   }
 
   @override

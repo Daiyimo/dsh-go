@@ -15,6 +15,7 @@ Future<remote.RemotePeerConnection> flutterPeerConnector(
   final pc = await createPeerConnection({
     'iceServers': [for (final server in iceServers) server.toJson()],
     'sdpSemantics': 'unified-plan',
+    'iceTransportPolicy': handlers.iceTransportPolicy.name,
   });
   return _FlutterPeer(pc, handlers);
 }

@@ -40,4 +40,14 @@ base64 -w0 synthetic.mp4 > runtime/media/dsh-media/test/fixtures/video.base64
 
 当前报价未知，逐次审批与本地预留不能保证供应商账单不超过 ¥20；没有退款推断。Host 重启需原会话显式 resume_media，不自动重建任务；无 task ID 的不确定提交不可自动恢复。恢复新命名避免覆盖半发布遗留，崩溃产生的旧文件与 .pending 目录不自动删除。MP4 只做格式与实际头部元数据验证，不保证每台设备解码。方舟/百炼只确认排队取消，硅基取消未提供。
 
-npm pack 只做本地内容检查与解包 import；npm 发布、市场上线、推送与设备安装均不在本验证范围。
+npm pack 已完成本地内容检查与解包 import。2026-10-31 发布前及切换备用组织后，精确 rc.4 依赖下全套均为 306/306 通过。旧 0.2.0 包暂存下载逐字节匹配；新令牌直发因已暂存版本占用返回 409，正常更新为 `@ccch1mneyyy/dsh-media@0.2.1`。最终 tarball 19 个文件与源码一致，48,019 bytes；与 306 通过的包对比只有 package.json 版本字段变化，运行时代码无改动。历史 headless 的 JS 源码、CLI、Node 与测试锁身份均匹配，没有重复运行。
+
+前一枚令牌的直发限制最终明确为 `E_STAGE_REQUIRED`，并非所有 npm 发布都必须人工审批。最新令牌提交 0.2.1 返回 HTTP 202；2026-10-30 19:55:51 UTC 后匿名精确版本查询和公开 tarball 下载均为 200，48,019 bytes 的下载包与本地 SHA256、registry SHA512 完全一致，确认正式版本可下载。设备安装、Android/PRoot 媒体完整链路与真实付费生成仍未新增验证，见 PUBLISH.md 和市场验收记录。
+
+## 公开包安装与 profile 组合（0.2.1）
+
+全新私有 consumer 使用独立空 npmrc，从公开 registry 实际安装精确的 `@ccch1mneyyy/dsh-media@0.2.1`；使用 `--ignore-scripts --legacy-peer-deps`，安装 6 个普通依赖。10 个 Host peer 逐一核对精确版本后复用既有 rc.4 依赖，安装锁记录的 tarball URL 与 SHA512 等于正式发布物。
+
+通过真实 bare-specifier 导入 `. / ./config / ./package.json` 三个 exports；安装包的 `cordis.patch.yml` 指向正式新 scope、entry ID 仍为 `dsh-media`。未改动 rc.4 CLI 在独立 `DSH_HOME` 中运行 `--dump-config`，使用安装包原 patch 成功组合出 `dsh-media`。这是实际 npm 安装、导出加载与 profile patch 组合验证，不声称实际 mounted activation、App 安装或新增媒体生成验证。
+
+市场真实 npm 扫描与 24 项测试、全部 5 包构建通过；Pages 和 Worker 双文件线上均为 HTTP 200，Worker `X-Market-Stale:false`，官方格式 1 parser 与实际 Worker validator 均通过，媒体正式条目为 official / 0.2.1，SRI 与 npm 一致。独立验证 `/p/%40ccch1mneyyy%2Fdsh-media` 分享页为 200，包含中文标题、0.2.1 与正确的 `dshgo://` deep link。App 内入口为设置 → 插件 → 插件市场 → 官方；未安装时，设置 → 图像与视频也提供当前主机安装按钮。这确认线上发现路径与现有 UI 接线，没有执行手机上的真实点击安装。

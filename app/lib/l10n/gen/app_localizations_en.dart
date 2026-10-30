@@ -12013,12 +12013,6 @@ class L10nEn extends L10n {
   String get remoteAutoConnectOnStartupHint => 'When off, start on this phone';
 
   @override
-  String get remoteDirect => 'Prefer direct (P2P)';
-
-  @override
-  String get remoteDirectHint => 'Skip the Server\'s relay when a direct path works';
-
-  @override
   String get remoteStepConnect => 'Connect to server';
 
   @override
@@ -13454,6 +13448,89 @@ class L10nEn extends L10n {
   }
 
   @override
+  String get remotePathLan => 'LAN';
+
+  @override
+  String get remotePathP2p => 'P2P';
+
+  @override
+  String get remoteNetworkDetails => 'Network details';
+
+  @override
+  String get remoteNetworkAutomatic =>
+      'Automatically tries LAN → P2P → TURN → Relay, with end-to-end encryption throughout.';
+
+  @override
+  String get remoteNetworkCurrentPath => 'Current path';
+
+  @override
+  String get remoteNetworkConnectDuration => 'Connection time';
+
+  @override
+  String get remoteNetworkRoundTripTime => 'Round-trip time (RTT)';
+
+  @override
+  String get remoteNetworkUnmeasured => 'Not measured';
+
+  @override
+  String get remoteNetworkUnknownPath => 'Not confirmed';
+
+  @override
+  String remoteNetworkMilliseconds(int value) {
+    return '$value ms';
+  }
+
+  @override
+  String get remoteNetworkMeasure => 'Refresh network / measure latency';
+
+  @override
+  String get remoteNetworkMeasuring => 'Measuring…';
+
+  @override
+  String get remoteNetworkMeasureFailed => 'Couldn’t measure latency. Try again later.';
+
+  @override
+  String get remoteNetworkDisconnected => 'Disconnected. Reconnect to measure latency.';
+
+  @override
+  String get remoteNetworkFallback => 'Fallback reason';
+
+  @override
+  String get remoteNetworkFallbackUnknown =>
+      'A direct connection wasn’t available; an available route was selected automatically.';
+
+  @override
+  String get remoteNetworkFallbackWebrtcUnavailable => 'WebRTC is unavailable on this device; using Relay.';
+
+  @override
+  String get remoteNetworkFallbackDirectFailed => 'LAN / P2P couldn’t connect; tried the next available route.';
+
+  @override
+  String get remoteNetworkFallbackDirectTimeout => 'LAN / P2P timed out; tried the next available route.';
+
+  @override
+  String get remoteNetworkFallbackDirectRecentlyFailed =>
+      'A recent direct attempt failed; using an available relay for this connection.';
+
+  @override
+  String get remoteNetworkFallbackTurnUnavailable => 'TURN is unavailable; using Relay.';
+
+  @override
+  String get remoteNetworkFallbackTurnFailed => 'TURN couldn’t connect; using Relay.';
+
+  @override
+  String get remoteNetworkFallbackTurnTimeout => 'TURN timed out; using Relay.';
+
+  @override
+  String get remoteNetworkFallbackPathUnverified => 'The WebRTC route type hasn’t been confirmed.';
+
+  @override
+  String get remoteNetworkSnapshotHint => 'Shows the last confirmed route and latency. Refresh to check again.';
+
+  @override
+  String get remoteNetworkObservedAt => 'Last checked';
+
+  @override
   String get riskDontShowAgain => 'Don’t show again';
 
   @override
@@ -13812,9 +13889,6 @@ class L10nEn extends L10n {
 
   @override
   String get searchKwRemoteAutoConnect => 'auto connect,on launch';
-
-  @override
-  String get searchKwRemoteDirect => 'direct,P2P,peer to peer,LAN,relay,TURN,WebRTC';
 
   @override
   String get searchKwPermissionCurrent => 'allow for this chat,this chat';

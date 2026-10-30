@@ -54,8 +54,7 @@ typedef LocalClientConnector = Future<DshClient> Function({required Uri baseUri,
 /// [DshClient.connect]; tests swap it to decide when a connect finishes.
 final localClientConnectorProvider = Provider<LocalClientConnector>(
   (ref) =>
-      ({required baseUri, required token}) =>
-          DshClient.connect(baseUri: baseUri, token: token, backgroundLists: true),
+      ({required baseUri, required token}) => DshClient.connect(baseUri: baseUri, token: token, backgroundLists: true),
 );
 
 /// Connects to the local `dsh web` once the native runtime reports it running.
@@ -328,6 +327,12 @@ class ConnectionDiagnostics {
         'phase': status.phase.name,
         if (status.step != null) 'step': status.step!.name,
         'attempt': status.attempt,
+        if (status.path case final path?) 'transport': path.name,
+        if (status.network case final network?) ...{
+          if (network.connectDuration case final duration?) 'connectDurationMs': duration.inMilliseconds,
+          if (network.roundTripTime case final duration?) 'roundTripTimeMs': duration.inMilliseconds,
+          'fallbackReason': ?network.safeFallbackReason,
+        },
         if (status.error case final error?) ...{'errorKind': error.kind.name, 'retryable': error.retryable},
       });
     }

@@ -20972,18 +20972,6 @@ abstract class L10n {
   /// **'关闭后从本机开始'**
   String get remoteAutoConnectOnStartupHint;
 
-  /// No description provided for @remoteDirect.
-  ///
-  /// In zh, this message translates to:
-  /// **'直连优先（P2P）'**
-  String get remoteDirect;
-
-  /// No description provided for @remoteDirectHint.
-  ///
-  /// In zh, this message translates to:
-  /// **'能直连就不走服务器中继'**
-  String get remoteDirectHint;
-
   /// No description provided for @remoteStepConnect.
   ///
   /// In zh, this message translates to:
@@ -22475,7 +22463,7 @@ abstract class L10n {
   /// No description provided for @remotePathRelay.
   ///
   /// In zh, this message translates to:
-  /// **'中继'**
+  /// **'Relay 中继'**
   String get remotePathRelay;
 
   /// No description provided for @remoteConnectedSsh.
@@ -23360,6 +23348,162 @@ abstract class L10n {
   /// **'{message}（{detail}）'**
   String remoteErrorDetail(String message, String detail);
 
+  /// No description provided for @remotePathLan.
+  ///
+  /// In zh, this message translates to:
+  /// **'LAN 局域网'**
+  String get remotePathLan;
+
+  /// No description provided for @remotePathP2p.
+  ///
+  /// In zh, this message translates to:
+  /// **'P2P 点对点'**
+  String get remotePathP2p;
+
+  /// No description provided for @remoteNetworkDetails.
+  ///
+  /// In zh, this message translates to:
+  /// **'网络详情'**
+  String get remoteNetworkDetails;
+
+  /// No description provided for @remoteNetworkAutomatic.
+  ///
+  /// In zh, this message translates to:
+  /// **'自动依次尝试 LAN → P2P → TURN → Relay，连接全程端到端加密。'**
+  String get remoteNetworkAutomatic;
+
+  /// No description provided for @remoteNetworkCurrentPath.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前路径'**
+  String get remoteNetworkCurrentPath;
+
+  /// No description provided for @remoteNetworkConnectDuration.
+  ///
+  /// In zh, this message translates to:
+  /// **'连接耗时'**
+  String get remoteNetworkConnectDuration;
+
+  /// No description provided for @remoteNetworkRoundTripTime.
+  ///
+  /// In zh, this message translates to:
+  /// **'往返延迟（RTT）'**
+  String get remoteNetworkRoundTripTime;
+
+  /// No description provided for @remoteNetworkUnmeasured.
+  ///
+  /// In zh, this message translates to:
+  /// **'未测量'**
+  String get remoteNetworkUnmeasured;
+
+  /// No description provided for @remoteNetworkUnknownPath.
+  ///
+  /// In zh, this message translates to:
+  /// **'尚未确认'**
+  String get remoteNetworkUnknownPath;
+
+  /// No description provided for @remoteNetworkMilliseconds.
+  ///
+  /// In zh, this message translates to:
+  /// **'{value} 毫秒'**
+  String remoteNetworkMilliseconds(int value);
+
+  /// No description provided for @remoteNetworkMeasure.
+  ///
+  /// In zh, this message translates to:
+  /// **'刷新网络信息 / 测量延迟'**
+  String get remoteNetworkMeasure;
+
+  /// No description provided for @remoteNetworkMeasuring.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在测量…'**
+  String get remoteNetworkMeasuring;
+
+  /// No description provided for @remoteNetworkMeasureFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'暂时无法测量，可以稍后重试'**
+  String get remoteNetworkMeasureFailed;
+
+  /// No description provided for @remoteNetworkDisconnected.
+  ///
+  /// In zh, this message translates to:
+  /// **'连接已断开，重新连接后可测量'**
+  String get remoteNetworkDisconnected;
+
+  /// No description provided for @remoteNetworkFallback.
+  ///
+  /// In zh, this message translates to:
+  /// **'回落原因'**
+  String get remoteNetworkFallback;
+
+  /// No description provided for @remoteNetworkFallbackUnknown.
+  ///
+  /// In zh, this message translates to:
+  /// **'直连未能建立，已自动使用可用路径'**
+  String get remoteNetworkFallbackUnknown;
+
+  /// No description provided for @remoteNetworkFallbackWebrtcUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'设备暂不支持 WebRTC，已使用 Relay 中继'**
+  String get remoteNetworkFallbackWebrtcUnavailable;
+
+  /// No description provided for @remoteNetworkFallbackDirectFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'LAN / P2P 直连未成功，已自动尝试后续路径'**
+  String get remoteNetworkFallbackDirectFailed;
+
+  /// No description provided for @remoteNetworkFallbackDirectTimeout.
+  ///
+  /// In zh, this message translates to:
+  /// **'LAN / P2P 直连超时，已自动尝试后续路径'**
+  String get remoteNetworkFallbackDirectTimeout;
+
+  /// No description provided for @remoteNetworkFallbackDirectRecentlyFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'近期直连未成功，本次先使用可用中继'**
+  String get remoteNetworkFallbackDirectRecentlyFailed;
+
+  /// No description provided for @remoteNetworkFallbackTurnUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'TURN 服务暂不可用，已使用 Relay 中继'**
+  String get remoteNetworkFallbackTurnUnavailable;
+
+  /// No description provided for @remoteNetworkFallbackTurnFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'TURN 未能连接，已使用 Relay 中继'**
+  String get remoteNetworkFallbackTurnFailed;
+
+  /// No description provided for @remoteNetworkFallbackTurnTimeout.
+  ///
+  /// In zh, this message translates to:
+  /// **'TURN 连接超时，已使用 Relay 中继'**
+  String get remoteNetworkFallbackTurnTimeout;
+
+  /// No description provided for @remoteNetworkFallbackPathUnverified.
+  ///
+  /// In zh, this message translates to:
+  /// **'尚未确认 WebRTC 路径类型'**
+  String get remoteNetworkFallbackPathUnverified;
+
+  /// No description provided for @remoteNetworkSnapshotHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'显示最近一次确认的路径与延迟，刷新可重新检测。'**
+  String get remoteNetworkSnapshotHint;
+
+  /// No description provided for @remoteNetworkObservedAt.
+  ///
+  /// In zh, this message translates to:
+  /// **'最近观测'**
+  String get remoteNetworkObservedAt;
+
   /// No description provided for @riskDontShowAgain.
   ///
   /// In zh, this message translates to:
@@ -24049,12 +24193,6 @@ abstract class L10n {
   /// In zh, this message translates to:
   /// **'自动连接,启动时连接'**
   String get searchKwRemoteAutoConnect;
-
-  /// No description provided for @searchKwRemoteDirect.
-  ///
-  /// In zh, this message translates to:
-  /// **'直连,P2P,点对点,局域网,中继,TURN,WebRTC'**
-  String get searchKwRemoteDirect;
 
   /// No description provided for @searchKwPermissionCurrent.
   ///
