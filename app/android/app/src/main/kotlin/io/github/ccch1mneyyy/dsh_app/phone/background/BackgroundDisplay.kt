@@ -3,6 +3,7 @@ package io.github.ccch1mneyyy.dsh_app.phone.background
 import android.os.Build
 import android.os.Bundle
 import io.github.ccch1mneyyy.dsh_app.phone.ActionResult
+import io.github.ccch1mneyyy.dsh_app.phone.a11y.Box
 import io.github.ccch1mneyyy.dsh_app.phone.Availability
 import io.github.ccch1mneyyy.dsh_app.phone.CollectResult
 import io.github.ccch1mneyyy.dsh_app.phone.PhoneAction
@@ -57,7 +58,7 @@ class BackgroundDisplay(private val channelProvider: () -> PrivilegedChannel?) :
         return toResult(response, "已在后台屏打开")
     }
 
-    override fun observe(detail: Boolean, image: Boolean): ScreenSnapshot {
+    override fun observe(detail: Boolean, image: Boolean, region: Box?): ScreenSnapshot {
         val pkg = currentPackage ?: return idleSnapshot()
         val request = Bundle().apply {
             putString(Proto.OP, Proto.OP_OBSERVE)

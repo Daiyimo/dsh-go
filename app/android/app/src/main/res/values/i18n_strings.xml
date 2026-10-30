@@ -72,6 +72,7 @@
     <string name="overlay_handoff_secret">Passwords and codes are yours to enter</string>
     <string name="overlay_handoff_system">System settings are yours to change</string>
     <string name="overlay_handoff_deny_list">Apps on your hands-off list are yours to use</string>
+    <string name="overlay_handoff_no_vision">This page has no controls to read, and this model cannot read images</string>
     <string name="overlay_unlocked">Limits lifted</string>
     <string name="overlay_unlocked_description">Limits lifted. Tap to review.</string>
     <string name="overlay_time_remaining">%1$s remaining</string>
@@ -181,6 +182,7 @@
     <string name="phone_log_clipboard_read">Read clipboard</string>
     <string name="phone_log_background_read">Read background display</string>
     <string name="phone_log_screen_read">Read screen</string>
+    <string name="phone_log_wait">Wait %1$d ms</string>
     <string name="phone_log_collect">Collect %1$s#%2$d</string>
     <string name="phone_log_scroll">Scroll %1$s %2$s</string>
     <string name="phone_log_tap_xy">Tap %1$s (%2$d,%3$d)</string>

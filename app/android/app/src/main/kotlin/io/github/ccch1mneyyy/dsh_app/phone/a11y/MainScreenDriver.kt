@@ -54,8 +54,15 @@ internal class MainScreenDriver(private val service: PhoneA11yService, private v
     private val lock = Any()
     private var latest: Snapshot? = null
 
-    /** Consecutive point taps on a canvas page that changed nothing (see [verifyPointTap]). */
-    @Volatile private var pointMisses = 0
+    /**
+     * Consecutive no-change hits on one target, kept across `screen` calls: a target the model
+     * keeps re-aiming at without any reaction is reported once with a checklist and then stopped,
+     * instead of being retried until the budget runs out. [verifyPointTap] counts point taps,
+     * [changeNote] counts element taps; a change, a different target or a different app clears it.
+     */
+    private val missLock = Any()
+    private var missKey: String? = null
+    private var missCount = 0
 
     /** Bumped by [abort] (stop, screen off): loops and waits started before it give up. */
     @Volatile private var abortGen = 0L
@@ -104,7 +111,7 @@ internal class MainScreenDriver(private val service: PhoneA11yService, private v
 
     override fun foregroundPackage(): String? = TreeCapture.foregroundPackage(service, screenBox())
 
-    override fun observe(detail: Boolean, image: Boolean): ScreenSnapshot = synchronized(lock) {
+    override fun observe(detail: Boolean, image: Boolean, region: Box?): ScreenSnapshot = synchronized(lock) {
         val start = SystemClock.uptimeMillis()
         availability().let { if (!it.ok) return blank(it.reason!!) }
         val cap = capture()
@@ -133,7 +140,9 @@ internal class MainScreenDriver(private val service: PhoneA11yService, private v
                     else -> {
                         val window = if (cap.windows.size == 1) cap.windows[0] else null
                         val secrets = ScreenShooter.sensitiveBounds(cap.windows)
-                        val shot = shooter.shoot(window, cap.screen, snap.screen.elements, secrets, minOf(left - 300, 3_000))
+                        // A zoomed crop is for reading small print, not for matching ids: no numbers on it, so the
+                        // note that says "no element numbers, read the 10x10 grid" stays true.
+                        val shot = shooter.shoot(window, cap.screen, if (region == null) snap.screen.elements else emptyList(), secrets, minOf(left - 300, 3_000), region)
                         secure = shot.secure
                         if (shot.bytes != null) {
                             bytes = shot.bytes
@@ -141,7 +150,8 @@ internal class MainScreenDriver(private val service: PhoneA11yService, private v
                             snap.image = shot.geometry
                             // l10n:keep agent screen result
                             snap.bytes = shot.bytes
-                            if (snap.screen.kind == ScreenKind.TREE) {
+                            // l10n:keep agent screen result
+                            if (region == null && snap.screen.kind == ScreenKind.TREE && snap.screen.elements.isNotEmpty()) {
                                 // l10n:keep agent screen result
                             text.append("\n截图上的数字就是上面的元素编号；tap_xy 的坐标按 0-1000 归一化（0,0=截图左上角，1000,1000=截图右下角），不要用像素。")
                             } else {
@@ -372,7 +382,7 @@ internal class MainScreenDriver(private val service: PhoneA11yService, private v
             // l10n:keep agent screen result
             if (!out.accepted) return ActionResult(false, "系统没有接受这次${if (a.long) "长按" else "点击"}「$what」。", observeQuiet())
             // l10n:keep agent screen result
-            return after(before, r.snap, gen, "已${if (a.long) "长按" else "点击"}「$what」。")
+            return after(before, r.snap, gen, "已${if (a.long) "长按" else "点击"}「$what」。", track = "p|${r.snap.packageName}|el:${r.el.fingerprint}")
         } finally { r.cap.recycle() }
     }
 
@@ -497,8 +507,11 @@ internal class MainScreenDriver(private val service: PhoneA11yService, private v
         // l10n:keep agent screen result
         if (!actuator.tap(point.first, point.second)) return ActionResult(false, "系统没有接受这次点击。", observeQuiet())
         // l10n:keep agent screen result
-        val out = after(before, snap, gen, "已点击截图上的 (${a.x}, ${a.y})（0-1000 归一化坐标）。")
-        return out.copy(message = verifyPointTap(snap, out.message))
+        val track = "p|${snap.packageName}|xy:${a.x},${a.y}"
+        val out = after(before, snap, gen, "已点击截图上的 (${a.x}, ${a.y})（0-1000 归一化坐标）。", verifyPixels = false)
+        val verified = verifyPointTap(snap, out.message, track)
+        // A tree page was already measured by [changeNote]; a canvas page only here.
+        return out.copy(message = verified.note, change = verified.amount ?: out.change)
     }
 
     /**
@@ -514,41 +527,52 @@ internal class MainScreenDriver(private val service: PhoneA11yService, private v
      * Best-effort by design: a screenshot that cannot be taken after the tap is not a failure, and
      * a screen that changed size (rotation, app launch) is not a failure either — both only cost
      * the verification, never the tap.
+     *
+     * Returns the note together with the measured diff, so the one signal the GUI channel really
+     * has (did the picture move?) reaches the action log as well as the model.
      */
-    private fun verifyPointTap(snap: Snapshot, message: String): String {
-        if (snap.screen.kind == ScreenKind.TREE) return message
-        val before = snap.bytes?.let { ScreenShooter.thumbnail(it) } ?: return message
-        val cap = try { capture() } catch (_: Exception) { return message }
+    private fun verifyPointTap(snap: Snapshot, message: String, track: String): Change {
+        if (snap.screen.kind == ScreenKind.TREE) return Change(message, null)
+        val before = snap.bytes?.let { ScreenShooter.thumbnail(it) } ?: return Change(message, null)
+        val cap = try { capture() } catch (_: Exception) { return Change(message, null) }
         try {
             if (cap.screen.width != snap.display.width || cap.screen.height != snap.display.height) {
                 // l10n:keep agent screen result
-                return message + "\n" + "注意：截图之后屏幕尺寸或方向变了（截图 ${snap.display.width}×${snap.display.height}，现在 ${cap.screen.width}×${cap.screen.height}）。0-1000 归一化坐标按比例仍然有效，但画面已经不是原来那张：如果是小程序 / 游戏启动造成的跳转，请重新 screen 看新画面再继续，不要因为坐标失效就结束任务。"
+                return Change(message + "\n" + "注意：截图之后屏幕尺寸或方向变了（截图 ${snap.display.width}×${snap.display.height}，现在 ${cap.screen.width}×${cap.screen.height}）。0-1000 归一化坐标按比例仍然有效，但画面已经不是原来那张：如果是小程序 / 游戏启动造成的跳转，请重新 screen 看新画面再继续，不要因为坐标失效就结束任务。", null)
             }
             val window = if (cap.windows.size == 1) cap.windows[0] else null
-            val shot = try { shooter.shoot(window, cap.screen, emptyList(), emptyList(), 1_500) } catch (_: Exception) { return message }
-            val after = shot.bytes?.let { ScreenShooter.thumbnail(it) } ?: return message
+            val shot = try { shooter.shoot(window, cap.screen, emptyList(), emptyList(), 1_500) } catch (_: Exception) { return Change(message, null) }
+            val after = shot.bytes?.let { ScreenShooter.thumbnail(it) } ?: return Change(message, null)
             val change = PixelDiff.diff(before, after)
             if (change >= CHANGED) {
-                pointMisses = 0
-                return message
+                clearMiss()
+                return Change(message, change)
             }
-            pointMisses++
+            val hits = bumpMiss(track)
             val amount = String.format(java.util.Locale.ROOT, "%.2f", change)
-            if (pointMisses >= 2) {
+            if (hits >= 2) {
                 // l10n:keep agent screen result
-                return message + "\n" + "点击后画面几乎没有变化（差异 $amount），这已经是同一目标连续第 $pointMisses 次没有反应：停止重复点击。改试相邻的目标，或 handoff 交给用户；不要继续猜坐标。"
+                return Change(message + "\n" + "点击后画面几乎没有变化（差异 $amount），这已经是同一目标连续第 $hits 次没有反应：停止重复点击。改试相邻的目标，或 handoff 交给用户；不要继续猜坐标。", change)
             }
             // l10n:keep agent screen result
-            return message + "\n" + "点击后画面几乎没有变化（差异 $amount）。先核对你手上的坐标：tap_xy 的 x/y 是 0-1000 归一化坐标（0,0=截图左上角，1000,1000=截图右下角），不是像素、不是百分数，从图上量出来的像素要换算。再确认目标真的在这一屏：状态栏、输入法键盘下方、刚加载出来的空白页都可能让点击落空。同一位置第二次仍然没有变化就停手，改 handoff 交给用户。"
+            return Change(message + "\n" + "点击后画面几乎没有变化（差异 $amount）。先核对你手上的坐标：tap_xy 的 x/y 是 0-1000 归一化坐标（0,0=截图左上角，1000,1000=截图右下角），不是像素、不是百分数，从图上量出来的像素要换算。再确认目标真的在这一屏：状态栏、输入法键盘下方、刚加载出来的空白页都可能让点击落空。同一位置第二次仍然没有变化就停手，改 handoff 交给用户。", change)
         } catch (_: Exception) {
-            return message
+            return Change(message, null)
         } finally {
             cap.recycle()
         }
     }
 
     /** Waits for the UI to settle, reads the new screen (`+` marks) and says whether anything changed. */
-    private fun after(before: Long, previous: Snapshot?, gen: Long, message: String, scrolled: Boolean = false): ActionResult {
+    private fun after(
+        before: Long,
+        previous: Snapshot?,
+        gen: Long,
+        message: String,
+        scrolled: Boolean = false,
+        track: String? = null,
+        verifyPixels: Boolean = true,
+    ): ActionResult {
         clock.settle(before, 1_500, 300, 3_000) { cancelled(gen) }
         val cap = try { settledCapture(previous, gen) } catch (e: InterruptedException) { throw e } catch (e: Exception) {
             Log.w(TAG, "observation after an accepted action failed", e)
@@ -557,16 +581,117 @@ internal class MainScreenDriver(private val service: PhoneA11yService, private v
         }
         try {
             val snap = publish(cap, false)
-            val unchanged = previous != null && previous.packageName == snap.packageName && previous.fingerprints == snap.fingerprints
-            val note = when {
-                !unchanged -> ""
-                // l10n:keep agent screen result
-                scrolled -> "内容没有变化，可能已经到头了。"
-                // l10n:keep agent screen result
-                else -> "界面没有明显变化。"
-            }
-            return ActionResult(true, message + note, toSnapshot(snap))
+            val change = changeNote(previous, snap, scrolled, track, verifyPixels)
+            return ActionResult(true, message + change.note, toSnapshot(snap), change.amount)
         } finally { cap.recycle() }
+
+    }
+
+    /**
+     * Whether anything changed after an accepted action, as a note for the model.
+     *
+     * The control tree answers this for free: the element list *is* the fingerprint set, and a
+     * page that did anything changes it. A canvas or blanked page has no elements at all, so both
+     * sides of that comparison are the empty set and it always answers 界面没有明显变化 — including
+     * after a tap that worked, and for `back` on a page whose pixels did change. On those pages
+     * pixels are the only evidence, so compare thumbnails ([pixelChange]); when no verdict is
+     * possible (no before-shot, screenshot refused, size changed) say nothing rather than invent
+     * one.
+     *
+     * [track] names the target the model aimed at. It survives `screen` calls, so a target that
+     * keeps not reacting is stopped after the second miss instead of being retried until the
+     * budget runs out; a change, a different target or a different app clears the count.
+     *
+     * [verifyPixels] is false when the caller verifies the pixels itself ([verifyPointTap]): then
+     * no second screenshot is taken here, and an element-less page stays silent rather than
+     * getting a second, contradicting verdict.
+     */
+    private fun changeNote(previous: Snapshot?, snap: Snapshot, scrolled: Boolean, track: String?, verifyPixels: Boolean): Change {
+        if (previous == null || previous.packageName != snap.packageName) {
+            clearMiss()
+            return Change("", null)
+        }
+        val noElements = snap.screen.elements.isEmpty() && previous.screen.elements.isEmpty()
+        if (noElements && !verifyPixels) return Change("", null)
+        val amount = when {
+            !noElements -> fingerprintDistance(previous.fingerprints, snap.fingerprints)
+            else -> pixelChange(previous, snap) ?: return Change("", null)
+        }
+        if (amount > 0f) {
+            clearMiss()
+            return Change("", amount)
+        }
+        if (track != null) {
+            val hits = bumpMiss(track)
+            if (hits >= 2) {
+                // l10n:keep agent screen result
+                return Change(
+                    "这已经是同一目标连续第 $hits 次没有反应：停止重复点击。改试相邻的目标，或 handoff 交给用户；不要继续对着同一个目标点。",
+                    amount,
+                )
+            }
+            // l10n:keep agent screen result
+            return Change(
+                "界面没有明显变化。先确认这一下点对了地方：状态栏、输入法键盘下方、刚加载出来的空白页和页面边缘的装饰都容易让点击落空。同一目标第二次仍然没有变化就停手，改 handoff 交给用户。",
+                amount,
+            )
+        }
+        // l10n:keep agent screen result
+        return Change(if (scrolled) "内容没有变化，可能已经到头了。" else "界面没有明显变化。", amount)
+    }
+
+    /** What an action did to the screen, as reported to the model ([note]) and to the log ([amount]). */
+    private class Change(val note: String, val amount: Float?)
+
+    /**
+     * Pixel verdict for a page with no elements (canvas, blanked): screenshot now and diff against
+     * the thumbnail kept on [previous]. Null when no verdict is possible — no before-shot, the
+     * screenshot was refused, or the screen changed size — which costs the verdict, never the
+     * action. The fresh pixels are kept on [snap] so the next action on this page can be verified
+     * the same way.
+     */
+    private fun pixelChange(previous: Snapshot, snap: Snapshot): Float? {
+        val before = previous.bytes?.let { ScreenShooter.thumbnail(it) } ?: return null
+        val cap = try { capture() } catch (e: Exception) { return null }
+        try {
+            if (cap.packageName != snap.packageName) return null
+            if (cap.screen.width != snap.display.width || cap.screen.height != snap.display.height) return null
+            val window = if (cap.windows.size == 1) cap.windows[0] else null
+            val shot = try { shooter.shoot(window, cap.screen, emptyList(), emptyList(), 1_500) } catch (e: Exception) { return null }
+            val after = shot.bytes?.let { ScreenShooter.thumbnail(it) } ?: return null
+            snap.bytes = shot.bytes
+            return PixelDiff.diff(before, after)
+        } finally {
+            cap.recycle()
+        }
+    }
+
+    /**
+     * How far two element sets are apart, 0f..1f (Jaccard distance): the fraction of the union of
+     * fingerprints that is not shared. Zero means the same controls are still there, which is what
+     * makes the log's `change` column readable across both channels — pixels on a canvas-like page,
+     * this on a tree page.
+     */
+    private fun fingerprintDistance(before: Set<String>, after: Set<String>): Float {
+        if (before.isEmpty() && after.isEmpty()) return 0f
+        val shared = before.count { it in after }
+        val union = before.size + after.size - shared
+        return if (union == 0) 0f else (union - shared).toFloat() / union
+    }
+
+    /** Records a no-change hit on [key] (app + target); returns how many in a row. */
+    private fun bumpMiss(key: String): Int = synchronized(missLock) {
+        if (missKey != key) {
+            missKey = key
+            missCount = 0
+        }
+        missCount++
+        missCount
+    }
+
+    private fun clearMiss() = synchronized(missLock) {
+        missKey = null
+        missCount = 0
     }
 
     /**
@@ -584,9 +709,18 @@ internal class MainScreenDriver(private val service: PhoneA11yService, private v
         return cap
     }
 
-    private fun looksUnfinished(cap: Capture, previous: Snapshot?): Boolean =
-        cap.hiddenWindowTitle == null &&
-            (cap.windows.isEmpty() || (ScreenFormat.textCount(cap.windows) < ScreenFormat.POOR_TREE && previous?.screen?.poorTree != true))
+    /**
+     * True while the screen we just read may still be settling (no root yet, or a nearly empty
+     * tree right after a transition). A canvas or blanked page is never unfinished this way: it
+     * has no text to wait for, and retrying it four times only burns the action budget on a page
+     * that will read exactly the same.
+     */
+    private fun looksUnfinished(cap: Capture, previous: Snapshot?): Boolean {
+        if (cap.hiddenWindowTitle != null) return false
+        if (ScreenFormat.classify(cap.windows, false) != ScreenKind.TREE) return false
+        return cap.windows.isEmpty() ||
+            (ScreenFormat.textCount(cap.windows) < ScreenFormat.POOR_TREE && previous?.screen?.poorTree != true)
+    }
 
     private fun settledSnapshot(before: Long, gen: Long): ScreenSnapshot? {
         clock.settle(before, 800, 250, 2_000) { cancelled(gen) }
@@ -670,7 +804,6 @@ internal class MainScreenDriver(private val service: PhoneA11yService, private v
         }
         val snap = Snapshot(id, formatted, pkg, appLabel, protectedPage, cap.ownAppInFront, cap.windows.lastOrNull()?.id, cap.hiddenWindowTitle != null, cap.screen)
         latest = snap
-        pointMisses = 0
         return snap
     }
 

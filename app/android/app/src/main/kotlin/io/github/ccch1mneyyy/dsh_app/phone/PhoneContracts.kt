@@ -1,5 +1,8 @@
 package io.github.ccch1mneyyy.dsh_app.phone
 
+import io.github.ccch1mneyyy.dsh_app.phone.a11y.Box
+import io.github.ccch1mneyyy.dsh_app.phone.a11y.ScreenGeom
+
 // The contract between the phone-control modules.
 // Each module owns its side:
 //
@@ -125,6 +128,13 @@ data class ActionResult(
     val message: String,
     /** The screen after the action settled (new lines marked `+`), when it could be read. */
     val screen: ScreenSnapshot? = null,
+    /**
+     * How much the screen changed, 0f..1f, when it was measured: the pixel diff on a canvas-like
+     * page, or the share of elements whose fingerprint moved on a tree page. Null when nothing was
+     * measured. Logged per action ([PhoneTasks.ActionLog]) so the GUI channel's effectiveness is
+     * visible after the fact instead of being computed and thrown away.
+     */
+    val change: Float? = null,
 )
 
 data class CollectResult(
@@ -149,7 +159,12 @@ interface PhoneDriver {
 
     fun availability(): Availability
 
-    fun observe(detail: Boolean, image: Boolean): ScreenSnapshot
+    /**
+     * Reads the screen. [region] (0-1000 over the screen, see [ScreenGeom.NORM]) asks for a
+     * zoomed crop of the screenshot instead of the whole picture: a driver that cannot crop it
+     * ignores it and returns the full frame.
+     */
+    fun observe(detail: Boolean, image: Boolean, region: Box? = null): ScreenSnapshot
 
     /**
      * Page shape of the latest observation, for the safety gate: on a canvas-like page
@@ -210,7 +225,14 @@ enum class HandoffCause(val rule: String) {
     SYSTEM("system-page"),
 
     /** An app on the person's 不碰 list. */
-    DENY_LIST("deny-list");
+    DENY_LIST("deny-list"),
+
+    /**
+     * A page that can only be worked through the picture (canvas, blanked) while the model cannot
+     * see pictures. Both channels are then closed: there is no tree to read and the screenshot is
+     * unreadable, so the right move is to stop and ask the person, not to keep guessing coordinates.
+     */
+    NO_VISION("no-vision");
 
     companion object {
         /** From an action-log decision (`refused:<rule>`); null for anything else. */

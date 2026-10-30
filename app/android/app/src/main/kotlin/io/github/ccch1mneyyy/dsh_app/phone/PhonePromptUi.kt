@@ -44,6 +44,7 @@ internal object PhonePromptUi {
         HandoffCause.SECRET -> R.string.overlay_handoff_secret
         HandoffCause.SYSTEM -> R.string.overlay_handoff_system
         HandoffCause.DENY_LIST -> R.string.overlay_handoff_deny_list
+        HandoffCause.NO_VISION -> R.string.overlay_handoff_no_vision
     })
 
     fun label(ctx: Context, choice: PromptChoice): String = AppStrings.get(ctx, when (choice) {

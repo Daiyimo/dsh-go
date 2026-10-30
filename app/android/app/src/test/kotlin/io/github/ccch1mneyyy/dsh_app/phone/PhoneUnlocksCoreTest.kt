@@ -1,5 +1,7 @@
 package io.github.ccch1mneyyy.dsh_app.phone
 
+import io.github.ccch1mneyyy.dsh_app.phone.a11y.Box
+
 import java.time.ZoneId
 import org.junit.After
 import org.junit.Assert.*
@@ -23,7 +25,7 @@ class PhoneUnlocksCoreTest {
         override val screen = PhoneScreen.MAIN
         override fun availability() = Availability(true)
         override fun foregroundPackage() = foreground
-        override fun observe(detail: Boolean, image: Boolean) = ScreenSnapshot("s2", "Example", "Example", foreground)
+        override fun observe(detail: Boolean, image: Boolean, region: Box?) = ScreenSnapshot("s2", "Example", "Example", foreground)
         override fun collect(screenId: String, listElementId: Int, maxPages: Int, until: String?) = error("unexpected collect")
         override fun target(screenId: String, elementId: Int) = field.copy(screenId = screenId, elementId = elementId, packageName = foreground)
         override fun perform(action: PhoneAction): ActionResult { writes++; return ActionResult(true, "done") }

@@ -362,18 +362,35 @@ class PhoneTasks(
 
 /** What the agent did, without screen contents, for the person to review. Newest last; [toMaps] lists newest first. */
 class ActionLog(private val capacity: Int = 300, private val clock: () -> Long = System::currentTimeMillis) {
-    data class Entry(val time: Long, val tool: String, val app: String?, val summary: String, val decision: String)
+    /**
+     * One entry. [change] is how much the screen moved, 0f..1f, when it was measured (the pixel
+     * diff on a canvas-like page, the element-fingerprint distance on a tree page); null when the
+     * action was not a write or nothing could be measured. Without it the GUI channel's
+     * effectiveness is invisible after the fact: the diff is computed for the model's benefit and
+     * then thrown away.
+     */
+    data class Entry(
+        val time: Long,
+        val tool: String,
+        val app: String?,
+        val summary: String,
+        val decision: String,
+        val change: Float? = null,
+    )
 
     private val entries = ArrayDeque<Entry>()
 
-    fun add(tool: String, app: String?, summary: String, decision: String) = synchronized(entries) {
-        entries.addLast(Entry(clock(), tool, app, summary, decision))
+    fun add(tool: String, app: String?, summary: String, decision: String, change: Float? = null) = synchronized(entries) {
+        entries.addLast(Entry(clock(), tool, app, summary, decision, change))
         while (entries.size > capacity) entries.removeFirst()
     }
 
     fun toMaps(limit: Int): List<Map<String, Any?>> = synchronized(entries) {
         entries.reversed().take(limit.coerceIn(0, capacity)).map {
-            linkedMapOf("time" to it.time, "tool" to it.tool, "app" to it.app, "summary" to it.summary, "decision" to it.decision)
+            linkedMapOf(
+                "time" to it.time, "tool" to it.tool, "app" to it.app, "summary" to it.summary,
+                "decision" to it.decision, "change" to it.change,
+            )
         }
     }
 

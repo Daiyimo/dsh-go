@@ -69,6 +69,7 @@
     <string name="overlay_handoff_secret">密码和验证码需要你来输入</string>
     <string name="overlay_handoff_system">系统设置需要你来操作</string>
     <string name="overlay_handoff_deny_list">不碰名单里的 App 需要你来操作</string>
+    <string name="overlay_handoff_no_vision">这个页面没有控件可读，而当前模型看不懂图片</string>
     <string name="overlay_unlocked">已解除限制</string>
     <string name="overlay_unlocked_description">已解除限制，点按查看</string>
     <string name="overlay_time_remaining">还剩 %1$s</string>
@@ -176,6 +177,7 @@
     <string name="phone_log_clipboard_read">读剪贴板</string>
     <string name="phone_log_background_read">读后台屏</string>
     <string name="phone_log_screen_read">读屏</string>
+    <string name="phone_log_wait">等 %1$d 毫秒</string>
     <string name="phone_log_collect">收集 %1$s#%2$d</string>
     <string name="phone_log_scroll">滚动 %1$s %2$s</string>
     <string name="phone_log_tap_xy">点坐标 %1$s (%2$d,%3$d)</string>

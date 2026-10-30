@@ -801,6 +801,14 @@ class PhoneChannel {
 
   Future<bool> setPolicies(PhonePolicies policies) => _bool('setPolicies', policies.toWire());
 
+  /// Tells the phone gate whether the model in use can read images. A model that
+  /// refuses a picture at admission gets `false`, which makes the gate refuse point
+  /// taps on pages that can only be worked through the picture (canvas, blanked)
+  /// instead of letting the model guess coordinates; a model that later takes
+  /// pictures again gets `true`. Only this one key goes over the wire
+  /// (`setPolicies` keeps everything it doesn't mention).
+  Future<bool> setCanSeeImages(bool on) => _bool('setPolicies', {'canSeeImages': on});
+
   /// Lifts or restores one hard rule, and nothing else (`setPolicies` keeps
   /// what it isn't sent).
   Future<bool> setUnlock(PhoneUnlock unlock, bool on) => _bool('setPolicies', {

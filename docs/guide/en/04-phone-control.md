@@ -33,7 +33,9 @@ Games, self-drawn canvas pages and encrypted or obfuscated pages have no readabl
 - **Checks the tap**: after tapping, DSH compares the picture before and after. When nothing changed it sends the model a checklist — coordinates measured in screenshot pixels instead of grid units, the status bar in the way, the keyboard covering the target — and after two misses in a row it suggests stopping and handing the screen back to you instead of tapping the same spot again.
 - **Approvals**: coordinate taps on these pages still ask first by default; with **No confirmations this task**, and once this app has been approved in the current task, they stop asking. **Ask every time** keeps asking every time.
 
-A model that can't see pictures can't help on these pages; DSH hands the screen back to you.
+A model that can't see pictures can't help on these pages: there is no tree to read and the screenshot means nothing to it, so DSH refuses coordinate taps and makes the model hand the phone back to you instead of guessing coordinates until the budget runs out.
+
+When the whole-screen picture is too small to read the fine print, the model can ask for a region on screen (for example 200,300,800,900, 0-1000) and DSH zooms into just that part; coordinates on the zoomed picture still count from its own top-left as 0,0. While a page is still loading or an animation is still running, the model can also wait a moment before reading the screen again.
 
 ## Floating bar
 
@@ -114,7 +116,7 @@ Disclaimer:
 
 ## Action log and advanced
 
-**Recent actions** logs every step, without screen contents. Tap **All actions** to see them. The log lasts until the app closes.
+**Recent actions** logs every step, without screen contents. Tap **All actions** to see them. Each entry also records how much the screen changed afterwards (0 to 1: the element distance on a tree page, the pixel difference on a screenshot page), so it is visible afterwards which steps actually did something. The log lasts until the app closes.
 
 Under **Advanced**:
 

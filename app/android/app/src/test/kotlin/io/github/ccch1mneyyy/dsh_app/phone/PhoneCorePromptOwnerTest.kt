@@ -1,5 +1,7 @@
 package io.github.ccch1mneyyy.dsh_app.phone
 
+import io.github.ccch1mneyyy.dsh_app.phone.a11y.Box
+
 import java.time.ZoneId
 import org.junit.After
 import org.junit.Assert.*
@@ -49,7 +51,7 @@ class PhoneCorePromptOwnerTest {
         var opens = 0
         override fun availability() = Availability(true)
         override fun foregroundPackage() = "example.app"
-        override fun observe(detail: Boolean, image: Boolean): ScreenSnapshot {
+        override fun observe(detail: Boolean, image: Boolean, region: Box?): ScreenSnapshot {
             reads++
             return ScreenSnapshot("${screen.prefix}1", "Example", "Example", "example.app")
         }

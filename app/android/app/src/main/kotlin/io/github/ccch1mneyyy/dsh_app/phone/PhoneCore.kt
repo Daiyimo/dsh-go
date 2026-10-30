@@ -1,5 +1,6 @@
 package io.github.ccch1mneyyy.dsh_app.phone
 
+import io.github.ccch1mneyyy.dsh_app.phone.a11y.Box
 import io.github.ccch1mneyyy.dsh_app.phone.a11y.ScreenGeom
 import java.time.ZoneId
 
@@ -65,6 +66,7 @@ class PhoneCore(
         val app: String? = null,
         val summary: String? = null,
         val decision: String? = null,
+        val change: Float? = null,
     )
 
     fun call(name: String, args: Map<String, Any?>): ToolOutput {
@@ -109,7 +111,7 @@ class PhoneCore(
                 decision = "error",
             )
         }
-        out.summary?.let { log.add(name, out.app, it, out.decision ?: if (out.error) "error" else "ok") }
+        out.summary?.let { log.add(name, out.app, it, out.decision ?: if (out.error) "error" else "ok", out.change) }
         noteRefusal(name, out.decision)
         val interjections = tasks.drainInterjections()
         val text = buildString {
@@ -159,6 +161,7 @@ class PhoneCore(
             PhoneToolCatalog.COLLECT -> collect(a)
             PhoneToolCatalog.TAP, PhoneToolCatalog.TYPE, PhoneToolCatalog.SCROLL, PhoneToolCatalog.TAP_XY -> act(name, a, scope)
             PhoneToolCatalog.KEY -> key(a)
+            PhoneToolCatalog.WAIT -> wait(a, scope)
             PhoneToolCatalog.HANDOFF -> handoff(a, scope)
             // l10n:keep agent tool result
             else -> Out("没有这个手机工具：$name", error = true)
@@ -365,6 +368,10 @@ class PhoneCore(
     private fun screen(a: Args): Out {
         val which = if (a.bool("background") == true) PhoneScreen.BACKGROUND else PhoneScreen.MAIN
         val summary = if (which == PhoneScreen.BACKGROUND) ui.get("phone_log_background_read", "读后台屏") else ui.get("phone_log_screen_read", "读屏") // l10n:keep test default
+        val region = when (val r = regionOf(a)) {
+            is Either.Left -> return Out(r.value, error = true, summary = summary, decision = "invalid")
+            is Either.Right -> r.value
+        }
         val driver = when (val d = driverFor(which)) {
             is Either.Left -> return Out(d.value, error = true, summary = summary, decision = "unavailable")
             is Either.Right -> d.value
@@ -372,7 +379,7 @@ class PhoneCore(
         if (env.isLocked()) return locked(summary)
         lastScreen = which
         say(if (which == PhoneScreen.BACKGROUND) ui.get("phone_reading_background", "DSH 正在看后台屏") else ui.get("phone_reading_screen", "DSH 正在看屏幕")) // l10n:keep test default
-        val snap = driver.observe(detail = a.bool("detail") == true, image = a.bool("image") == true)
+        val snap = driver.observe(detail = a.bool("detail") == true, image = a.bool("image") == true, region = region)
         tasks.setApp(snap.appLabel)
         val shown = safety.filterScreen(snap)
         val refused = shown !== snap
@@ -383,6 +390,50 @@ class PhoneCore(
             screen = shown,
             app = snap.appLabel ?: snap.packageName,
             summary = "$summary ${snap.id}",
+            decision = if (refused) "refused:read" else "ok",
+        )
+    }
+
+    /**
+     * `region` ("x1,y1,x2,y2" in 0-1000) as a screen box. A model writes coordinates the way it
+     * writes everything else, so a malformed one gets the format back instead of a silent
+     * full-frame read it did not ask for.
+     */
+    private fun regionOf(a: Args): Either<String, Box?> {
+        val raw = a.str("region")?.trim()?.takeIf { it.isNotEmpty() } ?: return Either.Right(null)
+        val parts = raw.split(',', ' ', ';').mapNotNull { it.trim().toIntOrNull() }
+        if (parts.size != 4) return Either.Left("region 要填 4 个 0-1000 的数字，用逗号分开：x1,y1,x2,y2（如 200,300,800,900）。")
+        return Either.Right(Box(parts[0], parts[1], parts[2], parts[3]))
+    }
+
+    /** Waits, then reads the screen: the only way to let a slow page finish without guessing. */
+    private fun wait(a: Args, scope: SerialWorker.Scope): Out {
+        val ms = a.int("ms")?.toLong() ?: WAIT_DEFAULT_MS
+        if (ms < 1 || ms > WAIT_MAX_MS) {
+            // l10n:keep agent tool result
+            return Out("wait 的 ms 要在 1 到 30000 毫秒之间。", error = true, summary = PhoneToolCatalog.WAIT, decision = "invalid")
+        }
+        val which = if (a.bool("background") == true) PhoneScreen.BACKGROUND else PhoneScreen.MAIN
+        val summary = if (which == PhoneScreen.BACKGROUND) ui.get("phone_log_background_read", "读后台屏") else ui.get("phone_log_wait", "等 %1\$d 毫秒", ms.toInt()) // l10n:keep test default
+        val driver = when (val d = driverFor(which)) {
+            is Either.Left -> return Out(d.value, error = true, summary = summary, decision = "unavailable")
+            is Either.Right -> d.value
+        }
+        if (env.isLocked()) return locked(summary)
+        lastScreen = which
+        env.sleep(ms)
+        say(if (which == PhoneScreen.BACKGROUND) ui.get("phone_reading_background", "DSH 正在看后台屏") else ui.get("phone_reading_screen", "DSH 正在看屏幕")) // l10n:keep test default
+        val snap = driver.observe(detail = a.bool("detail") == true, image = a.bool("image") == true)
+        tasks.setApp(snap.appLabel)
+        val shown = safety.filterScreen(snap)
+        val refused = shown !== snap
+        return Out(
+            // l10n:keep agent tool result
+            if (refused) "没有读取这个屏幕的内容。" else "等了 ${ms} 毫秒。",
+            error = refused,
+            screen = shown,
+            app = snap.appLabel ?: snap.packageName,
+            summary = summary,
             decision = if (refused) "refused:read" else "ok",
         )
     }
@@ -527,6 +578,7 @@ class PhoneCore(
             app = app,
             summary = summary,
             decision = if (res.ok) decision else "failed",
+            change = res.change,
         )
     }
 
@@ -598,7 +650,7 @@ class PhoneCore(
         }))
         val res = driver.perform(PhoneAction.Key(sid ?: "${which.prefix}0", key))
         return Out(res.message, error = !res.ok, screen = res.screen?.let { safety.filterScreen(it) }, summary = summary,
-            decision = if (res.ok) "ok" else "failed")
+            decision = if (res.ok) "ok" else "failed", change = res.change)
     }
 
     private fun handoff(a: Args, scope: SerialWorker.Scope): Out {
@@ -654,6 +706,8 @@ class PhoneCore(
         const val SETTLE_AFTER_LAUNCH_MS = 1200L
         const val MAX_APPS = 150
         const val MAX_COLLECT_CHARS = 16_000
+        const val WAIT_DEFAULT_MS = 2_000L
+        const val WAIT_MAX_MS = 30_000L
 
         /** The call's own time, not counting waits for the person. */
         fun budgetMs(tool: String): Long = when (tool) {
@@ -662,6 +716,7 @@ class PhoneCore(
             PhoneToolCatalog.OPEN, PhoneToolCatalog.INTENT -> 25_000L
             PhoneToolCatalog.SCREEN -> 12_000L
             PhoneToolCatalog.COLLECT -> 120_000L
+            PhoneToolCatalog.WAIT -> 35_000L
             PhoneToolCatalog.HANDOFF -> 30_000L
             else -> 30_000L
         }

@@ -1,7 +1,7 @@
 // Portions derived from Phase (https://github.com/CikeSeven/phase), used with the author's permission. See THIRD_PARTY_NOTICES.md.
 // Local changes: blocking with a timeout; API 30–33 full-display capture with the overlay
 // hidden; element numbers drawn on the image; near-black frames treated as secure; JPEG, long
-// side ≤ 1300 px.
+// side ≤ 1300 px; optional zoomed crop ([shoot]'s [region]) for small print.
 
 package io.github.ccch1mneyyy.dsh_app.phone.a11y
 
@@ -42,8 +42,21 @@ internal class ScreenShooter(private val service: AccessibilityService, private 
      * Captures [window] (API 34+, overlay excluded by construction) or the whole display
      * (API 30–33, overlay hidden for the moment of capture), then greys out [secrets] (see
      * [sensitiveBounds]) and draws [marks].
+     *
+     * [region] asks for a corner of the picture instead of all of it, in 0-1000 over [screen]
+     * (see [ScreenGeom.NORM]). A whole phone screen squeezed onto 1300 px leaves mini-program
+     * print unreadable, and the only cure is to send fewer pixels: a crop is kept at native
+     * resolution, which is the zoom. The returned [ImageGeometry] maps the cropped picture back
+     * to the screen, so `tap_xy` on that crop still lands where the model meant.
      */
-    fun shoot(window: UiWindow?, screen: Box, marks: List<ScreenElement>, secrets: List<Box>, timeoutMs: Long): Shot {
+    fun shoot(
+        window: UiWindow?,
+        screen: Box,
+        marks: List<ScreenElement>,
+        secrets: List<Box>,
+        timeoutMs: Long,
+        region: Box? = null,
+    ): Shot {
         // l10n:keep agent screenshot result
         if (Build.VERSION.SDK_INT < 30) return Shot(null, null, null, false, "本机系统低于 Android 11，不支持无障碍截图")
         val useWindow = Build.VERSION.SDK_INT >= 34 && window != null
@@ -60,25 +73,61 @@ internal class ScreenShooter(private val service: AccessibilityService, private 
         try {
             // l10n:keep agent screenshot result
             if (looksBlack(bitmap)) return Shot(null, null, null, true, "截图全黑，可能是禁止截图的页面")
-            val origin = if (useWindow) window.bounds else screen
-            val factor = minOf(1f, 1300f / max(bitmap.width, bitmap.height))
-            val w = (bitmap.width * factor).roundToInt().coerceAtLeast(1)
-            val h = (bitmap.height * factor).roundToInt().coerceAtLeast(1)
-            var scaled = if (factor < 1f) Bitmap.createScaledBitmap(bitmap, w, h, true) else bitmap
-            if (scaled === bitmap || !scaled.isMutable) {
-                val mutable = scaled.copy(Bitmap.Config.ARGB_8888, true)
-                if (scaled !== bitmap) scaled.recycle()
-                scaled = mutable
-            }
+            val full = if (useWindow) window.bounds else screen
+            val zoom = region?.let { zoomBox(it, full) }?.takeIf { it.width > 0 && it.height > 0 }
+            val source = if (zoom == null) bitmap else crop(bitmap, zoom, full)
+                // l10n:keep agent screenshot result
+                ?: return Shot(null, null, null, false, "放大的区域不在屏幕范围内，请给一个在屏内的矩形")
             try {
-                val sx = w.toFloat() / origin.width.coerceAtLeast(1)
-                val sy = h.toFloat() / origin.height.coerceAtLeast(1)
-                draw(scaled, marks, secrets, origin, sx, sy)
-                val out = ByteArrayOutputStream()
-                scaled.compress(Bitmap.CompressFormat.JPEG, 80, out)
-                return Shot(out.toByteArray(), "image/jpeg", ImageGeometry(origin.left, origin.top, sx, sy, w, h), false, null)
-            } finally { scaled.recycle() }
+                val origin = zoom ?: full
+                val factor = minOf(1f, 1300f / max(source.width, source.height))
+                val w = (source.width * factor).roundToInt().coerceAtLeast(1)
+                val h = (source.height * factor).roundToInt().coerceAtLeast(1)
+                var scaled = if (factor < 1f) Bitmap.createScaledBitmap(source, w, h, true) else source
+                if (scaled === source || !scaled.isMutable) {
+                    val mutable = scaled.copy(Bitmap.Config.ARGB_8888, true)
+                    if (scaled !== source) scaled.recycle()
+                    scaled = mutable
+                }
+                try {
+                    val sx = w.toFloat() / origin.width.coerceAtLeast(1)
+                    val sy = h.toFloat() / origin.height.coerceAtLeast(1)
+                    draw(scaled, marks, secrets, origin, sx, sy)
+                    val out = ByteArrayOutputStream()
+                    scaled.compress(Bitmap.CompressFormat.JPEG, 80, out)
+                    return Shot(out.toByteArray(), "image/jpeg", ImageGeometry(origin.left, origin.top, sx, sy, w, h), false, null)
+                } finally { scaled.recycle() }
+            } finally { if (source !== bitmap) source.recycle() }
         } finally { bitmap.recycle() }
+    }
+
+    /** [region] in 0-1000 over [full] turned into a screen box, clamped to what is on screen. */
+    private fun zoomBox(region: Box, full: Box): Box {
+        fun axis(v: Int, lo: Int, span: Int) = lo + ScreenGeom.normToPx(v.coerceIn(0, ScreenGeom.NORM), span)
+        val left = axis(region.left, full.left, full.width).coerceIn(full.left, full.right)
+        val right = axis(region.right, full.left, full.width).coerceIn(full.left, full.right)
+        val top = axis(region.top, full.top, full.height).coerceIn(full.top, full.bottom)
+        val bottom = axis(region.bottom, full.top, full.height).coerceIn(full.top, full.bottom)
+        return Box(minOf(left, right), minOf(top, bottom), maxOf(left, right), maxOf(top, bottom))
+    }
+
+    /**
+     * Cuts [zoom] (a box on the screen) out of a bitmap that covers all of [full]; null when
+     * nothing of it is inside the bitmap. Bitmap pixels outside the crop are dropped, so a crop
+     * is the only way to spend the 1300 px budget on the part of the screen the model is asking
+     * about.
+     */
+    private fun crop(bitmap: Bitmap, zoom: Box, full: Box): Bitmap? {
+        if (zoom.width <= 0 || zoom.height <= 0) return null
+        val kx = bitmap.width.toFloat() / full.width.coerceAtLeast(1)
+        val ky = bitmap.height.toFloat() / full.height.coerceAtLeast(1)
+        val left = ((zoom.left - full.left) * kx).roundToInt()
+        val top = ((zoom.top - full.top) * ky).roundToInt()
+        if (left >= bitmap.width || top >= bitmap.height) return null
+        val w = (zoom.width * kx).roundToInt().coerceIn(1, bitmap.width - left.coerceAtLeast(0))
+        val h = (zoom.height * ky).roundToInt().coerceIn(1, bitmap.height - top.coerceAtLeast(0))
+        if (w <= 0 || h <= 0) return null
+        return Bitmap.createBitmap(bitmap, left.coerceAtLeast(0), top.coerceAtLeast(0), w, h)
     }
 
     private class Raw(val bitmap: Bitmap?, val secure: Boolean, val error: String?)

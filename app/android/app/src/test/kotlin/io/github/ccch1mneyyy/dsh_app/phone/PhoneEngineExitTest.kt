@@ -1,5 +1,7 @@
 package io.github.ccch1mneyyy.dsh_app.phone
 
+import io.github.ccch1mneyyy.dsh_app.phone.a11y.Box
+
 import java.time.ZoneId
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -57,7 +59,7 @@ class PhoneEngineExitTest {
         override val screen = PhoneScreen.MAIN
         override fun availability() = Availability(true)
         override fun foregroundPackage() = "example.app"
-        override fun observe(detail: Boolean, image: Boolean) = ScreenSnapshot("s1", "Example", "Example", "example.app")
+        override fun observe(detail: Boolean, image: Boolean, region: Box?) = ScreenSnapshot("s1", "Example", "Example", "example.app")
         override fun collect(screenId: String, listElementId: Int, maxPages: Int, until: String?): CollectResult {
             synchronized(workerThreads) { workerThreads += Thread.currentThread().name }
             for (page in 1..maxPages) {

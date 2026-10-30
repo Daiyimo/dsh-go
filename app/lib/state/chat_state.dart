@@ -3,6 +3,7 @@ import 'dart:math';
 
 import 'package:dsh_client/dsh_client.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../l10n/l10n.dart';
 import '../usage/usage_stats.dart';
@@ -11,6 +12,7 @@ import 'chat_error_text.dart';
 import 'connection_state.dart';
 import 'hosts_state.dart';
 import 'notify_state.dart' show appForegroundProvider;
+import 'phone_state.dart';
 import 'run_pulse.dart';
 import 'sessions_state.dart';
 
@@ -969,6 +971,7 @@ class ChatController extends Notifier<ChatState> {
     switch (event) {
       case ModelSelectedEvent(:final selection?):
         _model = selection;
+        _syncModelImages(selection);
       case SessionSnapshotEvent(:final events, :final projections, :final isResync):
         ModelSelection? latest;
         for (final e in events) {
@@ -977,6 +980,7 @@ class ChatController extends Notifier<ChatState> {
           }
         }
         _model = latest ?? (isResync ? _model : null) ?? projections.nextModel ?? _model;
+        _syncModelImages(_model);
       default:
         break;
     }
@@ -1257,12 +1261,22 @@ class ChatController extends Notifier<ChatState> {
 
     try {
       await prompt(images, receipts);
+      // The pictures went through, so this model reads them: lift the no-vision
+      // stop the phone gate installed for a text-only model, if it is still on.
+      if (images.isNotEmpty && !_modelSeesImages) _setModelSeesImages(true);
+      if (images.isNotEmpty) _imageProof = true;
       return null;
     } on DshRemoteException catch (e) {
       if (images.isEmpty || !_imagesRefused(e) || !client.supportsEndpoint('fileUploads/upload')) {
         rethrow;
       }
       _requireCurrent(operation);
+      _imageProof = true;
+      // A model that cannot read images cannot work a canvas-like page at all:
+      // there is no tree to read and the screenshot means nothing to it. Tell the
+      // phone gate, so it hands those pages back to the person instead of letting
+      // the model guess coordinates until the budget runs out.
+      if (_modelSeesImages) _setModelSeesImages(false);
       await prompt(const [], [...receipts, ...await _stageFiles(operation, attachments, images: true)]);
       return appL10n.stateChatTextOnlyModel;
     }
@@ -1270,6 +1284,71 @@ class ChatController extends Notifier<ChatState> {
 
   static bool _imagesRefused(Object e) =>
       e is DshRemoteException && e.details['reason'] == 'MODEL_DOES_NOT_SUPPORT_IMAGES';
+
+  /// Whether the model in use reads images, as the phone gate currently believes.
+  /// Starts optimistic; the first prompt with pictures that goes through, or the
+  /// first refusal, corrects it.
+  bool _modelSeesImages = true;
+
+  /// The model that belief is about, and the last value told to the gate, so a
+  /// repeat costs no round trip.
+  String? _modelImageKey;
+  bool? _gateToldImages;
+
+  /// Set once this run has seen the model take or refuse a picture. What we saw
+  /// outranks what an earlier run recorded, so a recorded stop is not re-applied
+  /// over fresh proof that the model reads images after all.
+  bool _imageProof = false;
+
+  /// The belief is remembered here rather than in the gate: the gate is told what
+  /// to believe and keeps no memory of it, so a stop recorded for a text-only
+  /// model cannot outlive that model, while a model with no record gets the
+  /// benefit of the doubt (which also clears a stop an earlier model left).
+  static const _imageModelPref = 'phone.image.model';
+  static const _imageCanSeePref = 'phone.image.canSee';
+
+  void _setModelSeesImages(bool on) {
+    _modelSeesImages = on;
+    _rememberModelImages();
+    if (_gateToldImages == on) return;
+    _gateToldImages = on;
+    // The phone plugin may be off or unreachable: the gate's own default (can see)
+    // is the safe one, and the next prompt with pictures corrects it again.
+    unawaited(ref.read(phoneChannelProvider).setCanSeeImages(on).catchError((_) => false));
+  }
+
+  void _rememberModelImages() {
+    final model = _modelImageKey;
+    if (model == null) return;
+    final canSee = _modelSeesImages;
+    unawaited(() async {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_imageModelPref, model);
+      await prefs.setBool(_imageCanSeePref, canSee);
+    }());
+  }
+
+  /// Applies what an earlier run recorded for the model now in use.
+  Future<void> _resolveModelImages() async {
+    final current = _modelImageKey;
+    if (current == null || _imageProof) return;
+    final prefs = await SharedPreferences.getInstance();
+    if (!ref.mounted || _modelImageKey != current) return;
+    final canSee = prefs.getString(_imageModelPref) == current
+        ? prefs.getBool(_imageCanSeePref) ?? true
+        : true;
+    _setModelSeesImages(canSee);
+  }
+
+  /// Re-teaches the image belief when the model in use changes, so a belief left
+  /// behind by an earlier model does not outlive it.
+  void _syncModelImages(ModelSelection? selection) {
+    final key = selection == null ? null : '${selection.provider}/${selection.model}';
+    if (key == null || key == _modelImageKey) return;
+    _modelImageKey = key;
+    _imageProof = false;
+    unawaited(_resolveModelImages());
+  }
 
   /// The banner for a send that did not go through.
   static String _sendFailure(Object e) => switch (e) {

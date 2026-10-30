@@ -10,12 +10,24 @@ data class PhonePolicies(
     val confirmEveryWritePackages: List<String> = SafetyRules.DEFAULT_CONFIRM_EVERY_WRITE,
     val confirmMode: ConfirmMode = ConfirmMode.ASK,
     val unlocks: PhoneUnlocks = PhoneUnlocks(),
+    /**
+     * The model in use can read images. Set from the app the moment a model refuses a picture
+     * (it answers "I cannot see images"), and cleared when the model changes. On a canvas-like
+     * page a point tap is the only way to act, so with this off both channels are closed and the
+     * gate refuses instead of letting the model guess coordinates forever. Not persisted: the app
+     * keeps it per model and tells the gate again after a restart.
+     */
+    val canSeeImages: Boolean = true,
 ) {
     fun toMap(): Map<String, Any?> = linkedMapOf(
         "denyPackages" to denyPackages,
         "confirmEveryWritePackages" to confirmEveryWritePackages,
         "confirmMode" to confirmMode.wire,
         "unlocks" to unlocks.toMap(),
+        // canSeeImages is deliberately left out: it is an observation about the model in use, not a
+        // setting, and the app owns it (keyed by model) and re-sends it when the model changes.
+        // Storing it here would leave a stop recorded for a text-only model covering every model
+        // used afterwards, with nothing left to reopen it.
     )
 
     companion object {
@@ -30,6 +42,7 @@ data class PhonePolicies(
                 list("confirmEveryWritePackages", base.confirmEveryWritePackages),
                 ConfirmMode.fromWire(map?.get("confirmMode") as? String) ?: base.confirmMode,
                 PhoneUnlocks.fromMap(map?.get("unlocks") as? Map<*, *>, base.unlocks),
+                map?.get("canSeeImages") as? Boolean ?: base.canSeeImages,
             )
         }
 
@@ -245,6 +258,14 @@ class SafetyGate(
         if (secret && !lifted.secretFields) {
             // l10n:keep agent safety result
             return Verdict.Refuse("这是密码 / 验证码 / 支付密码一类的输入框，DSH 不代填，也不替用户点它。请调用 handoff 让用户自己输入。", "secret-field")
+        }
+        // A canvas-like page (no usable elements) worked only through the picture, for a model that
+        // cannot see pictures: the tree channel is empty and the screenshot channel is closed, so
+        // both ways in are gone. Stop and hand over rather than guess coordinates until the budget
+        // runs out. This is a hard stop, so it sits above the waivers.
+        if (needsVision && !p.canSeeImages) {
+            // l10n:keep agent safety result
+            return Verdict.Refuse("这个页面没有控件可读，只能看截图操作，而当前模型看不懂图片。两条路都不通，请不要再猜坐标：调用 handoff 把手机交还给用户，让他自己完成这一步。", "no-vision")
         }
         // Everything above is a hard rule (or one the person lifted); everything below only asks.
         if (waived(p)) return Verdict.Allow
