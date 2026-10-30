@@ -5,7 +5,7 @@
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/assets/hero-en-dark.webp">
-    <img src="docs/assets/hero-en-light.webp" alt="dsh-go: DeepSeek Harness, in your pocket" width="100%">
+    <img src="docs/assets/hero-en-light.webp" alt="DSH Go: DeepSeek Harness, in your pocket" width="100%">
   </picture>
 </p>
 
@@ -14,8 +14,8 @@
 </p>
 
 <p align="center">
-  <img alt="Private beta" src="https://img.shields.io/badge/status-private%20beta-4B67B4?style=flat-square&labelColor=2B3245">
-  <img alt="Android 8+" src="https://img.shields.io/badge/Android-8%2B-4B67B4?style=flat-square&logo=android&logoColor=white&labelColor=2B3245">
+  <a href="https://github.com/ccch1mneyyy/dsh-go/releases/latest"><img alt="Android 8+" src="https://img.shields.io/badge/Android-8%2B-4B67B4?style=flat-square&logo=android&logoColor=white&labelColor=2B3245"></a>
+  <a href="LICENSE"><img alt="License AGPL-3.0" src="https://img.shields.io/badge/license-AGPL--3.0-4B67B4?style=flat-square&labelColor=2B3245"></a>
   <a href="https://forum.dshtui.com"><img alt="Forum" src="https://img.shields.io/badge/forum-forum.dshtui.com-4B67B4?style=flat-square&labelColor=2B3245"></a>
   <a href="https://qm.qq.com/q/OEy2RqZnqY"><img alt="QQ group 1132118290" src="https://img.shields.io/badge/QQ%20group-1132118290-4B67B4?style=flat-square&logo=tencentqq&logoColor=white&labelColor=2B3245"></a>
 </p>
@@ -36,18 +36,26 @@
 
 <br>
 
-<a id="join"></a>
-<h3 align="center">Join the group to get the beta</h3>
+<a id="download"></a>
+<h3 align="center">Download DSH Go</h3>
 
-<p align="center">Beta builds are shared in the groups, mainly QQ. Public beta next week, with the main repo going public.</p>
+<p align="center">Get the latest APK from GitHub Releases or the download page at go.dshtui.com. Most phones need the arm64 package.</p>
 
 <p align="center">
-  <a href="https://qm.qq.com/q/OEy2RqZnqY"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/qr-qq-en-dark.webp"><img src="docs/assets/qr-qq-en-light.webp" width="300" alt="QQ group DSH-Go!!, number 1132118290"></picture></a>&emsp;&emsp;<picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/qr-wechat-en-dark.webp"><img src="docs/assets/qr-wechat-en-light.webp" width="300" alt="WeChat group 小C的AI交流小屋（DSH-Go）"></picture>
+  <a href="https://github.com/ccch1mneyyy/dsh-go/releases/latest"><img alt="Download from GitHub Releases" src="https://img.shields.io/badge/GitHub%20Releases-Download%20APK-4B67B4?style=for-the-badge&logo=github&logoColor=white&labelColor=2B3245"></a>&emsp;<a href="https://go.dshtui.com/download"><img alt="Download from go.dshtui.com" src="https://img.shields.io/badge/go.dshtui.com-Download%20page-4B67B4?style=for-the-badge&labelColor=2B3245"></a>
 </p>
 
 <p align="center">
-  <sub>QQ group <code>1132118290</code>. On a computer, <a href="https://qm.qq.com/q/OEy2RqZnqY">join with one click</a>. The WeChat code changes every week; if it has expired, join the QQ group.</sub><br>
-  <sub>If you installed an early test build, uninstall it first: release builds are signed with a new key.</sub>
+  <b>Once we reach 1,000 stars, I'll bring DSH Go to iOS and HarmonyOS as soon as I can — thanks for your support!</b>
+</p>
+
+<p align="center">
+  <a href="https://github.com/ccch1mneyyy/dsh-go/stargazers"><img alt="GitHub stars" src="https://img.shields.io/github/stars/ccch1mneyyy/dsh-go?style=flat-square&logo=github&label=Star&color=4B67B4&labelColor=2B3245"></a>
+</p>
+
+<p align="center">
+  <sub>New here? Start with the <a href="docs/guide/README.md">user guide</a>, and bring questions to the <a href="#community">forum and QQ group</a>.</sub><br>
+  <sub>An early test build signed with a different key can't be updated in place: uninstall it first, which clears your chats, the Linux environment and settings.</sub>
 </p>
 
 <br>
@@ -156,13 +164,44 @@
 
 <br>
 
+## Features
+
+DSH Go combines a chat interface, an on-device runtime and remote connections. It is a third-party project built on [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness). The DSH engine runs on your phone; model requests are still handled by the model provider you configure.
+
+- **On-device runtime:** install Ubuntu, Node.js and DSH from the app without Root or a separate Termux installation.
+- **Remote connections:** use DSH on a computer or server through SSH or DSH Remote.
+- **Chat and tools:** switch models, send images, use voice input, and respond to tool approvals and questions. Chat and web interfaces are available.
+- **Plugin interfaces:** use native tool cards, forms and panels from plugins adapted for DSH Go. This repository includes an SDK, guides and examples.
+- **Phone control:** after you enable the required permissions, let the local engine read the screen, tap and type. You can stop it at any time.
+- **Sharing and appearance:** share, export and replay conversations, and customize themes, icons and pets.
+
+Capabilities depend on the host and connection. DSH Remote currently accepts image attachments only, does not open the web interface inside the app, limits plugin management to enabling or disabling plugins, and does not support DS Bot or conversation-log export. See [Engine and remote hosts](docs/guide/en/03-engine-hosts.md).
+
+## Install
+
+Installation requires Android 8.0 (API 26) or later. Use the **arm64** package for typical 64-bit Android phones. The **x64** package targets x86_64 devices and emulators. This repository has no 32-bit ARM build.
+
+1. Download the APK for your device architecture from [GitHub Releases](https://github.com/ccch1mneyyy/dsh-go/releases/latest) or the [download page](https://go.dshtui.com/download), and follow Android's prompt to allow that installation source.
+2. On first launch, choose an on-device runtime or a remote host.
+3. Configure a model and its credentials for the selected host, then start a conversation. Some remote providers must be configured on the host itself.
+
+A remote-only setup does not need a local runtime on the phone. Phone control works with the local engine outside safe mode and requires permissions such as Accessibility, as explained in the app. Non-disruptive mode additionally requires Android 14 or later and Shizuku or self-ADB. Follow the [user guide](docs/guide/README.md) for setup.
+
+The local engine uses compatible PRoot startup by default. Direct startup is off by default in Developer options; see [Troubleshooting](docs/guide/en/11-faq.md) for compatibility and fallback behavior. The current Android build targets APK sideloading, not Google Play distribution.
+
+## Data and permissions
+
+Model requests go to the provider you configure. During phone-control tasks, relevant screen text may be sent to the model, and vision-capable models may receive screenshots. Read the app's permission disclosure before enabling the feature.
+
+“Send anonymous usage statistics” is on by default. You can turn it off during onboarding or in Settings → Privacy and sharing. See [Troubleshooting](docs/guide/en/11-faq.md) for the fields collected and what happens when it is disabled. Review content before sharing it; recipients can save a copy of a shared link or file's contents.
+
 ## FAQ
 
 <details>
 <summary><b>Is this an official DeepSeek app?</b></summary>
 <br>
 
-No. dsh-go is an unofficial client made by the community, built on the open-source [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness). DSH itself runs on your phone; the model runs in DeepSeek's cloud, so it needs a connection and bills your account.
+No. DSH Go is an unofficial client made by the community, built on the open-source [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness). DSH itself runs on your phone; model requests go to the provider you configure, so it needs a connection and bills your account with that provider.
 
 </details>
 
@@ -178,7 +217,7 @@ The local web interface only answers to the app itself. Shared links are end-to-
 <summary><b>Will the system kill it in the background?</b></summary>
 <br>
 
-Some battery savers hold apps back. When that happens, dsh-go tells you and opens the right setting, on vivo, Xiaomi, Huawei, Honor and OPPO.
+Some battery savers hold apps back. When that happens, DSH Go tells you and opens the right setting, on vivo, Xiaomi, Huawei, Honor and OPPO.
 
 </details>
 
@@ -186,7 +225,7 @@ Some battery savers hold apps back. When that happens, dsh-go tells you and open
 <summary><b>What phone do I need?</b></summary>
 <br>
 
-Android 8 or later on arm64. The first launch sets up the built-in environment; keep about 1 GB free.
+Android 8 or later. Most phones use the arm64 package; x86_64 devices and emulators use x64. Running DSH on the phone needs the built-in environment, so keep about 1 GB free; connecting to DSH on a computer or server doesn't.
 
 </details>
 
@@ -194,26 +233,97 @@ Android 8 or later on arm64. The first launch sets up the built-in environment; 
 <summary><b>Is it open source?</b></summary>
 <br>
 
-Yes. The main code repository goes public with the public beta next week, under AGPL-3.0. The dsh-go name and logo, and the mascots Deepy and Whale girl, remain all rights reserved.
+Yes. The code is in this repository under [AGPL-3.0](LICENSE); `sdk/` and `examples/` are MIT. The DSH Go name and logo, and the mascots Deepy and Whale girl, are not covered by the open-source license; see [ASSETS.md](ASSETS.md).
 
 </details>
+
+## Build from source
+
+The following workflow targets **Linux x86_64**. The toolchain script currently defaults to JDK 17, Flutter 3.47.7 and the Android SDK/NDK. The app requires Dart `^3.13.5`. Prepare Bash, Git, curl, tar, unzip, xz, Python 3, zstd (for unpacking zstd-compressed deb archives when Python does not provide `compression.zstd`), file and standard GNU utilities. Resolving Ubuntu package locks again also requires gpgv.
+
+Start with the complete source tree and project assets. Fonts, images and other files declared in `app/pubspec.yaml` are build inputs. The following script generates the runtime bundle.
+
+```bash
+git clone https://github.com/ccch1mneyyy/dsh-go.git
+cd dsh-go
+
+bash tooling/setup-toolchain.sh
+source tooling/env.sh
+flutter --version
+java -version
+
+bash runtime/build-runtime.sh arm64-v8a
+DSH_BETA_TOKEN_FILE= bash tooling/build-apk.sh -f arm64 --keep-daemon
+```
+
+The toolchain script downloads the SDK/NDK and emulator images and runs Android SDK license acceptance. Its default location is `~/dev`; set `DEV_ROOT` to use a separate directory. The script reuses existing installations, so check their versions before building.
+
+The output is `app/build/app/outputs/flutter-apk/app-arm64-release.apk`. Runtime assembly uses the versions and verification data pinned in the repository and needs network access to download dependencies. `DSH_BETA_TOKEN_FILE=` leaves out the maintainer's beta-channel token. `--keep-daemon` preserves Gradle daemons, which is useful when working on other Android projects at the same time.
+
+For an x86_64 APK, generate its runtime first:
+
+```bash
+bash runtime/build-runtime.sh x86_64
+DSH_BETA_TOKEN_FILE= bash tooling/build-apk.sh -f x64 --keep-daemon
+```
+
+Without `app/android/key.properties`, a local release build uses debug signing. It cannot replace an official installation signed with a different key. Use a test device and preserve existing data; do not uninstall your daily-use app just to resolve a signing mismatch. Do not commit signing keys or their configuration.
+
+To inspect APK build commands without building:
+
+```bash
+DSH_BETA_TOKEN_FILE= bash tooling/build-apk.sh --dry-run -f all
+```
+
+## Repository layout
+
+| Path | Contents |
+| --- | --- |
+| `app/` | Flutter interface and Android Kotlin platform code |
+| `packages/dsh_client/` | Dart client for the DSH Web API |
+| `packages/dsh_remote/` | Dart client for DSH Remote |
+| `runtime/` | Linux runtime assembly, engine patches and the app bridge |
+| `sdk/plugin-kit/` | Native plugin authoring kit, used from the repository and not published to npm |
+| `examples/plugins/` | Example plugins |
+| `docs/guide/`, `docs/plugins/` | User and plugin development guides |
+| `docs/assets/` | Showcase images, pet animations and community QR codes used on this page |
+| `tooling/` | Toolchain, APK build and diagnostic scripts |
+| `services/`, `site/`, `infra/` | Companion sharing service, website and deployment materials |
+
+## Contribute
+
+Report bugs and suggest improvements in [Issues](https://github.com/ccch1mneyyy/dsh-go/issues). For code, documentation and translation changes, start with [CONTRIBUTING.en.md](CONTRIBUTING.en.md). Plugin authors can use the [plugin guides](docs/plugins/en/README.md) and [SDK](sdk/plugin-kit/README.en.md).
+
+Report security issues through [SECURITY.en.md](SECURITY.en.md). Keep vulnerability details and credentials out of public issues.
+
+<a id="community"></a>
 
 ## Community
 
 - **Forum**: [forum.dshtui.com](https://forum.dshtui.com)
 - **QQ group**: `1132118290` ([join](https://qm.qq.com/q/OEy2RqZnqY))
-- **WeChat group**: scan the [code above](#join); if it has expired, join the QQ group
+- **WeChat group**: scan the code below; if it has expired, join the QQ group
 <!-- Telegram: link to come, add a line here -->
 
-## Thanks
+<p align="center">
+  <a href="https://qm.qq.com/q/OEy2RqZnqY"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/qr-qq-en-dark.webp"><img src="docs/assets/qr-qq-en-light.webp" width="300" alt="QQ group DSH-Go!!, number 1132118290"></picture></a>&emsp;&emsp;<picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/qr-wechat-en-dark.webp"><img src="docs/assets/qr-wechat-en-light.webp" width="300" alt="WeChat group 小C的AI交流小屋（DSH-Go）"></picture>
+</p>
 
-- [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness): the agent dsh-go runs and connects to.
+<p align="center">
+  <sub>QQ group <code>1132118290</code>. On a computer, <a href="https://qm.qq.com/q/OEy2RqZnqY">join with one click</a>. The WeChat code changes every week; if it has expired, join the QQ group.</sub>
+</p>
+
+## License and acknowledgments
+
+This project is licensed under [AGPL-3.0](LICENSE). `sdk/` and `examples/` remain **MIT**. Third-party code and assets retain the terms stated in their own notices.
+
+- [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness): the agent DSH Go runs and connects to.
 - [DSH-TUI](https://github.com/ccch1mneyyy/dsh-TUI): home of the mascots, Deepy and Whale girl.
 
-## License
+Code derived from Phase is used with the author's permission. DeepSeek Harness, PiPilot, DS Bot, DSH Remote and other third-party components and assets retain their own licenses and attribution. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for sources and terms.
 
-Code will be open-sourced under AGPL-3.0 (public at the public beta) · Brand and mascots: all rights reserved
+The DSH Go name, logo and mascots (Deepy and Whale girl) are not covered by the AGPL; see [ASSETS.md](ASSETS.md) for their terms.
 
 <br>
 
-<p align="center"><sub>dsh-go is an unofficial client made by the community. It is not affiliated with or endorsed by DeepSeek. DeepSeek names and marks belong to their owners.</sub></p>
+<p align="center"><sub>DSH Go is an unofficial client made by the community. It is not affiliated with or endorsed by DeepSeek. DeepSeek names and marks belong to their owners.</sub></p>
