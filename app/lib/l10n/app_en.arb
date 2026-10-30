@@ -2662,7 +2662,7 @@
   "phoneControlReadToTable": "Read the screen into tables or tasks",
   "phoneControlNeedsAccessibilityHint": "Requires accessibility",
   "phoneControlTapType": "Tap and type for you",
-  "phoneControlSensitiveHint": "Asks before sending or buying. Never pays.",
+  "phoneControlSensitiveHint": "Sending and purchases normally require approval; settings can relax these protections.",
   "phoneDisclosureWhatTitle": "What it reads",
   "phoneDisclosureWhatBody": "Text on the current screen. With a vision model, a screenshot may be included.",
   "phoneDisclosureWhenTitle": "When it reads",

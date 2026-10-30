@@ -8712,7 +8712,7 @@ class L10nZh extends L10n {
   String get phoneControlTapType => '帮你点按、输入';
 
   @override
-  String get phoneControlSensitiveHint => '发送、下单前先问你，付款由你来';
+  String get phoneControlSensitiveHint => '默认对发送、下单等操作先确认；调整设置可放宽这些保护';
 
   @override
   String get phoneDisclosureWhatTitle => '读什么';

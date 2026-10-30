@@ -5415,7 +5415,7 @@
   "phoneControlReadToTable": "读屏幕，整理成表格或待办",
   "phoneControlNeedsAccessibilityHint": "需要打开无障碍",
   "phoneControlTapType": "帮你点按、输入",
-  "phoneControlSensitiveHint": "发送、下单前先问你，付款由你来",
+  "phoneControlSensitiveHint": "默认对发送、下单等操作先确认；调整设置可放宽这些保护",
   "phoneDisclosureWhatTitle": "读什么",
   "phoneDisclosureWhatBody": "当前屏幕上的文字。用能看图的模型时，可能附一张截图。",
   "phoneDisclosureWhenTitle": "什么时候读",
