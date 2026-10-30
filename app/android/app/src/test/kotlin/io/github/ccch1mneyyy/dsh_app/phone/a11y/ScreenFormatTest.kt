@@ -109,6 +109,18 @@ class ScreenFormatKindTest {
         assertEquals(ScreenKind.TREE, page.kind)
     }
 
+    @Test fun aWindowWhoseRootIsInvisibleIsBlankedLikeWeChat() {
+        // WeChat: one root node with isVisibleToUser=false, so TreeCapture drops it and the
+        // window is listed with root=null. The page is there, its contents are not, so it
+        // must take the blanked path (auto screenshot + tap_xy) instead of unknown, which
+        // used to leave the model with an empty screen and no picture to look at.
+        val bounds = Box(0, 0, 400, 800)
+        val screen = formatted(windows = listOf(UiWindow(1, WindowKind.APP, "com.tencent.mm", null, bounds, null)))
+        assertEquals(ScreenKind.BLANKED, screen.kind)
+        assertTrue(screen.text.contains(ScreenFormat.BLANKED_NOTE))
+        assertFalse(screen.text.contains(ScreenFormat.POOR_TREE_NOTE))
+    }
+
     @Test fun aHiddenWindowIsBlankedNotCanvas() {
         // Secure window: the tree is withheld, which is a different instruction from "nothing to drive".
         val screen = formatted(windows = listOf(UiWindow(1, WindowKind.APP, "example.app", null, Box(0, 0, 400, 800), null)), hidden = true)

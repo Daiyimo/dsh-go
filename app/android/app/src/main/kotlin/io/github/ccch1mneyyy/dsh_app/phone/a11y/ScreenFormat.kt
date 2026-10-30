@@ -134,6 +134,14 @@ object ScreenFormat {
      * perfectly good elements). [hidden] — the main window refused to give its tree — is
      * [ScreenKind.BLANKED]: the page is there, its contents are not.
      *
+     * The same goes for a window the system listed but whose root we had to drop. WeChat
+     * hands the accessibility service a single node with isVisibleToUser=false, so the tree
+     * comes back empty even though the app is right there in front of the user; the old code
+     * called that UNKNOWN and the model got 0 items with no picture and no hint, which is
+     * how everything-disappears-when-WeChat-opens happened. A listed window with nothing
+     * readable inside is a blanked page; only no windows at all (screen off, transition)
+     * stays [ScreenKind.UNKNOWN].
+     *
      * The test is "is there anything to drive", not "is there any text": GAgent counted clicks
      * only, dsh-go counts tap / long-press / scroll / type, because an obfuscated page keeps its
      * random-character text (textCount > 0) while offering nothing drivable — exactly the pages
@@ -144,7 +152,7 @@ object ScreenFormat {
     fun classify(windows: List<UiWindow>, hidden: Boolean): ScreenKind {
         val roots = windows.mapNotNull { it.root }
         if (hidden) return ScreenKind.BLANKED
-        if (roots.isEmpty()) return ScreenKind.UNKNOWN
+        if (roots.isEmpty()) return if (windows.isEmpty()) ScreenKind.UNKNOWN else ScreenKind.BLANKED
         var drivable = 0
         for (root in roots) drivable += countDrivable(root)
         return if (drivable == 0) ScreenKind.CANVAS else ScreenKind.TREE
