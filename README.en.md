@@ -179,7 +179,7 @@ Capabilities depend on the host and connection. DSH Remote currently accepts ima
 
 ## Install
 
-Installation requires Android 8.0 (API 26) or later. Use the **arm64** package for typical 64-bit Android phones. The **x64** package targets x86_64 devices and emulators. This repository has no 32-bit ARM build.
+Installation requires Android 8.0 (API 26) or later. The **arm64** package on the Releases page is for typical 64-bit Android phones; the x64 package for x86_64 devices and emulators is under “Other builds” at the end of the release notes. This repository has no 32-bit ARM build.
 
 1. Download the APK for your device architecture from [GitHub Releases](https://github.com/ccch1mneyyy/dsh-go/releases/latest) or the [download page](https://go.dshtui.com/download), and follow Android's prompt to allow that installation source.
 2. On first launch, choose an on-device runtime or a remote host.
@@ -225,7 +225,7 @@ Some battery savers hold apps back. When that happens, DSH Go tells you and open
 <summary><b>What phone do I need?</b></summary>
 <br>
 
-Android 8 or later. Most phones use the arm64 package; x86_64 devices and emulators use x64. Running DSH on the phone needs the built-in environment, so keep about 1 GB free; connecting to DSH on a computer or server doesn't.
+Android 8 or later. On a phone, download the package on the Releases page; the x86_64 build for emulators is under “Other builds” at the end of the release notes. Running DSH on the phone needs the built-in environment, so keep about 1 GB free; connecting to DSH on a computer or server doesn't.
 
 </details>
 

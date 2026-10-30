@@ -19,9 +19,9 @@ window.DSH_GO_CONFIG = {
   },
   download: {
     label: "下载 DSH Go",
-    platform: "Android 8.0+ · arm64（多数手机）/ x86_64",
+    platform: "Android 8.0+",
     title: "获取 DSH Go",
-    description: "DSH Go 1.0 已发布，支持 Android 8.0 及以上。安装包在 GitHub Releases 发布：大多数手机下载 arm64 版，模拟器和 x86 设备下载 x64 版。",
+    description: "DSH Go 1.0 已发布，支持 Android 8.0 及以上的手机，安装包在 GitHub Releases 发布。",
     qrImage: "assets/author/download-qr.png", // 内容是下面的 url；改 url 时要重新生成
     qrNote: "扫码打开 GitHub 下载页",
     url: "https://github.com/ccch1mneyyy/dsh-go/releases/latest", // 下载入口：GitHub Releases 最新版本
