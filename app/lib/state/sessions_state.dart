@@ -225,6 +225,7 @@ class SessionsController extends AsyncNotifier<List<SessionSummary>> {
           event is SessionRemovedEvent ||
           event is SessionStatusEvent ||
           event is HostReadyEvent) {
+        if (_applyInPlace(event)) return;
         // Ready alone changes no conversation: it doesn't read the list a
         // second time behind the one a (re)connection is reading.
         _debouncedChange |= event is! HostReadyEvent;
@@ -260,7 +261,13 @@ class SessionsController extends AsyncNotifier<List<SessionSummary>> {
   }
 
   Future<List<SessionSummary>> _load(Ref r, DshClient client, int seq, ReadListIdentity? identity) async {
-    final sessions = await client.listSessions();
+    final List<SessionSummary> sessions;
+    _listsOut++;
+    try {
+      sessions = await client.listSessions();
+    } finally {
+      _listsOut--;
+    }
     if (!r.mounted) return const [];
     if (seq == _loadSeq) {
       _all = sessions;
@@ -270,6 +277,37 @@ class SessionsController extends AsyncNotifier<List<SessionSummary>> {
       _readTitles(r, client);
     }
     return _visible();
+  }
+
+  /// Lists being read. An edge landing meanwhile reads the list once more
+  /// instead of being applied in place: the read out may predate it.
+  int _listsOut = 0;
+
+  /// Applies a `$events` edge to the rows when the edge says all that
+  /// changed, instead of reading every conversation again (`session/list`
+  /// has no paging: a remote Host sends all of them, projections and all,
+  /// through the Relay on each read). That covers a conversation added or
+  /// re-announced (the edge carries its row), a listed conversation starting
+  /// a turn, and any edge of a subagent child (hidden here, kept for the
+  /// lineage). A turn ending, a removal and a conversation not listed yet
+  /// still read the list.
+  bool _applyInPlace(HostEvent event) {
+    if (_listsOut > 0 || !state.hasValue || state.isLoading) return false;
+    final SessionSummary row;
+    switch (event) {
+      case SessionAddedEvent(:final summary) when summary.sessionId.isNotEmpty:
+        row = summary;
+      case SessionStatusEvent(:final sessionId, :final running):
+        final listed = _all.where((s) => s.sessionId == sessionId).firstOrNull;
+        if (listed == null || !(listed.isSubagent || running && !listed.blank)) return false;
+        row = listed.copyWith(running: running);
+      default:
+        return false;
+    }
+    final at = _all.indexWhere((s) => s.sessionId == row.sessionId);
+    _all = at < 0 ? [..._all, row] : (List.of(_all)..[at] = row);
+    state = AsyncData(_visible());
+    return true;
   }
 
   List<SessionSummary> _visible() => ref

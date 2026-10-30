@@ -464,6 +464,23 @@ void main() {
       expect(host.rpcMethods.where((m) => m == 'harness.transport.describe').length, before + 2);
     });
 
+    test('the periodic probe waits while the Host keeps sending, and runs once it goes quiet', () async {
+      final target = await signInAndFindHost();
+      await account.connectHost(target, muxOptions: fastMux, healthInterval: const Duration(milliseconds: 150));
+      int describes() => host.rpcMethods.where((m) => m == 'harness.transport.describe').length;
+      final before = describes();
+      final busy = Timer.periodic(const Duration(milliseconds: 40), (_) {
+        for (final c in host.connections.values) {
+          c.event('session/updated', const {'sessionId': 's1'});
+        }
+      });
+      await Future<void>.delayed(const Duration(milliseconds: 700));
+      busy.cancel();
+      expect(describes(), before);
+      await Future<void>.delayed(const Duration(milliseconds: 500));
+      expect(describes(), greaterThan(before));
+    });
+
     test('a Host METHOD_NOT_FOUND response still proves probe liveness', () async {
       final target = await signInAndFindHost();
       final client = await account.connectHost(target, muxOptions: fastMux);

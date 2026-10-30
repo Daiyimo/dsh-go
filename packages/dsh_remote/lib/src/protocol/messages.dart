@@ -41,15 +41,16 @@ class RemoteMessage {
 
   Uint8List encode() => Uint8List.fromList(utf8.encode(jsonEncode(toJson())));
 
-  /// Strict decode (fail closed): valid UTF-8 JSON, v1, known type.
+  /// Strict decode (fail closed): valid UTF-8 JSON without duplicate keys,
+  /// v1, known type.
   static RemoteMessage decode(List<int> bytes) {
-    final String text;
+    final Object? json;
     try {
-      text = utf8.decode(bytes);
+      json = decodeWireJson(utf8.decode(bytes));
     } on FormatException {
-      throw const ProtocolError('Remote message is not valid UTF-8.');
+      throw const ProtocolError('Remote message is not valid UTF-8 JSON.');
     }
-    final map = asMap(tryDecodeJson(text));
+    final map = asMap(json);
     if (map == null) throw const ProtocolError('Remote message is not a JSON object.');
     if (map['v'] != protocolVersion) {
       throw const ProtocolError('Unsupported Remote message version.', 'UNSUPPORTED_VERSION');

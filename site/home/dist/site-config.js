@@ -32,8 +32,8 @@ window.DSH_GO_CONFIG = {
   // 代码框和 Star 气泡都链接到这里；气泡上的 Star 数由本站的 /api/github/stars
   // 提供（services/share-worker/src/github.ts，固定查 ccch1mneyyy/dsh-go）。
   repository: {
-    label: "github / ccch1mneyyy / dsh-go", // 整行文字均可修改
-    url: "https://github.com/ccch1mneyyy/dsh-go"
+    label: "github / ccch1mneyyy / dsh-Go", // 整行文字均可修改
+    url: "https://github.com/ccch1mneyyy/dsh-Go"
   },
   // 三行从右向左滚动。每项可指定 row: 1、2 或 3；省略则轮流分配。
   // name 只用于无平台链接的姓名。平台对象的 label 是对应平台显示名。

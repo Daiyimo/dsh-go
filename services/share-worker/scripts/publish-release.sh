@@ -429,11 +429,18 @@ for block in iter(lambda: sys.stdin.buffer.read(1 << 20), b""):
     n += len(block)
 print(h.hexdigest(), n)'; }
 check() { # LABEL NAME (curl args…) → dies unless the bytes match dist
-  local label=$1 name=$2 got got_size
+  local label=$1 name=$2 got got_size attempt
   shift 2
   if [[ $DRY == 1 ]]; then plan "download $label $name, expect ${SIZE[$name]} bytes, sha256 ${SHA[$name]:0:12}…"; return; fi
-  read -r got got_size < <(curl -fsS --retry 3 --retry-all-errors "$@" | hash_stream || echo "- -")
-  [[ "$got" == "${SHA[$name]}" && "$got_size" == "${SIZE[$name]}" ]] || die "$label $name doesn't match ($got_size bytes, sha256 $got)"
+  # Whole downloads, retried here: curl's own --retry appends the retried body to what it
+  # already sent down the pipe, so a dropped connection looked like a wrong file.
+  for attempt in 1 2 3 4; do
+    read -r got got_size < <(curl -fsS "$@" | hash_stream || echo "- -")
+    [[ "$got" == "${SHA[$name]}" && "$got_size" == "${SIZE[$name]}" ]] && break
+    [[ $attempt == 4 ]] && die "$label $name doesn't match ($got_size bytes, sha256 $got)"
+    echo "  $label $name: got $got_size bytes, downloading again"
+    sleep 5
+  done
   echo "ok - $label $name: $got_size bytes, sha256 matches"
 }
 if [[ $VERIFY == 0 ]]; then

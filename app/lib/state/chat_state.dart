@@ -10,6 +10,7 @@ import 'attachments.dart';
 import 'chat_error_text.dart';
 import 'connection_state.dart';
 import 'hosts_state.dart';
+import 'notify_state.dart' show appForegroundProvider;
 import 'run_pulse.dart';
 import 'sessions_state.dart';
 
@@ -537,6 +538,7 @@ class ChatController extends Notifier<ChatState> {
       _flush?.cancel();
       _flush = null;
       _stopTimeout?.cancel();
+      _awayTimer?.cancel();
       unawaited(_sub?.cancel());
       unawaited(_states?.cancel());
     });
@@ -544,6 +546,12 @@ class ChatController extends Notifier<ChatState> {
     // error. What was loaded stays until a new snapshot replaces it.
     if (client == null) return _retained(loading: false);
     _sameClock = ref.read(activeConnectionProvider).value!.isLocal;
+    if (_sameClock) {
+      _quiet = false;
+    } else {
+      _onScreen(ref.read(appForegroundProvider), building: true);
+      ref.listen(appForegroundProvider, (_, onScreen) => _onScreen(onScreen));
+    }
     // Token speed and compaction for the activity pill (see run_pulse.dart).
     final pulse = ref.watch(runPulseProvider(sessionId));
     _listen(client, pulse, building: true);
@@ -559,6 +567,43 @@ class ChatController extends Notifier<ChatState> {
       }
     });
     return _retained(loading: _transcript.items.isEmpty);
+  }
+
+  /// How long the app may be out of sight before a running conversation on a
+  /// remote host stops streaming tokens ([_quiet]).
+  static const quietAfter = Duration(seconds: 30);
+  Timer? _awayTimer;
+  bool _awayLong = false;
+
+  /// Remote hosts relay every streamed token as a frame of its own. While
+  /// the app has been out of sight for [quietAfter], a running conversation
+  /// follows without them (durable events, approvals and turn ends still
+  /// arrive); back on screen it takes them up again from a fresh snapshot.
+  bool _quiet = false;
+
+  void _onScreen(bool onScreen, {bool building = false}) {
+    _awayTimer?.cancel();
+    _awayLong = false;
+    if (!onScreen) {
+      _awayTimer = Timer(quietAfter, () {
+        _awayLong = true;
+        _quietIfRunning();
+      });
+    } else if (_quiet) {
+      _quiet = false;
+      if (!building) _relisten();
+    }
+  }
+
+  void _quietIfRunning() {
+    if (!_awayLong || _quiet || !ref.mounted || !_transcript.running) return;
+    _quiet = true;
+    _relisten();
+  }
+
+  void _relisten() {
+    final client = _client;
+    if (client != null) _listen(client, ref.read(runPulseProvider(sessionId)));
   }
 
   /// The loaded conversation without its live parts (running, approvals,
@@ -670,6 +715,7 @@ class ChatController extends Notifier<ChatState> {
         .watch(
           sessionId,
           options: WatchOptions(
+            assistantStream: !_quiet,
             includeSyncEvents: true,
             activate: true,
             activationAllowed: () {
@@ -706,6 +752,7 @@ class ChatController extends Notifier<ChatState> {
                 (event is SessionSnapshotEvent && event.isResync);
             final before = reconcile ? _inboxIds() : const <String>{};
             final changed = _transcript.apply(event);
+            if (_awayLong && !_quiet && _transcript.running) scheduleMicrotask(_quietIfRunning);
             if (reconcile) {
               final removed = before.difference(_inboxIds());
               if (event is InboxSplicedEvent && !event.canceled) {

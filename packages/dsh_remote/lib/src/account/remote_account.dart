@@ -13,6 +13,7 @@ import '../carrier/tunnel_carrier.dart';
 import '../channel/rpc_client.dart';
 import '../channel/secure_channel.dart';
 import '../crypto/noise_ik.dart';
+import '../protocol/control.dart' show maxRemoteCapabilityEntries;
 import '../server/server_api.dart';
 import '../state.dart';
 import '../transport/relay_transport.dart';
@@ -175,20 +176,16 @@ class _Credentials {
     this.provider,
   });
 
-  factory _Credentials.fromTokens(
-    String deviceId,
-    String account,
-    DeviceTokenPair tokens, {
-    String? provider,
-  }) => _Credentials(
-    deviceId: deviceId,
-    account: account,
-    accessToken: tokens.accessToken,
-    accessTokenExpiresAt: tokens.accessTokenExpiresAt,
-    refreshToken: tokens.refreshToken,
-    refreshTokenExpiresAt: tokens.refreshTokenExpiresAt,
-    provider: provider,
-  );
+  factory _Credentials.fromTokens(String deviceId, String account, DeviceTokenPair tokens, {String? provider}) =>
+      _Credentials(
+        deviceId: deviceId,
+        account: account,
+        accessToken: tokens.accessToken,
+        accessTokenExpiresAt: tokens.accessTokenExpiresAt,
+        refreshToken: tokens.refreshToken,
+        refreshTokenExpiresAt: tokens.refreshTokenExpiresAt,
+        provider: provider,
+      );
 
   factory _Credentials.fromJson(JsonMap json) => _Credentials(
     deviceId: json['deviceId']! as String,
@@ -463,12 +460,7 @@ class RemoteAccount {
       _Credentials.fromTokens(identity.deviceId, account, tokens, provider: provider),
       beforeWrite: beforeCommit,
     );
-    return RemoteUser(
-      account: account,
-      deviceId: identity.deviceId,
-      serverUrl: serverUrl,
-      provider: provider,
-    );
+    return RemoteUser(account: account, deviceId: identity.deviceId, serverUrl: serverUrl, provider: provider);
   }
 
   DeviceDescriptor _descriptor(_Identity identity) => DeviceDescriptor(
@@ -576,12 +568,7 @@ class RemoteAccount {
     try {
       final tokens = await api.refresh(credentials.deviceId, credentials.refreshToken);
       await _saveCredentials(
-        _Credentials.fromTokens(
-          credentials.deviceId,
-          credentials.account,
-          tokens,
-          provider: credentials.provider,
-        ),
+        _Credentials.fromTokens(credentials.deviceId, credentials.account, tokens, provider: credentials.provider),
       );
       return tokens.accessToken;
     } on RemoteApiException catch (error) {
@@ -721,6 +708,8 @@ class RemoteAccount {
     HostTrustPrompt? confirmNewHost,
     MuxOptions muxOptions = const MuxOptions(),
     Duration timeout = const Duration(seconds: 30),
+    Duration healthInterval = const Duration(seconds: 25),
+    Duration healthTimeout = const Duration(seconds: 10),
     DshTracer? tracer,
   }) async {
     await _restore();
@@ -730,6 +719,8 @@ class RemoteAccount {
     final carrier = RemoteTunnelCarrier(
       hostId: host.id,
       open: (last) => _openHostSession(host, last, confirmNewHost),
+      healthInterval: healthInterval,
+      healthTimeout: healthTimeout,
       tracer: tracer,
     );
     final client = DshClient.withCarrier(carrier, muxOptions: muxOptions);
@@ -840,7 +831,10 @@ class RemoteAccount {
         await rpc.call('harness.transport.describe', const <String, Object?>{}, timeout: const Duration(seconds: 10)),
       );
       final raw = description?['capabilities'];
-      if (raw is! List || raw.any((c) => c is! String || c.isEmpty) || raw.toSet().length != raw.length) {
+      if (raw is! List ||
+          raw.length > maxRemoteCapabilityEntries ||
+          raw.any((c) => c is! String || c.isEmpty) ||
+          raw.toSet().length != raw.length) {
         throw const RemoteConnectException(
           RemoteFailure('INVALID_MESSAGE', 'The Host returned invalid transport capabilities.', retryable: false),
         );
