@@ -173,4 +173,36 @@ class SafetyGateTest {
         val denyGate = SafetyGate({ PhonePolicies(confirmMode = ConfirmMode.TASK) }, approved, { null })
         assertEquals("deny-list", (denyGate.checkWrite(WriteKind.TAP_XY, target(), "com.icbc", null, needsVision = true) as SafetyGate.Verdict.Refuse).rule)
     }
+
+    @Test fun whetherTheModelSeesPicturesSurvivesTheRoundTrip() {
+        // The person's switch, so it has to come back out of the stored policy map: it used to be
+        // dropped by toMap(), which is why the app had no way to say "this model has no eyes".
+        val off = PhonePolicies.fromMap(mapOf("canSeeImages" to false))
+        assertFalse(off.canSeeImages)
+        assertEquals(false, off.toMap()["canSeeImages"])
+        assertTrue(PhonePolicies.fromMap(off.toMap()).canSeeImages == false)
+        assertTrue(PhonePolicies().toMap()["canSeeImages"] as Boolean)
+        // What the switch itself sends: the value and the fact that it is the person's.
+        val fromSwitch = PhonePolicies.fromMap(mapOf("canSeeImages" to false, "canSeeImagesManual" to true))
+        assertFalse(fromSwitch.canSeeImages)
+        assertTrue(fromSwitch.canSeeImagesManual)
+    }
+
+    @Test fun aGuessForANewModelDoesNotUndoThePersonsAnswer() {
+        // The app sends its per-model belief on every model change and guesses "can see" for a model
+        // it knows nothing about. Once the person has moved 模型能看截图, that guess is dropped.
+        val mine = PhonePolicies(canSeeImages = false, canSeeImagesManual = true)
+        val guess = PhonePolicies.fromMap(
+            mapOf("canSeeImages" to true, "canSeeImagesGuess" to true),
+            mine,
+        )
+        assertFalse("a guess turned the person's switch back on", guess.canSeeImages)
+        assertTrue(guess.canSeeImagesManual)
+        // Proof — a picture the model accepted or refused — is sent without the marker and lands.
+        val proof = PhonePolicies.fromMap(mapOf("canSeeImages" to true), mine)
+        assertTrue(proof.canSeeImages)
+        // Nobody's answer yet: the guess is the only belief there is, so it applies.
+        val fresh = PhonePolicies.fromMap(mapOf("canSeeImages" to false, "canSeeImagesGuess" to true))
+        assertFalse(fresh.canSeeImages)
+    }
 }

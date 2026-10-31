@@ -11,23 +11,28 @@ data class PhonePolicies(
     val confirmMode: ConfirmMode = ConfirmMode.ASK,
     val unlocks: PhoneUnlocks = PhoneUnlocks(),
     /**
-     * The model in use can read images. Set from the app the moment a model refuses a picture
-     * (it answers "I cannot see images"), and cleared when the model changes. On a canvas-like
-     * page a point tap is the only way to act, so with this off both channels are closed and the
-     * gate refuses instead of letting the model guess coordinates forever. Not persisted: the app
-     * keeps it per model and tells the gate again after a restart.
+     * The model in use can read images (设置 → 手机操控 → 进阶 → 模型能看截图). On a canvas-like page
+     * a point tap is the only way to act, so with this off both channels are closed: the gate
+     * refuses instead of letting the model guess coordinates until the budget runs out, and a read
+     * of such a page says so up front. Stored with the rest of the policies, because it is a
+     * setting the person makes for the model they chose.
      */
     val canSeeImages: Boolean = true,
+    /**
+     * The person moved that switch themselves. The app keeps its own per-model belief and sends it
+     * on every model change, guessing "can see" for a model it knows nothing about — a guess must
+     * not undo the person's answer, so [fromMap] drops it once this is set. Proof (a picture the
+     * model accepted or refused) is sent without the guess marker and always lands.
+     */
+    val canSeeImagesManual: Boolean = false,
 ) {
     fun toMap(): Map<String, Any?> = linkedMapOf(
         "denyPackages" to denyPackages,
         "confirmEveryWritePackages" to confirmEveryWritePackages,
         "confirmMode" to confirmMode.wire,
         "unlocks" to unlocks.toMap(),
-        // canSeeImages is deliberately left out: it is an observation about the model in use, not a
-        // setting, and the app owns it (keyed by model) and re-sends it when the model changes.
-        // Storing it here would leave a stop recorded for a text-only model covering every model
-        // used afterwards, with nothing left to reopen it.
+        "canSeeImages" to canSeeImages,
+        "canSeeImagesManual" to canSeeImagesManual,
     )
 
     companion object {
@@ -37,12 +42,18 @@ data class PhonePolicies(
                 val raw = map?.get(key) as? List<*> ?: return keep
                 return raw.mapNotNull { (it as? String)?.trim()?.takeIf { s -> PACKAGE.matches(s) } }.distinct()
             }
+            val manual = map?.get("canSeeImagesManual") as? Boolean ?: base.canSeeImagesManual
+            val guess = map?.get("canSeeImagesGuess") as? Boolean == true
+            val asked = map?.get("canSeeImages") as? Boolean
             return PhonePolicies(
                 list("denyPackages", base.denyPackages),
                 list("confirmEveryWritePackages", base.confirmEveryWritePackages),
                 ConfirmMode.fromWire(map?.get("confirmMode") as? String) ?: base.confirmMode,
                 PhoneUnlocks.fromMap(map?.get("unlocks") as? Map<*, *>, base.unlocks),
-                map?.get("canSeeImages") as? Boolean ?: base.canSeeImages,
+                // A guess for a model the app knows nothing about keeps the person's answer; a
+                // stored value nobody re-sends is still theirs on the next start.
+                if (asked != null && !(guess && manual)) asked else base.canSeeImages,
+                manual,
             )
         }
 
@@ -265,7 +276,7 @@ class SafetyGate(
         // runs out. This is a hard stop, so it sits above the waivers.
         if (needsVision && !p.canSeeImages) {
             // l10n:keep agent safety result
-            return Verdict.Refuse("这个页面没有控件可读，只能看截图操作，而当前模型看不懂图片。两条路都不通，请不要再猜坐标：调用 handoff 把手机交还给用户，让他自己完成这一步。", "no-vision")
+            return Verdict.Refuse("这个页面没有控件可读，只能看截图操作，而当前模型看不懂图片（设置 → 手机操控 → 进阶 → 模型能看截图）。两条路都不通，请不要再猜坐标：调用 handoff 把手机交还给用户，让他自己完成这一步。", "no-vision")
         }
         // Everything above is a hard rule (or one the person lifted); everything below only asks.
         if (waived(p)) return Verdict.Allow

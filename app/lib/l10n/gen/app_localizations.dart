@@ -17282,6 +17282,18 @@ abstract class L10n {
   /// **'打开应用时请求全屏窗口，不在小窗或悬浮窗里跑。'**
   String get phoneLaunchFullscreenHint;
 
+  /// No description provided for @phoneModelVision.
+  ///
+  /// In zh, this message translates to:
+  /// **'模型能看截图'**
+  String get phoneModelVision;
+
+  /// No description provided for @phoneModelVisionHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'纯 GUI 的页面只有画面：模型读不了图片时关掉它，DSH 会直接交还给你，不再猜坐标。'**
+  String get phoneModelVisionHint;
+
   /// No description provided for @phoneTaskResultReady.
   ///
   /// In zh, this message translates to:

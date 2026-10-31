@@ -26,6 +26,8 @@ class PhonePureGuiTest {
     private val launches = mutableListOf<String>()
     private val opens = mutableListOf<String>()
     private var fullscreen = true
+    private var policies = PhonePolicies()
+    private var secure = false
 
     private fun driver(screen: PhoneScreen, id: String) = object : PhoneDriver {
         override val screen = screen
@@ -33,7 +35,7 @@ class PhonePureGuiTest {
         override fun foregroundPackage() = pkg
         override fun screenKind() = kind
         override fun observe(detail: Boolean, image: Boolean, region: Box?) =
-            ScreenSnapshot(id = id, text = "Example", appLabel = appLabel, packageName = pkg, kind = kind)
+            ScreenSnapshot(id = id, text = "Example", appLabel = appLabel, packageName = pkg, secure = secure, kind = kind)
         override fun collect(screenId: String, listElementId: Int, maxPages: Int, until: String?) =
             error("unexpected collect")
         override fun target(screenId: String, elementId: Int) = null
@@ -49,7 +51,7 @@ class PhonePureGuiTest {
 
     private val env = object : PhoneEnv {
         override fun enabled() = true
-        override fun policies() = PhonePolicies()
+        override fun policies() = policies
         override fun isLocked() = false
         override fun gate() = object : UserGate {
             override fun confirm(request: ConfirmRequest) = Decision.ALLOW_ONCE
@@ -198,6 +200,46 @@ class PhonePureGuiTest {
         // Not "drawn and taken back": the page is known before anything is drawn, so the GUI never
         // sees a line appear mid-flow.
         assertTrue("the line was drawn on a picture page: $statuses", statuses.none { it != null })
+    }
+
+    @Test fun aWeChatTaskTakesDownALeftoverDisplayBeforeItLaunches() {
+        pkg = "com.tencent.mm"
+        appLabel = "微信"
+        val out = core.call(PhoneToolCatalog.OPEN, mapOf("app" to "com.tencent.mm"))
+        assertFalse(out.text, out.isError)
+        assertEquals("a virtual screen from an earlier task was left up", 1, closeCount)
+        assertEquals(listOf("com.tencent.mm"), opens)
+        assertTrue("the start fell back to the plain way", launches.isEmpty())
+    }
+
+    @Test fun aBlankedWeChatPageIsStillReadable() {
+        // 微信 hides its tree: the page is BLANKED, not a secure window, and the picture is how it
+        // is worked. Refusing it as "安全窗口" was what made the GUI scheme unusable.
+        pkg = "com.tencent.mm"
+        appLabel = "微信"
+        kind = ScreenKind.BLANKED
+        val out = readMain()
+        assertFalse(out.text, out.isError)
+        assertTrue(out.text, out.text.contains("纯 GUI"))
+    }
+
+    @Test fun aRefusedReadSaysWhy() {
+        pkg = "com.icbc"
+        appLabel = "ICBC"
+        val out = readMain()
+        assertTrue(out.isError)
+        assertTrue("the reason was swallowed: ${out.text}", out.text.contains("默认不碰名单"))
+        assertFalse("a generic line still leads the answer", out.text.contains("没有读取这个屏幕的内容"))
+    }
+
+    @Test fun aPicturePageSaysTheModelCannotSeeIt() {
+        policies = PhonePolicies(canSeeImages = false)
+        pkg = "com.game.example"
+        appLabel = "Game"
+        kind = ScreenKind.CANVAS
+        val out = readMain()
+        assertTrue(out.text, out.text.contains("模型能看截图"))
+        assertTrue(out.text, out.text.contains("handoff"))
     }
 
     @Test fun anAppOutsideTheSchemeKeepsTheBackScreen() {

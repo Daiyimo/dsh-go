@@ -9379,6 +9379,12 @@ class L10nZh extends L10n {
   String get phoneLaunchFullscreenHint => '打开应用时请求全屏窗口，不在小窗或悬浮窗里跑。';
 
   @override
+  String get phoneModelVision => '模型能看截图';
+
+  @override
+  String get phoneModelVisionHint => '纯 GUI 的页面只有画面：模型读不了图片时关掉它，DSH 会直接交还给你，不再猜坐标。';
+
+  @override
   String get phoneTaskResultReady => '任务完成 · 查看结果';
 
   @override

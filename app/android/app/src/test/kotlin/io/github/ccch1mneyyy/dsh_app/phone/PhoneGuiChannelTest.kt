@@ -50,10 +50,10 @@ class SafetyGateNoVisionTest {
         assertTrue(allow is SafetyGate.Verdict.Allow)
     }
 
-    @Test fun theFlagIsToldNotStoredAndAMissingKeyKeepsTheBase() {
-        // The app owns this belief (keyed by model) and re-sends it, so it is not written into the
-        // stored policies: a stop recorded for a text-only model must not outlive that model.
-        assertTrue(PhonePolicies.fromMap(PhonePolicies(canSeeImages = false).toMap(), PhonePolicies()).canSeeImages)
+    @Test fun theFlagIsStoredWithTheOtherPolicies() {
+        // 模型能看截图 is a setting the person makes for the model they chose, so it is stored with
+        // the rest of the policies instead of being re-sent by the app on every connect.
+        assertFalse(PhonePolicies.fromMap(PhonePolicies(canSeeImages = false).toMap(), PhonePolicies()).canSeeImages)
         // A single-key update (what the app sends when a model refuses a picture) keeps the rest.
         val base = PhonePolicies(confirmMode = ConfirmMode.TASK, canSeeImages = false)
         val patched = PhonePolicies.fromMap(mapOf("canSeeImages" to true), base)

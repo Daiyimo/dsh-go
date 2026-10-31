@@ -643,5 +643,7 @@
   "phonePureGuiRemove": "移出名单",
   "phonePureGuiNote": "游戏和只有画面的页面看屏时会自动进纯 GUI，不用加进名单。",
   "phoneLaunchFullscreen": "全屏打开应用",
-  "phoneLaunchFullscreenHint": "打开应用时请求全屏窗口，不在小窗或悬浮窗里跑。"
+  "phoneLaunchFullscreenHint": "打开应用时请求全屏窗口，不在小窗或悬浮窗里跑。",
+  "phoneModelVision": "模型能看截图",
+  "phoneModelVisionHint": "纯 GUI 的页面只有画面：模型读不了图片时关掉它，DSH 会直接交还给你，不再猜坐标。"
 }

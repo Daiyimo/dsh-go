@@ -9867,6 +9867,13 @@ class L10nEn extends L10n {
       'Asks for a fullscreen window when opening an app, instead of a small or floating one.';
 
   @override
+  String get phoneModelVision => 'The model can read screenshots';
+
+  @override
+  String get phoneModelVisionHint =>
+      'A pure-GUI page is only a picture: when the model cannot read images, turn this off and DSH hands the phone back instead of guessing coordinates.';
+
+  @override
   String get phoneTaskResultReady => 'Task complete · View result';
 
   @override

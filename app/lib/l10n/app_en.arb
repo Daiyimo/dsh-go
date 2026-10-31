@@ -2865,6 +2865,8 @@
   "phonePureGuiNote": "Games and pages with only a picture switch to pure GUI on their own when the screen is read; they don't need to be listed.",
   "phoneLaunchFullscreen": "Open apps fullscreen",
   "phoneLaunchFullscreenHint": "Asks for a fullscreen window when opening an app, instead of a small or floating one.",
+  "phoneModelVision": "The model can read screenshots",
+  "phoneModelVisionHint": "A pure-GUI page is only a picture: when the model cannot read images, turn this off and DSH hands the phone back instead of guessing coordinates.",
   "phoneTaskResultReady": "Task complete · View result",
   "phoneTaskEndedResult": "Task ended · View result",
   "phoneBackgroundGuideTitle": "Confirmations and return",

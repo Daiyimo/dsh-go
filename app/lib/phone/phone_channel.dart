@@ -600,6 +600,8 @@ class PhonePolicies {
     this.defaultConfirm = const [],
     this.confirmMode = PhoneConfirmMode.ask,
     this.unlocks = const {},
+    this.canSeeImages = true,
+    this.canSeeImagesManual = false,
   });
 
   factory PhonePolicies.fromMap(Map<Object?, Object?> m) {
@@ -615,6 +617,8 @@ class PhonePolicies {
       defaultDeny: _strings(defaults['denyPackages']),
       defaultConfirm: _strings(defaults['confirmEveryWritePackages']),
       confirmMode: PhoneConfirmMode.parse(m['confirmMode']),
+      canSeeImages: _maybeFlag(m['canSeeImages']) ?? true,
+      canSeeImagesManual: _flag(m['canSeeImagesManual']),
       // Only an explicit true lifts a rule.
       unlocks: {
         for (final u in PhoneUnlock.values)
@@ -638,11 +642,32 @@ class PhonePolicies {
   /// The hard rules the person lifted; empty by default.
   final Set<PhoneUnlock> unlocks;
 
+  /// The model in use can read images. With it off, a page that only has a picture cannot be
+  /// worked at all, so DSH hands the phone back instead of guessing coordinates.
+  final bool canSeeImages;
+
+  /// The person moved that switch themselves, so the app's per-model guess must not undo it.
+  final bool canSeeImagesManual;
+
   Map<String, Object?> toWire() => {
     'denyPackages': denyPackages,
     'confirmEveryWritePackages': confirmEveryWritePackages,
     'confirmMode': confirmMode.name,
+    'canSeeImages': canSeeImages,
+    'canSeeImagesManual': canSeeImagesManual,
   };
+
+  PhonePolicies withCanSeeImages(bool on, {bool? manual}) => PhonePolicies(
+    denyPackages: denyPackages,
+    confirmEveryWritePackages: confirmEveryWritePackages,
+    labels: labels,
+    defaultDeny: defaultDeny,
+    defaultConfirm: defaultConfirm,
+    confirmMode: confirmMode,
+    unlocks: unlocks,
+    canSeeImages: on,
+    canSeeImagesManual: manual ?? canSeeImagesManual,
+  );
 
   PhonePolicies withConfirmMode(PhoneConfirmMode mode) => PhonePolicies(
     denyPackages: denyPackages,
@@ -652,6 +677,8 @@ class PhonePolicies {
     defaultConfirm: defaultConfirm,
     confirmMode: mode,
     unlocks: unlocks,
+    canSeeImages: canSeeImages,
+    canSeeImagesManual: canSeeImagesManual,
   );
 
   PhonePolicies withUnlock(PhoneUnlock unlock, bool on) => PhonePolicies(
@@ -662,6 +689,8 @@ class PhonePolicies {
     defaultConfirm: defaultConfirm,
     confirmMode: confirmMode,
     unlocks: on ? {...unlocks, unlock} : ({...unlocks}..remove(unlock)),
+    canSeeImages: canSeeImages,
+    canSeeImagesManual: canSeeImagesManual,
   );
 
   AppRule ruleFor(String package) {
@@ -701,6 +730,7 @@ class PhonePolicies {
       defaultConfirm: defaultConfirm,
       confirmMode: confirmMode,
       unlocks: unlocks,
+      canSeeImages: canSeeImages,
     );
   }
 }
@@ -893,7 +923,16 @@ class PhoneChannel {
   /// instead of letting the model guess coordinates; a model that later takes
   /// pictures again gets `true`. Only this one key goes over the wire
   /// (`setPolicies` keeps everything it doesn't mention).
-  Future<bool> setCanSeeImages(bool on) => _bool('setPolicies', {'canSeeImages': on});
+  /// [guess] marks the app's per-model guess (it assumes "can see" for a model it knows nothing
+  /// about); the native side drops a guess while the person's own answer stands. Proof — a picture
+  /// the model accepted or refused — is sent without it.
+  Future<bool> setCanSeeImages(bool on, {bool guess = false}) => _bool('setPolicies', {
+    'canSeeImages': on,
+    // The switch is the person's answer; the app's per-model guess is not, so it does not claim
+    // the setting.
+    'canSeeImagesManual': !guess,
+    if (guess) 'canSeeImagesGuess': true,
+  });
 
   /// Lifts or restores one hard rule, and nothing else (`setPolicies` keeps
   /// what it isn't sent).

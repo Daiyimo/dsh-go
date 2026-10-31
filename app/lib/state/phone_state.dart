@@ -231,6 +231,22 @@ class PhoneController extends Notifier<PhoneState> {
     return true;
   }
 
+  /// 模型能看截图: whether the model in use can read the pictures the phone sends.
+  /// False when the native side refused (nothing changes). A picture-only page cannot
+  /// be worked with this off, so DSH hands the phone back instead of guessing.
+  /// The person's own answer to 模型能看截图: it is marked as theirs, so the app's per-model guess
+  /// for the next model cannot quietly turn it back on.
+  Future<bool> setCanSeeImages(bool on) async {
+    final current = state.policies;
+    if (current == null) return false;
+    final ok = await _channel.setCanSeeImages(on);
+    if (!ok || !ref.mounted) return false;
+    state = state.copyWith(
+      policies: current.withCanSeeImages(on, manual: true),
+    );
+    return true;
+  }
+
   /// Changes one app's rule; false when the native side refused (nothing changes).
   Future<bool> setRule(String package, AppRule rule) async {
     final current = state.policies;

@@ -367,6 +367,17 @@ class PhoneCore(
         safety.checkOpen(app.packageName, app.label)?.let {
             return Out(it.message, error = true, app = app.label, summary = ui.get("phone_log_open_app", "打开 %1\$s", app.packageName), decision = "refused:${it.rule}") // l10n:keep test default
         }
+        val schemeApp = app.packageName in env.guiScheme() || pureGui()
+        if (app.packageName in env.guiScheme()) {
+            // A virtual screen from an earlier task may still show this app. Take it down before
+            // the first launch: the task runs in one fullscreen app, and leaving the display up
+            // means the person sees 微信 appear on it and vanish again when the first read
+            // latches pure GUI. enterPureGui closes it once for the whole task.
+            enterPureGui(app.packageName, app.label)
+        } else if (pureGui()) {
+            // A picture page latched the task already; a display left over from before still goes.
+            runCatching { env.closeBackground() }
+        }
         if (!background) {
             // 全屏打开应用: the accessibility service may ask for the fullscreen windowing mode,
             // this process may not (a background start from an app lands wherever the ROM puts it —
@@ -397,7 +408,7 @@ class PhoneCore(
             }
             return afterSystem(env.system().launch(app), ui.get("phone_log_open_app", "打开 %1\$s", app.packageName), app.label) // l10n:keep test default
         }
-        if (app.packageName in env.guiScheme() || pureGui()) {
+        if (schemeApp) {
             return Out(pureGuiSentence(app.label), error = true, app = app.label,
                 summary = ui.get("phone_log_open_background", "后台屏打开 %1\$s", app.packageName), decision = "refused:pure-gui") // l10n:keep test default
         }
@@ -564,13 +575,22 @@ class PhoneCore(
         say(if (which == PhoneScreen.BACKGROUND) ui.get("phone_reading_background", "DSH 正在看后台屏") else ui.get("phone_reading_screen", "DSH 正在看屏幕")) // l10n:keep test default
         val shown = safety.filterScreen(snap)
         val refused = shown !== snap
+        val blind = !refused && !env.policies().canSeeImages &&
+            (snap.kind == ScreenKind.CANVAS || snap.kind == ScreenKind.BLANKED)
         return Out(
-            // l10n:keep agent tool result
-            if (refused) "没有读取这个屏幕的内容。"
-            else if (which == PhoneScreen.MAIN && pureGui()) pureGuiHint(snap.appLabel, snap.kind)
-            else "",
+            when {
+                // l10n:keep agent tool result
+                refused -> shown.text
+                // A picture page for a model that cannot read pictures: say it here rather than
+                // let it guess coordinates (the gate would refuse the tap anyway, one step later).
+                blind -> "屏幕 ${snap.id}：这个页面只有画面，当前模型看不懂图片（设置 → 手机操控 → 进阶 → 模型能看截图）。不要猜坐标，调用 handoff 把手机交还给用户。" // l10n:keep agent tool result
+                which == PhoneScreen.MAIN && pureGui() -> pureGuiHint(snap.appLabel, snap.kind)
+                else -> ""
+            },
             error = refused,
-            screen = shown,
+            // A picture the model cannot read is not sent again: the page text is enough to know
+            // what is there, and another refusal costs a turn.
+            screen = if (refused) null else if (blind) shown.copy(image = null, imageMime = null) else shown,
             app = snap.appLabel ?: snap.packageName,
             summary = "$summary ${snap.id}",
             decision = if (refused) "refused:read" else "ok",

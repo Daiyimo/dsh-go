@@ -369,6 +369,23 @@ void main() {
       expect(tester.widget<Switch>(toggle).value, isTrue);
     });
 
+    testWidgets('模型能看截图 is on by default and belongs to the person', (tester) async {
+      final h = await pumpPhone(tester, const PhoneControlScreen());
+      final row = tileWith('模型能看截图');
+      final toggle = find.descendant(of: row, matching: find.byType(Switch));
+      expect(tester.widget<Switch>(toggle).value, isTrue);
+
+      await tester.tap(toggle);
+      await tester.pumpAndSettle();
+      // No guess marker: this is the person's answer, and the app's per-model guess must not
+      // turn it back on when the model changes.
+      expect(h.native!.callsOf('setPolicies').last.arguments, {
+        'canSeeImages': false,
+        'canSeeImagesManual': true,
+      });
+      expect(tester.widget<Switch>(toggle).value, isFalse);
+    });
+
     testWidgets('不打扰模式 row shows its state and opens the page', (tester) async {
       await pumpPhone(
         tester,

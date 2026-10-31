@@ -173,7 +173,10 @@ internal class MainScreenDriver(private val service: PhoneA11yService, private v
             }
             ScreenSnapshot(
                 snap.id, text.toString(), snap.appLabel, snap.packageName,
-                secure = secure || snap.hidden, poorTree = snap.screen.poorTree,
+                // A hidden tree is a blanked page, not a secure window: the picture is the
+                // channel for it (kind is already BLANKED, and the app is readable). Reporting it
+                // as secure made the core refuse the very page the screenshot exists for.
+                secure = secure, poorTree = snap.screen.poorTree,
                 kind = snap.screen.kind, image = bytes, imageMime = mime,
             )
         } finally { cap.recycle() }

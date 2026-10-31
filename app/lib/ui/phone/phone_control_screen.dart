@@ -359,6 +359,18 @@ class _PhoneControlScreenState extends ConsumerState<PhoneControlScreen> {
                     ),
                   ),
                 ),
+                MergeSemantics(
+                  child: ListPageRow(
+                    icon: AppIcons.readScreen,
+                    title: l10n.phoneModelVision,
+                    subtitle: l10n.phoneModelVisionHint,
+                    onTap: () => unawaited(_setCanSeeImages(!(state.policies?.canSeeImages ?? true))),
+                    trailing: Switch(
+                      value: state.policies?.canSeeImages ?? true,
+                      onChanged: (v) => unawaited(_setCanSeeImages(v)),
+                    ),
+                  ),
+                ),
                 ListPageRow(
                   icon: AppIcons.dndMode,
                   spot: SettingsIndex.entry(SettingsPageId.phoneDnd),
@@ -499,6 +511,12 @@ class _PhoneControlScreenState extends ConsumerState<PhoneControlScreen> {
   /// Shizuku/ADB link, so nothing keeps working on the hidden screen.
   Future<void> _setLaunchFullscreen(bool on) async {
     final ok = await ref.read(phoneProvider.notifier).setLaunchFullscreen(on);
+    if (!mounted || ok) return;
+    _toast(context.l10n.phoneActionFailedLater);
+  }
+
+  Future<void> _setCanSeeImages(bool on) async {
+    final ok = await ref.read(phoneProvider.notifier).setCanSeeImages(on);
     if (!mounted || ok) return;
     _toast(context.l10n.phoneActionFailedLater);
   }

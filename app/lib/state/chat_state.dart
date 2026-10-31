@@ -1263,7 +1263,7 @@ class ChatController extends Notifier<ChatState> {
       await prompt(images, receipts);
       // The pictures went through, so this model reads them: lift the no-vision
       // stop the phone gate installed for a text-only model, if it is still on.
-      if (images.isNotEmpty && !_modelSeesImages) _setModelSeesImages(true);
+      if (images.isNotEmpty && !_modelSeesImages) _setModelSeesImages(true, proof: true);
       if (images.isNotEmpty) _imageProof = true;
       return null;
     } on DshRemoteException catch (e) {
@@ -1276,7 +1276,7 @@ class ChatController extends Notifier<ChatState> {
       // there is no tree to read and the screenshot means nothing to it. Tell the
       // phone gate, so it hands those pages back to the person instead of letting
       // the model guess coordinates until the budget runs out.
-      if (_modelSeesImages) _setModelSeesImages(false);
+      if (_modelSeesImages) _setModelSeesImages(false, proof: true);
       await prompt(const [], [...receipts, ...await _stageFiles(operation, attachments, images: true)]);
       return appL10n.stateChatTextOnlyModel;
     }
@@ -1307,14 +1307,19 @@ class ChatController extends Notifier<ChatState> {
   static const _imageModelPref = 'phone.image.model';
   static const _imageCanSeePref = 'phone.image.canSee';
 
-  void _setModelSeesImages(bool on) {
+  /// [proof] is whether this comes from a picture the model accepted or refused, as opposed to the
+  /// optimistic guess made for a model nothing is recorded about. A guess never overrides the
+  /// person's own setting (设置 → 手机操控 → 进阶 → 模型能看截图); proof always lands.
+  void _setModelSeesImages(bool on, {bool proof = false}) {
     _modelSeesImages = on;
     _rememberModelImages();
     if (_gateToldImages == on) return;
     _gateToldImages = on;
     // The phone plugin may be off or unreachable: the gate's own default (can see)
     // is the safe one, and the next prompt with pictures corrects it again.
-    unawaited(ref.read(phoneChannelProvider).setCanSeeImages(on).catchError((_) => false));
+    unawaited(
+      ref.read(phoneChannelProvider).setCanSeeImages(on, guess: !proof).catchError((_) => false),
+    );
   }
 
   void _rememberModelImages() {
