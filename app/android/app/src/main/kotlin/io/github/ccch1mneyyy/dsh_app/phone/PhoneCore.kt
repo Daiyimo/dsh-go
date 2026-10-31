@@ -1024,9 +1024,19 @@ class PhoneCore(
      * the app it was working in and there is no picture of it left to work from.
      */
     private fun onLauncher(): Boolean {
-        if (!pureGui()) return false
+        // Only after this task has actually gone pure GUI, and only while the latch belongs to this
+        // task: [pureGui] also consults a cached foreground package, and on the first call of a task
+        // that cache could still name 微信 while the phone itself was sitting on the launcher — the
+        // task's very first tap was then refused as "now on the desktop" (log 03:20:49
+        // `tap error decision=refused:launcher task=4`).
+        val task = tasks.snapshot().id
+        val latched = (pictureApp != null && pictureTask == task) || (schemeApp != null && schemeTask == task)
+        if (!pureGuiEntered || !latched) return false
         val pkg = runCatching { env.peekPackage() }.getOrNull() ?: return false
-        return pkg in env.homePackages()
+        val home = env.homePackages()
+        val on = pkg in home
+        if (on) env.log("launcher in front while latched ($pkg): tap/scroll refused")
+        return on
     }
 
     private fun key(a: Args): Out {

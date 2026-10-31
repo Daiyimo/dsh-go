@@ -88,11 +88,23 @@ class SerialWorker(private val name: String) {
         } catch (e: java.util.concurrent.RejectedExecutionException) {
             return Outcome.Failed(e)
         }
+        var lastPoll = now()
         while (true) {
             try {
                 return Outcome.Done(future.get(POLL_MS, TimeUnit.MILLISECONDS))
             } catch (_: TimeoutException) {
                 val t = now()
+                // This phone's vendor freezer stops the whole process (StepOSFreeze) for 5–100 s at a
+                // time in the middle of a task. While that happens no poll arrives, and charging the
+                // gap to the call made a perfectly healthy call answer 「超时」 the instant it thawed.
+                // A skipped poll is time the call did not get to use, so it goes to the same bucket
+                // as waiting for the person.
+                val gap = stallGap(lastPoll, t)
+                if (gap > 0) {
+                    scope.waited.addAndGet(gap)
+                    PhoneLog.i("frozen ${gap}ms inside $name (the system stopped this app; not charged to the call)")
+                }
+                lastPoll = t
                 val started = startedAt.get()
                 if (started == 0L) {
                     if (t - submitted > maxTotalMs) {
@@ -148,6 +160,22 @@ class SerialWorker(private val name: String) {
 
     companion object {
         private const val POLL_MS = 50L
+
+        /** A poll later than this did not happen: the process was stopped by the system freezer. */
+        private const val STALL_MS = 400L
+
+        /**
+         * Time between two polls that the call never got to use, because the process was not running.
+         *
+         * This phone's vendor freezer stops the whole process for seconds at a time in the middle of a
+         * task; the poll loop only notices afterwards, as a gap between two ticks. A normal tick
+         * ([POLL_MS] plus scheduling noise) is zero here; a 30 s freeze is ~30 s.
+         */
+        internal fun stallGap(lastPoll: Long, now: Long): Long {
+            val gap = now - lastPoll - POLL_MS
+            // Below [STALL_MS] this is ordinary scheduling noise, not a stopped process.
+            return if (gap > STALL_MS) gap else 0L
+        }
         internal fun now(): Long = System.nanoTime() / 1_000_000
     }
 }

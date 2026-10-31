@@ -423,6 +423,35 @@ class PhonePureGuiTest {
         assertTrue(out.text, out.text.contains("桌面上"))
     }
 
+    @Test fun theDesktopIsNotRefusedBeforeTheTaskHasGonePureGui() {
+        // The task's first call may well arrive while the phone sits on the desktop (the person left
+        // it there, or a start-up launch put it back). Nothing has been latched yet, so there is no
+        // app to protect: refusing here threw away the first tap of a whole task (log 03:20:49
+        // `tap error decision=refused:launcher task=4`).
+        pkg = "com.game.example"
+        appLabel = "Game"
+        kind = ScreenKind.TREE
+        readMain()
+        home = setOf("com.android.launcher3")
+        pkg = "com.android.launcher3"
+        appLabel = "桌面"
+        val out = core.call(PhoneToolCatalog.SCROLL, mapOf("screen" to "s1", "direction" to "down"))
+        assertFalse("the desktop was refused before anything was latched: ${out.text}", out.text.contains("桌面上"))
+    }
+
+    @Test fun aLatchFromAnEarlierTaskDoesNotRefuseThisOne() {
+        pkg = "com.game.example"
+        appLabel = "Game"
+        kind = ScreenKind.CANVAS
+        readMain()
+        assertTrue(tasks.finish())
+        home = setOf("com.android.launcher3")
+        pkg = "com.android.launcher3"
+        appLabel = "桌面"
+        val out = core.call(PhoneToolCatalog.SCROLL, mapOf("screen" to "s1", "direction" to "left"))
+        assertFalse("an old task's latch refused the new task: ${out.text}", out.text.contains("桌面上"))
+    }
+
     @Test fun aLauncherSwipeIsRefusedWhileLatched() {
         pkg = "com.game.example"
         appLabel = "Game"

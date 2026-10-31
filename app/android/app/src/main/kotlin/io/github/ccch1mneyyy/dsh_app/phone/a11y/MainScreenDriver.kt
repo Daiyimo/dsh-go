@@ -91,6 +91,8 @@ internal class MainScreenDriver(private val service: PhoneA11yService, private v
 
         /** The screenshot attached to this snapshot (canvas pages), for post-tap verification. */
         @Volatile var bytes: ByteArray? = null
+        /** Mime of [bytes]; the MCP channel drops an image that has none. */
+        @Volatile var mime: String? = null
         val fingerprints: Set<String> by lazy { screen.elements.map { it.fingerprint }.toSet() }
     }
 
@@ -196,6 +198,7 @@ internal class MainScreenDriver(private val service: PhoneA11yService, private v
                             snap.image = shot.geometry
                             // l10n:keep agent screen result
                             snap.bytes = shot.bytes
+                            snap.mime = shot.mime
                             // l10n:keep agent screen result
                             if (region == null && snap.screen.kind == ScreenKind.TREE && snap.screen.elements.isNotEmpty()) {
                                 // l10n:keep agent screen result
@@ -434,7 +437,8 @@ internal class MainScreenDriver(private val service: PhoneA11yService, private v
         val hit = locate(cap, el)
         val node = hit?.let { cap.native(it.ref) }
         if (hit == null || node == null) {
-            val now = try { publish(cap, false).let { toSnapshot(it) } } finally { cap.recycle() }
+            cap.recycle()
+            val now = observeShot()
             // l10n:keep agent screen result
             return ActionResult(false, "目标 [$elementId]「${short(el.label.ifEmpty { el.role })}」已经变了（界面有变化），没有执行。请看新屏幕再操作。", now)
         }
@@ -568,29 +572,52 @@ internal class MainScreenDriver(private val service: PhoneA11yService, private v
         return after(before, latest, gen, what)
     }
 
+    /**
+     * The same answer `screen` gives, screenshot included.
+     *
+     * Every refusal below hands one of these back, so a model that lost its page (a 30 s system
+     * freeze, a timed-out call, a screen that turned) can act on the very next call instead of
+     * spending a whole round trip asking for the screen again — the single most expensive thing in
+     * a canvas task.
+     */
+    private fun observeShot(): ScreenSnapshot? =
+        runCatching { observe(detail = false, image = true, region = null) }.getOrNull()
+
+    /** A page that carries no picture cannot be point-tapped; say which way to go. */
+    private fun refusedNoPicture(a: PhoneAction.TapXY, snap: Snapshot): ActionResult {
+        PhoneLog.i("tap_xy refused: screen ${a.screenId} has no picture (kind=${snap.screen.kind})")
+        // l10n:keep agent screen result
+        val why = if (snap.screen.kind == ScreenKind.TREE) {
+            "屏幕 ${a.screenId} 能读到控件：用 tap / type / scroll 点元素编号，不要用 tap_xy。坐标点击只给 canvas 这类只有画面的页面用。"
+        } else {
+            "屏幕 ${a.screenId} 没有截图。坐标点击要先用 screen 看屏；canvas 页面 DSH 会自动附图。"
+        }
+        return ActionResult(false, why, observeShot())
+    }
+
     private fun tapXY(a: PhoneAction.TapXY, gen: Long): ActionResult {
         val snap = latest
         if (snap == null || snap.id != a.screenId) {
-            val now = observeQuiet()
+            // The model kept an id from before a hiccup (a 30 s system freeze, a timed-out call).
+            // Answer with the same thing `screen` would — picture included — so the next call can
+            // simply re-measure; a text-only refusal costs it a whole extra round trip.
+            PhoneLog.i("tap_xy refused: ${a.screenId} is not the latest screen (${snap?.id ?: "none"})")
             // l10n:keep agent screen result
-            return ActionResult(false, "屏幕编号 ${a.screenId} 已过期，坐标对不上了。请重新 screen 看屏再点。", now)
+            return ActionResult(false, "屏幕编号 ${a.screenId} 不是最新的（现在是 ${snap?.id ?: "还没有读过屏幕"}）：坐标对不上。下面是当前屏幕，按它的编号重新量一次再点。", observeShot())
         }
         // l10n:keep agent screen result
         // A tree page needs no coordinates: every element has an id, and a point tap there would
         // bypass the element checks (secret words, target re-verification) for no gain. Only a
         // picture page — where `observe` attaches the screenshot — has a point to tap.
-        val geometry = snap.image ?: return ActionResult(false, if (snap.screen.kind == ScreenKind.TREE) {
-            // l10n:keep agent screen result
-            "屏幕 ${a.screenId} 能读到控件：用 tap / type / scroll 点元素编号，不要用 tap_xy。坐标点击只给 canvas 这类只有画面的页面用。"
-        } else {
-            // l10n:keep agent screen result
-            "屏幕 ${a.screenId} 没有截图。坐标点击要先用 screen 看屏；canvas 页面 DSH 会自动附图。"
-        })
+        val geometry = snap.image ?: return refusedNoPicture(a, snap)
         // 0-1000 归一化 → 截图像素 → 屏幕像素。截图和屏幕之间的比例由 ImageGeometry 管, 这里只负责
         // 模型说的那一套单位: 单位混用是坐标点击最贵的故障(像素当归一化点偏几百像素且不报错)。
         val point = geometry.toScreen(ScreenGeom.normToPx(a.x, geometry.width), ScreenGeom.normToPx(a.y, geometry.height))
             // l10n:keep agent screen result
-            ?: return ActionResult(false, "坐标 (${a.x}, ${a.y}) 换算后不在截图范围内（截图是 ${geometry.width}×${geometry.height}）。请重新 screen 看屏再点。")
+            ?: run {
+                PhoneLog.i("tap_xy refused: (${a.x},${a.y}) is outside the ${geometry.width}x${geometry.height} picture")
+                return ActionResult(false, "坐标 (${a.x}, ${a.y}) 换算后不在截图范围内（截图是 ${geometry.width}×${geometry.height}）。下面是当前屏幕，按它重新量一次再点。", observeShot())
+            }
         // l10n:keep agent screen result
         if (snap.ownApp && !lifted.ownApp) return ActionResult(false, "这是 DSH 自己的界面，不操作。")
         // l10n:keep agent screen result
@@ -599,18 +626,27 @@ internal class MainScreenDriver(private val service: PhoneA11yService, private v
         // The picture the model measured was taken before the screen turned over (a game going
         // landscape, 微信 opening a mini program): the same normalized point now lands on a
         // different control, and nothing would fail. Refuse and hand back a fresh screen instead.
-        if (cap.screen.width != snap.display.width || cap.screen.height != snap.display.height) {
-            val now = try { publish(cap, false).let { toSnapshot(it) } } finally { cap.recycle() }
+        val nowBox = cap.screen
+        if (nowBox.width != snap.display.width || nowBox.height != snap.display.height) {
+            PhoneLog.i("tap_xy refused: screen turned ${snap.display.width}x${snap.display.height} -> ${nowBox.width}x${nowBox.height}")
+            cap.recycle()
+            val now = observeShot()
             // l10n:keep agent screen result
             return ActionResult(
                 false,
-                "屏幕方向变了（截图是 ${snap.display.width}×${snap.display.height}，现在是 ${cap.screen.width}×${cap.screen.height}）：坐标要按新画面重新量，请再 screen 一次再点。",
+                "屏幕方向变了（截图是 ${snap.display.width}×${snap.display.height}，现在是 ${nowBox.width}×${nowBox.height}）：坐标要按新画面重新量，请再 screen 一次再点。",
                 now,
             )
         }
-        val same = try { cap.packageName == snap.packageName && cap.windows.lastOrNull()?.id == snap.mainWindowId } finally { cap.recycle() }
+        val capPkg = cap.packageName
+        val capWindow = cap.windows.lastOrNull()?.id
+        val same = try { capPkg == snap.packageName && capWindow == snap.mainWindowId } finally { cap.recycle() }
         // l10n:keep agent screen result
-        if (!same) return ActionResult(false, "截图之后界面已经换了，没有点击。请重新看屏幕。", observeQuiet())
+        if (!same) {
+            PhoneLog.i("tap_xy refused: page changed under the picture (${snap.packageName} -> $capPkg)")
+            // l10n:keep agent screen result
+            return ActionResult(false, "截图之后界面已经换了，没有点击。下面是当前屏幕，按它重新量一次再点。", observeShot())
+        }
         val before = clock.count
         PhoneLog.i("tap_xy norm=(${a.x},${a.y}) -> (${point.first},${point.second}) picture=${geometry.width}x${geometry.height} screen=${snap.display.width}x${snap.display.height} at=${geometry.originX},${geometry.originY}")
         // l10n:keep agent screen result
@@ -682,7 +718,11 @@ internal class MainScreenDriver(private val service: PhoneA11yService, private v
         track: String? = null,
         verifyPixels: Boolean = true,
     ): ActionResult {
-        clock.settle(before, 1_500, 300, 3_000) { cancelled(gen) }
+        // A picture page (game, 微信) produces no accessibility events, so the full "wait for the
+        // first event, then for silence" budget is spent waiting for nothing: 1.5 s of the model's
+        // time on every single tap. 400 ms is enough to see a button react.
+        val picture = previous != null && previous.screen.kind != ScreenKind.TREE
+        clock.settle(before, if (picture) 400L else 1_500L, if (picture) 200L else 300L, if (picture) 1_200L else 3_000L) { cancelled(gen) }
         val cap = try { settledCapture(previous, gen) } catch (e: InterruptedException) { throw e } catch (e: Exception) {
             Log.w(TAG, "observation after an accepted action failed", e)
             // l10n:keep agent screen result
@@ -876,8 +916,17 @@ internal class MainScreenDriver(private val service: PhoneA11yService, private v
 
     /** Formats [cap] as the next snapshot (`s<n>`) and makes it the latest. */
     private fun publish(cap: Capture, detail: Boolean): Snapshot {
-        val id = "${PhoneScreen.MAIN.prefix}${counter.incrementAndGet()}"
         val pkg = cap.packageName
+        // Nothing on the page moved and it is still the same window: keep the id the model already
+        // holds. Minting a new one on every read made every id expire the moment the next call
+        // published, so a model that reused an id it had just been given was told the screen was
+        // stale and had to spend another round trip on `screen`.
+        val held = latest
+        val fingerprints = runCatching { ScreenFormat.index(cap.windows).map { it.fingerprint }.toSet() }.getOrNull()
+        val reuse = held != null && fingerprints != null && held.fingerprints == fingerprints &&
+            held.packageName == pkg && held.display == cap.screen &&
+            held.mainWindowId == cap.windows.lastOrNull()?.id
+        val id = if (reuse) held!!.id else "${PhoneScreen.MAIN.prefix}${counter.incrementAndGet()}"
         val appLabel = label(pkg)
         val titles = cap.windows.mapNotNull { it.title } + ProtectedPages.titleTexts(cap.windows.firstOrNull()?.root, cap.screen.height)
         val protectedPage = ProtectedPages.isProtected(pkg, titles)
@@ -916,7 +965,13 @@ internal class MainScreenDriver(private val service: PhoneA11yService, private v
         return snap
     }
 
-    private fun toSnapshot(s: Snapshot) = ScreenSnapshot(s.id, s.screen.text, s.appLabel, s.packageName, secure = s.hidden, poorTree = s.screen.poorTree, kind = s.screen.kind)
+    private fun toSnapshot(s: Snapshot) = ScreenSnapshot(
+        s.id, s.screen.text, s.appLabel, s.packageName,
+        secure = s.hidden, poorTree = s.screen.poorTree, kind = s.screen.kind,
+        // The picture goes with it: a refusal that hands the page back without the screenshot
+        // forces the model to spend the very round trip this is trying to save.
+        image = s.bytes, imageMime = s.mime,
+    )
 
     /** A fresh text snapshot for an action result; null when the screen can't be read now. */
     private fun observeQuiet(): ScreenSnapshot? {
