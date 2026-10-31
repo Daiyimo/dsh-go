@@ -85,6 +85,14 @@ class PhoneCore(
     @Volatile private var pureGuiEntered = false
 
     /**
+     * The listed app (微信) this task is quiet about, and the task it belongs to. Kept so a page
+     * that belongs to the system — a permission sheet, the shade, our own confirm card — does not
+     * draw the line back over the app underneath it: the app is still the one being driven.
+     */
+    @Volatile private var schemeApp: String? = null
+    @Volatile private var schemeTask = 0L
+
+    /**
      * True while the task belongs to an app that is driven pure GUI: 微信 (an outside GUI scheme
      * reads and drives it on its own) and anything that draws its own picture. Those tasks stay on
      * the one fullscreen app — the virtual screen is refused — and nothing is drawn over it: the
@@ -93,7 +101,13 @@ class PhoneCore(
      */
     private fun pureGui(): Boolean {
         val pkg = mainPackage()
-        if (pkg != null && pkg in env.guiScheme()) return true
+        if (pkg != null && pkg in env.guiScheme()) {
+            schemeApp = pkg
+            schemeTask = tasks.snapshot().id
+            return true
+        }
+        val scheme = schemeApp
+        if (scheme != null && tasks.snapshot().id == schemeTask && (pkg == null || SafetyRules.isSystemPackage(pkg))) return true
         val latched = pictureApp ?: return false
         // A latch is that task's picture. The next task may start while the old app is still in
         // front (or while nobody can name the screen at all), and inheriting it would keep a task
@@ -102,7 +116,7 @@ class PhoneCore(
             clearLatch()
             return false
         }
-        return pkg == null || pkg == latched
+        return pkg == null || pkg == latched || SafetyRules.isSystemPackage(pkg)
     }
 
     private fun clearLatch() {
@@ -110,6 +124,8 @@ class PhoneCore(
         pictureLabel = null
         pictureTask = 0L
         pureGuiEntered = false
+        schemeApp = null
+        schemeTask = 0L
     }
 
     private fun mainPackage(): String? = try {
@@ -127,6 +143,10 @@ class PhoneCore(
      */
     private fun enterPureGui(pkg: String?, label: String? = null) {
         pictureApp = pkg ?: UNKNOWN_PACKAGE
+        if (pkg != null && pkg in env.guiScheme()) {
+            schemeApp = pkg
+            schemeTask = tasks.snapshot().id
+        }
         if (label != null) pictureLabel = label
         pictureTask = tasks.snapshot().id
         if (!pureGuiEntered) {
@@ -145,7 +165,9 @@ class PhoneCore(
         val scheme = pkg != null && pkg in env.guiScheme()
         if (snap.kind == ScreenKind.CANVAS || snap.kind == ScreenKind.BLANKED || scheme) {
             enterPureGui(pkg, snap.appLabel)
-        } else if (pkg != null && pkg != pictureApp) {
+        } else if (pkg != null && pkg != pictureApp && !SafetyRules.isSystemPackage(pkg)) {
+            // Another app in front ends the picture; a system page on top of it does not — it is
+            // the permission sheet or the shade, and the app is still the one being worked on.
             clearLatch()
         }
     }
@@ -533,10 +555,13 @@ class PhoneCore(
         }
         if (env.isLocked()) return locked(summary)
         lastScreen = which
-        say(if (which == PhoneScreen.BACKGROUND) ui.get("phone_reading_background", "DSH 正在看后台屏") else ui.get("phone_reading_screen", "DSH 正在看屏幕")) // l10n:keep test default
         val snap = driver.observe(detail = a.bool("detail") == true, image = a.bool("image") == true, region = region)
         tasks.setApp(snap.appLabel)
+        // After the page is known, not before: a picture page (a game, 微信 under an outside GUI
+        // scheme) must never have the line on it, not even for the second the read takes — the
+        // GUI matches its targets against what is on the screen right then.
         rememberPicture(which, snap)
+        say(if (which == PhoneScreen.BACKGROUND) ui.get("phone_reading_background", "DSH 正在看后台屏") else ui.get("phone_reading_screen", "DSH 正在看屏幕")) // l10n:keep test default
         val shown = safety.filterScreen(snap)
         val refused = shown !== snap
         return Out(
@@ -580,10 +605,10 @@ class PhoneCore(
         if (env.isLocked()) return locked(summary)
         lastScreen = which
         env.sleep(ms)
-        say(if (which == PhoneScreen.BACKGROUND) ui.get("phone_reading_background", "DSH 正在看后台屏") else ui.get("phone_reading_screen", "DSH 正在看屏幕")) // l10n:keep test default
         val snap = driver.observe(detail = a.bool("detail") == true, image = a.bool("image") == true)
         tasks.setApp(snap.appLabel)
         rememberPicture(which, snap)
+        say(if (which == PhoneScreen.BACKGROUND) ui.get("phone_reading_background", "DSH 正在看后台屏") else ui.get("phone_reading_screen", "DSH 正在看屏幕")) // l10n:keep test default
         val shown = safety.filterScreen(snap)
         val refused = shown !== snap
         return Out(

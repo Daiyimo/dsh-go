@@ -176,6 +176,30 @@ class PhonePureGuiTest {
         assertEquals("the system was asked to start it as well", emptyList<String>(), launches)
     }
 
+    @Test fun aSystemPageOnTopOfWeChatDrawsNothing() {
+        // A permission sheet or the shade over 微信: the app underneath is still the one being
+        // driven, and a line drawn there sits in the middle of the picture the GUI matches on.
+        pkg = "com.tencent.mm"
+        appLabel = "微信"
+        readMain()
+        statuses.clear()
+        pkg = "com.android.permissioncontroller"
+        appLabel = "权限控制器"
+        kind = ScreenKind.TREE
+        readMain()
+        assertTrue("the line came back over a system page on top of 微信: $statuses", statuses.none { it != null })
+    }
+
+    @Test fun theFirstReadOfAGameNeverDrawsTheLine() {
+        pkg = "com.game.example"
+        appLabel = "Game"
+        kind = ScreenKind.CANVAS
+        readMain()
+        // Not "drawn and taken back": the page is known before anything is drawn, so the GUI never
+        // sees a line appear mid-flow.
+        assertTrue("the line was drawn on a picture page: $statuses", statuses.none { it != null })
+    }
+
     @Test fun anAppOutsideTheSchemeKeepsTheBackScreen() {
         val out = readBack()
         assertFalse(out.text, out.isError)

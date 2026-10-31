@@ -143,7 +143,7 @@ Read the [full risk notice and disclaimer](https://github.com/Daiyimo/dsh-go/blo
 Under **Advanced**:
 
 - **Virtual screen**: the quick on/off for that mode, off by default. On it, the agent reads and taps on a trusted virtual screen; turning it off also ends the running task and drops the Shizuku / ADB link, so nothing keeps working behind your back. Pure-GUI tasks (WeChat, games) never use it: they do not open the virtual screen, and one left on is closed for them.
-- **Open apps fullscreen**: on by default; when an app is opened the accessibility service asks for a fullscreen window, so it does not run in a small or floating one. Off leaves the start to the system.
+- **Open apps fullscreen**: on by default; when an app is opened the accessibility service asks for a fullscreen window, so it does not run in a small or floating one. Off leaves the start to the system. On a device where it changes nothing (StepX-like ones that only go fullscreen on the virtual screen), turn it off and keep using **Non-disruptive mode** below; both ways stay, and a pure-GUI app like WeChat gets no bar either way.
 - **Non-disruptive mode**: works on a hidden screen while you use your phone. Needs Android 14 or later; choose **Use Shizuku** or **Direct ADB** and follow the setup. It needs Wi-Fi with Developer options and wireless debugging on, must be reactivated after restarting your phone, and the screen must still stay on and unlocked.
 - **Background running**: prevents Android from turning off accessibility; opens the phone settings guide.
 - **Confirmations and return**: see confirmations and task results in time; see Confirmations and return above.
