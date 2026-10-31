@@ -279,10 +279,36 @@ class PrivilegedDisplayCore(private val context: Context) {
     private fun fullscreen(request: Bundle, response: Bundle) {
         val component = request.getString(Proto.COMPONENT).orEmpty()
         if (!COMPONENT.matches(component)) throw Fault("invalidArguments")
-        val ok = runShell("/system/bin/am", "start", "--windowingMode", "1", "-n", component)
-        PhoneLog.i("fullscreen $component via am: ok=$ok")
+        val pkg = component.substringBefore('/')
+        // One shot is not enough: the ROM decides the windowing mode again while the task is still
+        // coming up (`WindowMode:mini … fullscreen -> stepos-mini-window`, a couple of milliseconds
+        // after the start; sometimes `stepos-pinned-window` seconds later). So start, look at what
+        // the task actually got, and start again while it sits in a small window. `am` runs as the
+        // shell uid, which this ROM does not re-mount into a mini window.
+        var ok = false
+        var mode = ""
+        var tries = 0
+        while (tries < FULLSCREEN_TRIES) {
+            tries++
+            if (runShell("/system/bin/am", "start", "--windowingMode", "1", "-n", component)) ok = true
+            Thread.sleep(FULLSCREEN_SETTLE_MS)
+            mode = taskMode(pkg)
+            if (mode.isEmpty() || !mode.startsWith("stepos")) break
+        }
+        PhoneLog.i("fullscreen $component via am: ok=$ok tries=$tries mode=$mode")
         response.putBoolean(Proto.OK, ok)
     }
+
+    /** The windowing mode of the task showing [pkg], as the shell prints it ("fullscreen", "stepos-mini-window"…). */
+    private fun taskMode(pkg: String): String = runCatching {
+        val process = ProcessBuilder(
+            "/system/bin/sh", "-c", "dumpsys activity activities | grep -m1 -F 'I=$pkg/'",
+        ).redirectErrorStream(true).start()
+        val out = process.inputStream.readBytes().toString(Charsets.UTF_8)
+        process.waitFor(SHELL_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+        val at = out.indexOf("mode=")
+        if (at < 0) "" else out.substring(at + "mode=".length).takeWhile { it.isLetterOrDigit() || it == '-' }
+    }.getOrDefault("")
 
     // ---- display lifecycle -------------------------------------------------
 
@@ -920,7 +946,10 @@ class PrivilegedDisplayCore(private val context: Context) {
     companion object {
         private val PACKAGE = Regex("[a-zA-Z][a-zA-Z0-9_]*(\\.[a-zA-Z0-9_]+)+")
         /** `pkg/activity`: exactly the shape `am start -n` takes, nothing else is passed to it. */
-        private val COMPONENT = Regex("[a-zA-Z][a-zA-Z0-9_]*(\\.[a-zA-Z0-9_]+)+/[a-zA-Z0-9_.$]+")
+        /** How many times a launch is re-asked for, and how long the task is given to settle in between. */
+    private val FULLSCREEN_TRIES = 3
+    private val FULLSCREEN_SETTLE_MS = 350L
+    private val COMPONENT = Regex("[a-zA-Z][a-zA-Z0-9_]*(\\.[a-zA-Z0-9_]+)+/[a-zA-Z0-9_.$]+")
         private val FLAG_NAMES = listOf(
             "PUBLIC", "OWN_CONTENT_ONLY", "SUPPORTS_TOUCH", "DESTROY_CONTENT_ON_REMOVAL",
             "TRUSTED", "OWN_FOCUS", "STEAL_TOP_FOCUS_DISABLED")

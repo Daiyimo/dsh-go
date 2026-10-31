@@ -272,10 +272,13 @@ class PhoneControl private constructor(private val app: Context) : PhoneEnv, Con
      */
     override fun launchFullscreen(): Boolean = prefs.getBoolean(K_LAUNCH_FULLSCREEN, true)
 
+    /** True when the switch was stored. It used to answer with the new value, so switching it OFF
+     *  looked like a failure to the page ("it did not work") and the row bounced back. */
     fun setLaunchFullscreen(on: Boolean): Boolean {
         prefs.edit().putBoolean(K_LAUNCH_FULLSCREEN, on).apply()
         emitStatus()
-        return on
+        log("launch fullscreen saved: $on")
+        return true
     }
 
     /** `guiScheme` in the status map: the list plus a label for each, for the settings page. */

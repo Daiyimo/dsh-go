@@ -509,7 +509,10 @@ class PhoneCore(
             }
             env.log("open ${app.packageName} left to the system")
             val launched = afterSystem(env.system().launch(app), ui.get("phone_log_open_app", "打开 %1\$s", app.packageName), app.label) // l10n:keep test default
-            if (env.launchFullscreen() && env.a11yState() == A11yState.CONNECTED) {
+            // The repair goes through the privileged channel, not through the accessibility
+            // service, so a bound service is not a condition for asking for it: a task that came up
+            // in the ROM's small window is unworkable however the start happened.
+            if (env.launchFullscreen()) {
                 val full = runCatching { env.forceFullscreen(app.packageName) }.getOrDefault(false)
                 env.log("fullscreen after system launch ${app.packageName}: ok=$full")
             }

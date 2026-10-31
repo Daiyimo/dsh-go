@@ -20,6 +20,8 @@ class PhoneLaunchTest {
     private var openOk = true
     private val opens = mutableListOf<String>()
     private val launches = mutableListOf<String>()
+    private val fullscreens = mutableListOf<String>()
+    private var a11y = A11yState.CONNECTED
 
     private val main = object : PhoneDriver {
         override val screen = PhoneScreen.MAIN
@@ -52,7 +54,8 @@ class PhoneLaunchTest {
         }
         override fun driver(screen: PhoneScreen): PhoneDriver? =
             if (screen == PhoneScreen.MAIN && driverPresent) main else null
-        override fun a11yState() = A11yState.CONNECTED
+        override fun a11yState() = a11y
+        override fun forceFullscreen(packageName: String): Boolean { fullscreens += packageName; return true }
         override fun backgroundUnavailable() = "后台屏用不了。"
         override fun launchFullscreen() = fullscreen
         override fun zone() = ZoneId.of("UTC")
@@ -106,6 +109,28 @@ class PhoneLaunchTest {
         assertFalse(out.text, out.isError)
         assertEquals("a service that answered no did not get a second try through it", listOf("example.app"), opens)
         assertEquals("the app was not started the plain way after the service failed", listOf("example.app"), launches)
+    }
+
+    @Test fun theRepairIsAskedForAfterAServiceStart() {
+        open()
+        assertEquals("the ROM's small window was not repaired after the service start", listOf("example.app"), fullscreens)
+    }
+
+    @Test fun theRepairDoesNotNeedTheService() {
+        // 无障碍 off: the start is the system's, but the windowing mode still has to be repaired,
+        // and that goes through the privileged channel, not through the service.
+        a11y = A11yState.DISABLED
+        driverPresent = false
+        val out = open()
+        assertFalse(out.text, out.isError)
+        assertEquals(listOf("example.app"), launches)
+        assertEquals("the repair was skipped because the service was gone", listOf("example.app"), fullscreens)
+    }
+
+    @Test fun theSwitchOffAsksForNoRepair() {
+        fullscreen = false
+        open()
+        assertEquals(emptyList<String>(), fullscreens)
     }
 
     @Test fun noServiceMeansTheSystemStillOpensIt() {
