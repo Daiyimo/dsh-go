@@ -20,6 +20,8 @@ class PhoneImeTest {
     private var imeSecret = false
     private val typedIn = mutableListOf<Pair<String, Boolean>>()
     private var commitAnswer: String? = null
+    private var tapOk = false
+    private var keyboard = false
 
     private fun driver(screen: PhoneScreen, id: String) = object : PhoneDriver {
         override val screen = screen
@@ -30,7 +32,7 @@ class PhoneImeTest {
             ScreenSnapshot(id = id, text = "微信", appLabel = appLabel, packageName = pkg, kind = kind)
         override fun collect(screenId: String, listElementId: Int, maxPages: Int, until: String?) = error("unexpected collect")
         override fun target(screenId: String, elementId: Int) = null
-        override fun perform(action: PhoneAction) = error("unexpected action")
+        override fun perform(action: PhoneAction) = if (tapOk) ActionResult(true, "点到了。", null) else error("unexpected action")
         override fun open(packageName: String) = error("unexpected open")
     }
 
@@ -48,6 +50,7 @@ class PhoneImeTest {
         override fun backgroundUnavailable() = "后台屏用不了。"
         override fun guiScheme() = PhoneCore.DEFAULT_GUI_SCHEME
         override fun imePassword() = imeSecret
+        override fun keyboardUp() = keyboard
         override fun typeIntoPage(text: String, submit: Boolean): String? {
             typedIn += text to submit
             return commitAnswer
@@ -115,5 +118,22 @@ class PhoneImeTest {
         val out = type("银行卡")
         assertTrue(out.isError)
         assertTrue(out.text, out.text.contains("应用没有接受这段文字。"))
+    }
+
+    @Test fun aTapThatPopsTheKeyboardUpTellsTheModelNotToTapAgain() {
+        tapOk = true
+        keyboard = true
+        kind = ScreenKind.CANVAS
+        core.call(PhoneToolCatalog.SCREEN, emptyMap())
+        val out = core.call(PhoneToolCatalog.TAP_XY, mapOf("observation" to "s1", "x" to 500, "y" to 90))
+        assertTrue(out.text, out.text.contains("不要再点输入框"))
+    }
+
+    @Test fun aTapWithTheKeyboardDownSaysNothingExtra() {
+        tapOk = true
+        kind = ScreenKind.CANVAS
+        core.call(PhoneToolCatalog.SCREEN, emptyMap())
+        val out = core.call(PhoneToolCatalog.TAP_XY, mapOf("observation" to "s1", "x" to 500, "y" to 90))
+        assertFalse(out.text, out.text.contains("不要再点输入框"))
     }
 }

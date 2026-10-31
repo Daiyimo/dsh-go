@@ -55,6 +55,11 @@ interface PhoneEnv {
     /** The focused field is a password / code field: DSH never types there. */
     fun imePassword(): Boolean = false
     /**
+     * A keyboard is on screen right now, i.e. a field already has the focus. Tapping that field
+     * again is what closes the keyboard and takes the focus away, so the model is told not to.
+     */
+    fun keyboardUp(): Boolean = false
+    /**
      * Text into a page that has no field ids at all (微信, games): `input text` over the shell-uid
      * engine for ASCII, else borrowing the person's own input method for one commit and putting it
      * back (0·A, see [io.github.ccch1mneyyy.dsh_app.phone.input.TextInjector]). Null on success,
@@ -896,8 +901,13 @@ class PhoneCore(
             return Out(said, screen = after, app = app, summary = summary, decision = decision)
         }
         val res = driver.perform(action!!)
+        // A tap that popped the keyboard up leaves the field focused: telling the model so keeps it
+        // from tapping the field a second time, which is exactly what dismisses the keyboard.
+        val tapped = res.ok && (kind == WriteKind.TAP || kind == WriteKind.TAP_XY) && env.keyboardUp()
+        // l10n:keep agent tool result
+        val hint = if (tapped) "输入法已经弹出来了，输入框就在光标里：直接 type 送文字，不要再点输入框——再点一次会把键盘收起来。" else ""
         return Out(
-            res.message,
+            if (hint.isEmpty()) res.message else res.message + "\n" + hint,
             error = !res.ok,
             screen = res.screen?.let { safety.filterScreen(it) },
             app = app,

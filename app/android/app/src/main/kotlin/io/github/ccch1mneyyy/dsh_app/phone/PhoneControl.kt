@@ -171,6 +171,9 @@ class PhoneControl private constructor(private val app: Context) : PhoneEnv, Con
                     background.key(android.view.KeyEvent.KEYCODE_PASTE)
                         .also { log("paste route: paste key ok=$it") }
             },
+            // A keyboard on screen means a field already has the focus: telling the model to tap it
+            // first would close that keyboard and drop the paste.
+            keyboardUp = { runCatching { PhoneRegistry.mainDriver?.imeShown() == true }.getOrDefault(false) },
         )
     }
 
@@ -681,6 +684,9 @@ class PhoneControl private constructor(private val app: Context) : PhoneEnv, Con
     override fun peekPackage(): String? = runCatching { PhoneRegistry.mainDriver?.foregroundPackage() }.getOrNull()
 
     override fun imePassword(): Boolean = DshIme.password()
+
+    override fun keyboardUp(): Boolean =
+        runCatching { PhoneRegistry.mainDriver?.imeShown() == true }.getOrDefault(false)
     override fun typeIntoPage(text: String, submit: Boolean): String? {
         val answer = injector.type(text, submit)
         log("type ${text.length} chars submit=$submit -> ${answer ?: "ok"}")

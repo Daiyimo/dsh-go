@@ -19,6 +19,7 @@ import android.os.SystemClock
 import android.util.Log
 import android.view.Display
 import android.view.accessibility.AccessibilityNodeInfo
+import android.view.accessibility.AccessibilityWindowInfo
 import io.github.ccch1mneyyy.dsh_app.phone.ActionResult
 import io.github.ccch1mneyyy.dsh_app.phone.Availability
 import io.github.ccch1mneyyy.dsh_app.phone.CollectResult
@@ -128,6 +129,10 @@ internal class MainScreenDriver(private val service: PhoneA11yService, private v
             ?: return false
         manager.setPrimaryClip(android.content.ClipData.newPlainText("dsh", text))
         true
+    }.getOrDefault(false)
+
+    override fun imeShown(): Boolean = runCatching {
+        service.windows.any { it.type == AccessibilityWindowInfo.TYPE_INPUT_METHOD }
     }.getOrDefault(false)
 
     override fun fieldReady(): Boolean =

@@ -191,6 +191,9 @@ interface PhoneDriver {
     /** Package of the app in front on this screen, if known (for per-app approval and deny lists). */
     fun foregroundPackage(): String?
 
+    /** A keyboard window is on screen, i.e. some field already has the focus. */
+    fun imeShown(): Boolean = false
+
     /** Whether a focused editable field exists to paste into (微信 hides its tree, so: no). */
     fun fieldReady(): Boolean = false
 

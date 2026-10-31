@@ -60,11 +60,17 @@ interface PastePort {
  *
  * When nothing is available (no Shizuku / self-ADB), the model gets a sentence saying so rather
  * than a silently empty field.
+ *
+ * Tapping the field again is never part of the recipe: on 微信 the tap that opens the search box
+ * already brings the keyboard up and puts the cursor in it, and a second tap dismisses the keyboard
+ * and takes the focus away. So the answer to a failure says "type again", not "tap it first".
  */
 class TextInjector(
     private val channel: TypingChannel,
     private val ime: ImePort,
     private val paste: PastePort? = null,
+    /** Whether a keyboard is already on screen, i.e. a field has the focus right now. */
+    private val keyboardUp: () -> Boolean = { false },
     /** Uptime in ms; a seam so the wait below is testable without a device. */
     private val now: () -> Long = { System.nanoTime() / 1_000_000 },
     private val sleep: (Long) -> Unit = { Thread.sleep(it) },
@@ -119,8 +125,11 @@ class TextInjector(
                 }
                 sleep(POLL_MS)
             }
-            // l10n:keep agent tool result
-            return last ?: "文字没有送进输入框：先用 tap_xy 点一下输入框（让光标在里面），再 type。"
+            if (last != null) return last
+            // A keyboard that is already up means the field has the focus: sending the model off to
+            // tap it again is what closes the keyboard and loses the paste (measured on 微信).
+            return if (keyboardUp()) FIELD_READY_NO_TAP else NO_FIELD
+
         } finally {
             if (borrowed) {
                 if (previous != null) channel.ime(Proto.IME_SET, previous)
@@ -138,6 +147,15 @@ class TextInjector(
 
         private const val NO_ENGINE =
             "这个页面没有输入框编号，文字要经特权通道送进去：先在 设置 › 手机操控 › 进阶 开通 不打扰模式 或 自连 ADB（也可以用 DSH 输入法 手动顶上）。现在两条都不通。"
+
+        // l10n:keep agent tool result
+        private const val NO_FIELD =
+            "文字没有送进输入框：先用 tap_xy 点一下输入框（让光标在里面），再 type。"
+
+        /** Nothing landed, but the keyboard is up already: tapping the field would close it. */
+        // l10n:keep agent tool result
+        const val FIELD_READY_NO_TAP =
+            "文字还没有送进输入框。键盘已经弹着、光标就在里面：直接再 type 一次，不要再点输入框——再点一下键盘就收起来，反而更粘不进去。"
 
         /** The paste key was delivered with the text on the clipboard — nothing proves it landed. */
         // l10n:keep agent tool result

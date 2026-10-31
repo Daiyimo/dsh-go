@@ -61,7 +61,8 @@ class TextInjectorTest {
     private val ime = Ime()
     private val paste = Paste()
     private var clock = 0L
-    private val injector = TextInjector(channel, ime, paste, now = { clock }, sleep = { clock += it })
+    private var keyboard = false
+    private val injector = TextInjector(channel, ime, paste, keyboardUp = { keyboard }, now = { clock }, sleep = { clock += it })
 
     @Test fun asciiGoesThroughTheShellWithoutTouchingTheKeyboard() {
         assertNull(injector.type("hello123", submit = false))
@@ -175,5 +176,24 @@ class TextInjectorTest {
         assertFalse(TextInjector.asciiOnly("a%sb"))
         assertFalse(TextInjector.asciiOnly("a\nb"))
         assertFalse(TextInjector.asciiOnly("x".repeat(TextInjector.MAX_TEXT + 1)))
+    }
+
+    @Test fun aKeyboardAlreadyUpMeansTypeAgainAndDoNotTapTheField() {
+        paste.clipboardOk = false
+        ime.readyNow = false
+        keyboard = true
+        val said = injector.type("银行卡", submit = false)
+        assertNotNull(said)
+        assertTrue(said!!, said!!.contains("不要再点输入框"))
+        assertFalse(said!!, said!!.contains("先用 tap_xy"))
+    }
+
+    @Test fun withoutAKeyboardTheModelIsSentToTheFieldFirst() {
+        paste.clipboardOk = false
+        ime.readyNow = false
+        keyboard = false
+        val said = injector.type("银行卡", submit = false)
+        assertNotNull(said)
+        assertTrue(said!!, said!!.contains("先用 tap_xy"))
     }
 }
