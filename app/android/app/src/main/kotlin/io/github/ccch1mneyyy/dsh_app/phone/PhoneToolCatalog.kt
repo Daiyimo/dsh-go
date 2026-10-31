@@ -287,11 +287,12 @@ object PhoneToolCatalog {
         Tool(
             WAIT,
             // l10n:keep agent tool catalog
-            "等一会儿，什么都不点，然后读当前屏幕。页面还在加载、动画没停、刚弹出的输入法键盘还没落下、" +
-                "或者刚 handoff 回来时用；ms 是等待毫秒数，1 到 30000。",
+            "等一会儿，什么都不点，然后读当前屏幕。只在真的需要停住时用（动画没停、刚 handoff 回来）；" +
+                "页面还在加载就直接再 screen 一次，不要靠 wait 赌它加载完：读屏本身会等页面稳定。" +
+                "ms 是等待毫秒数，1 到 5000。",
             linkedMapOf(
                 // l10n:keep agent tool catalog
-                "ms" to int("等待毫秒数，1-30000；省略等 2 秒", 1, 30_000),
+                "ms" to int("等待毫秒数，1-5000；省略等 2 秒", 1, 5_000),
                 // l10n:keep agent tool catalog
                 "screen" to str("屏幕号；省略时作用于主屏"),
                 // l10n:keep agent tool catalog

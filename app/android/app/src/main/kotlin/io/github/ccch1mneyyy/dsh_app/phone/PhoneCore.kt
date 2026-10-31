@@ -75,6 +75,13 @@ interface PhoneEnv {
         // l10n:keep agent tool result
         "这个页面没有输入框编号，文字要经特权通道送进去：先在 设置 › 手机操控 › 进阶 开通 不打扰模式 或 自连 ADB。"
     fun sleep(ms: Long) = Thread.sleep(ms)
+    /**
+     * Called on every tool call: keeps this ROM's freezer from stopping the app mid-task (a frozen
+     * process answers the next call tens of seconds late). See [KeepAwake].
+     */
+    fun keepAwake() {}
+    /** This app's own package, so a task can tell "the person came back to DSH" from another app. */
+    fun ownPackage(): String = ""
 }
 
 /**
@@ -311,6 +318,9 @@ class PhoneCore(
             // l10n:keep agent tool result
             return ToolOutput("手机操控已在 DSH 设置里关闭。请用户在 设置 → 手机操控 里打开后重启引擎。", isError = true)
         }
+        // The task is alive from here on: keep the system's freezer off the app (it stops on its own
+        // when the calls stop coming).
+        runCatching { env.keepAwake() }
         val outcome = worker.run(budgetMs(name), MAX_TOTAL_MS) { scope -> execute(name, Args(args), scope) }
         tasks.touch()
         val out = when (outcome) {
@@ -667,6 +677,29 @@ class PhoneCore(
         // l10n:keep agent tool result
         Out("手机锁着屏，DSH 不在锁屏状态下操作。请用户解锁后再说一声。", error = true, summary = summary, decision = "refused:locked")
 
+    /**
+     * A latched task whose app lost the front to this app itself (the person came back to DSH, a
+     * notification opened it): asking for the app's fullscreen again also brings it to the front, so
+     * the read describes the task instead of DSH Go — and the model does not spend an `open` (3-5 s
+     * and the page it had) getting back.
+     */
+    private fun returnToTask() {
+        val front = runCatching { env.peekPackage() }.getOrNull() ?: return
+        val own = env.ownPackage()
+        if (own.isEmpty() || front != own) return
+        // The latch itself, not pureGui(): once DSH Go is in front the package belongs to no scheme
+        // and pureGui() is false — which is exactly how a read ends up describing DSH's own screen.
+        val task = tasks.snapshot().id
+        val back = when {
+            pictureApp != null && pictureTask == task -> pictureApp
+            schemeApp != null && schemeTask == task -> schemeApp
+            else -> null
+        } ?: return
+        val ok = runCatching { env.forceFullscreen(back) }.getOrDefault(false)
+        env.log("own app in front: brought $back back ok=$ok")
+        if (ok) env.sleep(600)
+    }
+
     private fun screen(a: Args): Out {
         val which = if (a.bool("background") == true) PhoneScreen.BACKGROUND else PhoneScreen.MAIN
         val summary = if (which == PhoneScreen.BACKGROUND) ui.get("phone_log_background_read", "读后台屏") else ui.get("phone_log_screen_read", "读屏") // l10n:keep test default
@@ -674,6 +707,7 @@ class PhoneCore(
             is Either.Left -> return Out(r.value, error = true, summary = summary, decision = "invalid")
             is Either.Right -> r.value
         }
+        if (which == PhoneScreen.MAIN) returnToTask()
         val driver = when (val d = driverFor(which)) {
             is Either.Left -> return Out(d.value, error = true, summary = summary, decision = "unavailable")
             is Either.Right -> d.value
@@ -732,7 +766,7 @@ class PhoneCore(
         val ms = a.int("ms")?.toLong() ?: WAIT_DEFAULT_MS
         if (ms < 1 || ms > WAIT_MAX_MS) {
             // l10n:keep agent tool result
-            return Out("wait 的 ms 要在 1 到 30000 毫秒之间。", error = true, summary = PhoneToolCatalog.WAIT, decision = "invalid")
+            return Out("wait 的 ms 要在 1 到 5000 毫秒之间。", error = true, summary = PhoneToolCatalog.WAIT, decision = "invalid")
         }
         val which = if (a.bool("background") == true) PhoneScreen.BACKGROUND else PhoneScreen.MAIN
         val summary = if (which == PhoneScreen.BACKGROUND) ui.get("phone_log_background_read", "读后台屏") else ui.get("phone_log_wait", "等 %1\$d 毫秒", ms.toInt()) // l10n:keep test default
@@ -1094,7 +1128,9 @@ class PhoneCore(
         const val MAX_APPS = 150
         const val MAX_COLLECT_CHARS = 16_000
         const val WAIT_DEFAULT_MS = 2_000L
-        const val WAIT_MAX_MS = 30_000L
+        /** 5 s, not 30: a task that needs longer is a task whose page has not come up, and a page
+         *  that has not come up in five seconds is not helped by waiting thirty. */
+        const val WAIT_MAX_MS = 5_000L
 
         /**
          * Apps whose screens an outside GUI scheme reads and drives itself (微信 today): the

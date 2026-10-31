@@ -285,6 +285,8 @@
         </receiver>
 
         <receiver android:name=".notify.NotifyActionReceiver" android:exported="false" />
+        <!-- A broadcast of our own every couple of seconds: what holds this ROM's freezer off a task. -->
+        <receiver android:name=".phone.KeepAwakeReceiver" android:exported="false" />
         <receiver android:name=".phone.a11y.A11yKeeper$Receiver" android:exported="false">
             <intent-filter>
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />

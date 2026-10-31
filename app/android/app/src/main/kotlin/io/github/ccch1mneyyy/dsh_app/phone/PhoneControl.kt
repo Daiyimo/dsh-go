@@ -695,6 +695,10 @@ class PhoneControl private constructor(private val app: Context) : PhoneEnv, Con
         background.fullscreen(component.flattenToString())
     }.getOrDefault(false)
 
+    override fun keepAwake() = KeepAwake.note(app)
+
+    override fun ownPackage(): String = app.packageName
+
     override fun keyboardUp(): Boolean =
         runCatching { PhoneRegistry.mainDriver?.imeShown() == true }.getOrDefault(false)
     override fun typeIntoPage(text: String, submit: Boolean): String? {

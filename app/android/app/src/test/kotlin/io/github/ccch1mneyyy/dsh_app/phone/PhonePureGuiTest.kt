@@ -30,6 +30,7 @@ class PhonePureGuiTest {
     private var fullscreen = true
     private var policies = PhonePolicies()
     private var secure = false
+    private val fullscreens = mutableListOf<String>()
 
     private fun driver(screen: PhoneScreen, id: String) = object : PhoneDriver {
         override val screen = screen
@@ -76,6 +77,14 @@ class PhonePureGuiTest {
         override fun guiScheme() = scheme
         override fun homePackages() = home
         override fun launchFullscreen() = fullscreen
+        override fun forceFullscreen(packageName: String): Boolean {
+            fullscreens += packageName
+            // The real call starts the task again, so the next read is of that app, not of DSH's own UI.
+            pkg = packageName
+            appLabel = if (packageName == "com.tencent.mm") "微信" else packageName
+            return true
+        }
+        override fun ownPackage() = "io.github.ccch1mneyyy.dsh_app"
         override fun zone() = ZoneId.of("UTC")
         override fun notifyFix(kind: String) {}
         override fun beforeHandoff(screen: PhoneScreen): String? = null
@@ -345,6 +354,33 @@ class PhonePureGuiTest {
         assertTrue(out.text, out.isError)
         assertTrue(out.text, out.text.contains("纯 GUI"))
         assertEquals("the display was asked for before the refusal", 0, backgroundRequests)
+    }
+
+    @Test fun aReadBringsTheTaskBackWhenThisAppItselfIsInFront() {
+        // 微信 came to the front, then the person opened DSH Go: a plain read would describe DSH's
+        // own UI (and is refused as the app's own screen), costing an `open`, several seconds and
+        // the page the task had. Asking for the task's fullscreen again also brings it forward.
+        pkg = "com.tencent.mm"
+        appLabel = "微信"
+        readMain()
+        fullscreens.clear()
+        pkg = "io.github.ccch1mneyyy.dsh_app"
+        appLabel = "DSH Go"
+        val out = core.call(PhoneToolCatalog.SCREEN, emptyMap())
+        assertEquals("the task was not brought back: ${out.text}", listOf("com.tencent.mm"), fullscreens)
+        assertFalse(out.text, out.isError)
+    }
+
+    @Test fun anOrdinaryAppDoesNotGetBroughtBack() {
+        // example.app is in no scheme and drew nothing of its own: nothing is latched, so there is
+        // no task to bring back — the read stays the refusal it was.
+        pkg = "example.app"
+        appLabel = "Example"
+        readMain()
+        fullscreens.clear()
+        pkg = "io.github.ccch1mneyyy.dsh_app"
+        readMain()
+        assertEquals("a task that is not latched has nothing to bring back", emptyList<String>(), fullscreens)
     }
 
     @Test fun theHomeKeyIsRefusedWhileTheTaskRunsInOneApp() {
