@@ -518,6 +518,7 @@ class PhoneControl private constructor(private val app: Context) : PhoneEnv, Con
         "confirmationNotifications" to notificationGate.available(),
         "background" to backgroundStatus(),
         "a11yKeeper" to keeperStatus(),
+        "battery" to linkedMapOf("exempt" to freezeGuarded()),
         "guiScheme" to guiSchemeMap(),
         "launch" to linkedMapOf("fullscreen" to launchFullscreen()),
         "ime" to linkedMapOf(
@@ -655,6 +656,7 @@ class PhoneControl private constructor(private val app: Context) : PhoneEnv, Con
      * connect). The main one may be on its way back (自动恢复无障碍): give it a few seconds.
      */
     override fun driver(screen: PhoneScreen): PhoneDriver? {
+        guardAgainstFreezing()
         if (screen == PhoneScreen.MAIN && PhoneRegistry.mainDriver == null && A11yKeeper.check(app)) {
             val until = SystemClock.elapsedRealtime() + KEEPER_WAIT_MS
             while (PhoneRegistry.mainDriver == null && SystemClock.elapsedRealtime() < until) Thread.sleep(100)
@@ -723,6 +725,31 @@ class PhoneControl private constructor(private val app: Context) : PhoneEnv, Con
     }
 
     private var homeCache: Set<String>? = null
+
+    private var freezeTried = false
+
+    /** True when the system is told not to freeze this app in the background (电池优化 已忽略). */
+    fun freezeGuarded(): Boolean = runCatching {
+        (app.getSystemService(Context.POWER_SERVICE) as PowerManager).isIgnoringBatteryOptimizations(app.packageName)
+    }.getOrDefault(false)
+
+    /**
+     * One try per process, from the first tool call of a task. StepOS freezes a backgrounded app
+     * about 3 s after it stops being visible, and every tool call then stalls 30-70 s and reports a
+     * timeout the instant the app is thawed — which is what a game task looks like from outside.
+     * The exemption is one shell command, so it is free when it is already in place.
+     */
+    private fun guardAgainstFreezing() {
+        if (freezeTried) return
+        freezeTried = true
+        FreezeWatch.start()
+        if (freezeGuarded()) {
+            log("freeze guard: already exempt")
+            return
+        }
+        val ok = runCatching { background.freezeGuard(app.packageName) }.getOrDefault(false)
+        log("freeze guard: whitelist ok=$ok exempt=${freezeGuarded()}")
+    }
 
     override fun log(message: String) {
         Log.i("DshPhone", message)

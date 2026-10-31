@@ -142,6 +142,14 @@ class BackgroundControl private constructor(context: Context) {
     /** One key event on the main display (`input keyevent <code>`), for the enter after a typed answer. */
     fun key(code: Int): Boolean = engineCall(Proto.OP_INPUT_KEY) { putInt(Proto.KEY, code) }
 
+    /**
+     * Keeps this app out of the ROM's freezer (`cmd deviceidle whitelist +<pkg>`): without it every
+     * tool call stalls 30-70 s and then reports a timeout the moment the process is thawed.
+     */
+    fun freezeGuard(appPackage: String): Boolean = engineCall(Proto.OP_FREEZE_GUARD) {
+        putString(Proto.APP_PKG, appPackage)
+    }
+
     /** `ime enable|set|disable <component>`: borrow the person's input method for one commit. */
     fun ime(action: String, component: String): Boolean = engineCall(Proto.OP_IME) {
         putString(Proto.IME_ACTION, action)

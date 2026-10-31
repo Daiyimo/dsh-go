@@ -50,6 +50,16 @@ object Proto {
     const val OP_DESTROY = "destroy"
     const val OP_GATE = "gate"
 
+    /**
+     * Battery-optimisation exemption (`cmd deviceidle whitelist +<pkg>`): this ROM's StepOSFreeze
+     * freezes the whole app 3 s after it stops being visible, and every tool call then reports a
+     * timeout the instant the process is thawed (measured: 53.7 s and 74.1 s frozen mid-task).
+     */
+    const val OP_FREEZE_GUARD = "freezeGuard"
+
+    /** [OP_FREEZE_GUARD]: the package to exempt — always this app's own. */
+    const val APP_PKG = "appPkg"
+
     /** 自动恢复无障碍: grants [APP_PACKAGE] WRITE_SECURE_SETTINGS in [USER]; nothing else is grantable. */
     const val OP_GRANT_SECURE_SETTINGS = "grantSecureSettings"
 

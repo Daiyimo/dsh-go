@@ -171,6 +171,12 @@ class PrivilegedDisplayCore(private val context: Context) {
             response.putBoolean("released", true)
             return
         }
+        // Independent of any display, owner or lock state: keeping the app out of the ROM's freezer
+        // is what makes a task usable at all (a frozen app answers every call 30-70 s late).
+        if (op == Proto.OP_FREEZE_GUARD) {
+            freezeGuard(request, response)
+            return
+        }
         if (owner != null && owner != ownerId) throw Fault("identityChanged")
         if (keyguard?.isKeyguardLocked == true) throw Fault("locked")
         val pkg = request.getString(Proto.PKG).orEmpty()
@@ -234,6 +240,20 @@ class PrivilegedDisplayCore(private val context: Context) {
         } finally {
             releaseAll()
         }
+    }
+
+    /**
+     * `cmd deviceidle whitelist +<pkg>`: the person does not need to find a vendor switch. Verified
+     * on PZ261A / StepOS: with the uid in the doze whitelist the StepOSFreeze service stops freezing
+     * this app in the background (no freeze event in 105 s idle, where it used to freeze in 3 s), so
+     * a pure-GUI game task keeps running at full speed after the app leaves the foreground.
+     */
+    private fun freezeGuard(request: Bundle, response: Bundle) {
+        val me = request.getString(Proto.APP_PKG).orEmpty()
+        if (!PACKAGE.matches(me)) throw Fault("invalidArguments")
+        val ok = runShell("/system/bin/cmd", "deviceidle", "whitelist", "+$me")
+        PhoneLog.i("freeze guard: deviceidle whitelist +$me ok=$ok")
+        response.putBoolean(Proto.OK, ok)
     }
 
     // ---- display lifecycle -------------------------------------------------
