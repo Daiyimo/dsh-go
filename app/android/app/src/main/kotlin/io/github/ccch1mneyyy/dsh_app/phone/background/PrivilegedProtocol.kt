@@ -52,6 +52,27 @@ object Proto {
 
     /** 自动恢复无障碍: grants [APP_PACKAGE] WRITE_SECURE_SETTINGS in [USER]; nothing else is grantable. */
     const val OP_GRANT_SECURE_SETTINGS = "grantSecureSettings"
+
+    /**
+     * Text for a page with no field ids (微信, games): the engine runs `input text`, which types
+     * through the input pipeline without any accessibility node and without touching the person's
+     * keyboard. ASCII only — `input text` cannot carry anything else.
+     */
+    const val OP_INPUT_TEXT = "inputText"
+
+    /**
+     * One key event on the main display (`input keyevent <code>`): `input text` types characters but
+     * cannot press anything, and a search field needs its enter.
+     */
+    const val OP_INPUT_KEY = "inputKey"
+    const val KEY = "key"
+
+    /** Borrow the person's keyboard for one commit: `ime enable|set|disable <component>` ([IME_ACTION]). */
+    const val OP_IME = "ime"
+    const val IME_ACTION = "imeAction"
+    const val IME_ENABLE = "enable"
+    const val IME_SET = "set"
+    const val IME_DISABLE = "disable"
     const val USER = "user"
     const val APP_PACKAGE = "io.github.ccch1mneyyy.dsh_app"
 

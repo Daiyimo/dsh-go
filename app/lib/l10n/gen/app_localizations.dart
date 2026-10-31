@@ -17297,31 +17297,31 @@ abstract class L10n {
   /// No description provided for @phoneImeTitle.
   ///
   /// In zh, this message translates to:
-  /// **'DSH 输入法'**
+  /// **'DSH 输入法（兜底）'**
   String get phoneImeTitle;
 
   /// No description provided for @phoneImeHint.
   ///
   /// In zh, this message translates to:
-  /// **'画面页面没有输入框编号，文字只能从这里进。它不画键盘，只占一条。'**
+  /// **'画面页面没有输入框编号时，DSH 先走特权通道直接敲字；通道没开才临时借用它一下，用完立刻还回你的键盘。它不画键盘，只占一条。'**
   String get phoneImeHint;
 
   /// No description provided for @phoneImeReady.
   ///
   /// In zh, this message translates to:
-  /// **'正在用：可以给画面页面输入文字'**
+  /// **'兜底可用：需要时会临时借用'**
   String get phoneImeReady;
 
   /// No description provided for @phoneImeOff.
   ///
   /// In zh, this message translates to:
-  /// **'没有启用：微信这类页面输不进文字'**
+  /// **'没有启用：特权通道没开时，微信这类页面输不进文字'**
   String get phoneImeOff;
 
   /// No description provided for @phoneImeNotChosen.
   ///
   /// In zh, this message translates to:
-  /// **'已启用，但不是当前键盘'**
+  /// **'已启用，但不是当前键盘（需要时自动切过去再切回来）'**
   String get phoneImeNotChosen;
 
   /// No description provided for @phoneImeNoField.
@@ -17357,7 +17357,7 @@ abstract class L10n {
   /// No description provided for @phoneImeNote.
   ///
   /// In zh, this message translates to:
-  /// **'别的用法不需要它：能读到输入框编号的页面直接用 type。'**
+  /// **'平时不用设置它：能读到编号的页面直接 type，画面页优先走特权通道（不打扰模式 或 自连 ADB）。'**
   String get phoneImeNote;
 
   /// No description provided for @phoneTaskResultReady.

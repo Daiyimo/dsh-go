@@ -52,16 +52,17 @@ interface PhoneEnv {
      * process that a ROM may put in a small window. Off leaves the way the system chooses.
      */
     fun launchFullscreen(): Boolean = true
-    /**
-     * 设置 › 手机操控 › 进阶 › DSH 输入法: a picture page (微信, games) has no field ids, so the only
-     * way text gets in is an input method. [imeReady] is true when this app's input method is the
-     * one the person is using right now and a field is being edited.
-     */
-    fun imeReady(): Boolean = false
     /** The focused field is a password / code field: DSH never types there. */
     fun imePassword(): Boolean = false
-    /** Send [text] through the input method; null on success, else the sentence the model gets. */
-    fun imeCommit(text: String, submit: Boolean): String? = null
+    /**
+     * Text into a page that has no field ids at all (微信, games): `input text` over the shell-uid
+     * engine for ASCII, else borrowing the person's own input method for one commit and putting it
+     * back (0·A, see [io.github.ccch1mneyyy.dsh_app.phone.input.TextInjector]). Null on success,
+     * else the sentence the model gets.
+     */
+    fun typeIntoPage(text: String, submit: Boolean): String? =
+        // l10n:keep agent tool result
+        "这个页面没有输入框编号，文字要经特权通道送进去：先在 设置 › 手机操控 › 进阶 开通 不打扰模式 或 自连 ADB。"
     fun sleep(ms: Long) = Thread.sleep(ms)
 }
 
@@ -808,7 +809,7 @@ class PhoneCore(
                     summary = secretSummary(sid, id, submit)
                 } else {
                     // l10n:keep test default
-                    summary = ui.get("phone_log_type_ime", "输入（%1\$d 字%2\$s，DSH 输入法）", typed.length, if (submit) ui.get("phone_log_submit", "，提交") else "")
+                    summary = ui.get("phone_log_type_ime", "输入（%1\$d 字%2\$s，画面页）", typed.length, if (submit) ui.get("phone_log_submit", "，提交") else "")
                 }
             }
             PhoneToolCatalog.SCROLL -> {
@@ -849,10 +850,6 @@ class PhoneCore(
                 // l10n:keep agent tool result
                 return Out("这是密码框，DSH 不代填。调用 handoff，让用户自己输入。", error = true, summary = summary, decision = "refused:secret-field")
             }
-            if (!env.imeReady()) {
-                // l10n:keep agent tool result
-                return Out("这个页面没有输入框编号，文字要从 DSH 输入法进去：先用 tap_xy 点一下输入框，再确认 设置 → 手机操控 → 进阶 → DSH 输入法 已经启用并被选为当前输入法。", error = true, summary = summary, decision = "unavailable")
-            }
         }
         lastScreen = which
         val target: TargetInfo? = if (id != null && kind != WriteKind.TAP_XY) {
@@ -883,7 +880,7 @@ class PhoneCore(
         say(ui.get("phone_acting", "DSH 正在操作 · %1\$s", statusLine(kind, target, if (secret) SafetyRules.MASK else typed))) // l10n:keep test default
         if (action == null) {
             val text = typed!!
-            val err = env.imeCommit(text, submit)
+            val err = env.typeIntoPage(text, submit)
             val after = try {
                 safety.filterScreen(driver.observe(detail = false, image = kind0 != ScreenKind.TREE))
             } catch (e: InterruptedException) {
@@ -895,7 +892,7 @@ class PhoneCore(
                 return Out(err, error = true, screen = after, app = app, summary = summary, decision = "failed")
             }
             // l10n:keep test default
-            val said = if (submit) ui.get("phone_ime_typed_submit", "已用 DSH 输入法输入 %1\$d 字并提交。", text.length) else ui.get("phone_ime_typed", "已用 DSH 输入法输入 %1\$d 字。", text.length)
+            val said = if (submit) ui.get("phone_ime_typed_submit", "已把 %1\$d 字送进输入框并提交。", text.length) else ui.get("phone_ime_typed", "已把 %1\$d 字送进输入框。", text.length)
             return Out(said, screen = after, app = app, summary = summary, decision = decision)
         }
         val res = driver.perform(action!!)

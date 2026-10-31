@@ -155,6 +155,11 @@ object DshIme {
         imm.enabledInputMethodList.any { it.packageName == context.packageName && it.serviceName == DshImeService::class.java.name }
     }.getOrDefault(false)
 
+    /** The input method the person is using right now, i.e. the one to put back after a commit. */
+    fun current(context: Context): String? = runCatching {
+        android.provider.Settings.Secure.getString(context.contentResolver, android.provider.Settings.Secure.DEFAULT_INPUT_METHOD)
+    }.getOrNull()
+
     fun selected(context: Context): Boolean = runCatching {
         android.provider.Settings.Secure.getString(context.contentResolver, android.provider.Settings.Secure.DEFAULT_INPUT_METHOD) == component(context)
     }.getOrDefault(false)
@@ -163,7 +168,7 @@ object DshIme {
 
     /** Null on success, else the sentence the model gets back. */
     fun commit(text: String, submit: Boolean): String? {
-        val service = live ?: return null
+        val service = live ?: return "输入法还没接管这个输入框（没有拿到输入连接）。"
         return service.typeInto(text, submit)
     }
 }

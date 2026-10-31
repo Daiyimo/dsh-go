@@ -221,7 +221,7 @@ object PhoneToolCatalog {
                 // l10n:keep agent tool catalog
                 "密码、验证码、支付密码框默认拒绝（用户在设置里解除限制后才能填），被拒绝就改用 handoff。" +
                 // l10n:keep agent tool catalog
-                "画面页（微信、游戏）没有输入框编号：省略 id，先用 tap_xy 点中输入框，再用 type——文字由 DSH 输入法直接送进前台应用；没有启用输入法时会明确告诉你。",
+                "画面页（微信、游戏）没有输入框编号：省略 id，先用 tap_xy 点中输入框，再用 type——文字由 DSH 经特权通道敲进去，中文则临时借用一下输入法；两条都不通时会明确告诉你去开通什么。",
             linkedMapOf(
                 "screen" to SCREEN_ID,
                 // l10n:keep agent tool catalog

@@ -8,15 +8,15 @@ import org.junit.Test
 
 /**
  * Typing on a page with no field ids (微信, games): the tree is empty there, so `type` has no
- * element to act on. The text goes through DSH 输入法 instead — and when that input method is not
- * the one in use, the model is told, instead of a write silently doing nothing.
+ * element to act on. The text goes through the privileged `input text` (ASCII) or a borrowed input
+ * method (Chinese) instead — and when neither is available, the model is told, instead of a write
+ * silently doing nothing.
  */
 class PhoneImeTest {
     private val tasks = PhoneTasks()
     private var pkg: String? = "com.tencent.mm"
     private var appLabel: String? = "微信"
     private var kind = ScreenKind.BLANKED
-    private var imeReady = true
     private var imeSecret = false
     private val typedIn = mutableListOf<Pair<String, Boolean>>()
     private var commitAnswer: String? = null
@@ -47,9 +47,8 @@ class PhoneImeTest {
         override fun a11yState() = A11yState.CONNECTED
         override fun backgroundUnavailable() = "后台屏用不了。"
         override fun guiScheme() = PhoneCore.DEFAULT_GUI_SCHEME
-        override fun imeReady() = imeReady
         override fun imePassword() = imeSecret
-        override fun imeCommit(text: String, submit: Boolean): String? {
+        override fun typeIntoPage(text: String, submit: Boolean): String? {
             typedIn += text to submit
             return commitAnswer
         }
@@ -82,7 +81,7 @@ class PhoneImeTest {
         val out = type("银行卡")
         assertFalse(out.isError)
         assertEquals(listOf("银行卡" to false), typedIn)
-        assertTrue(out.text, out.text.contains("DSH 输入法"))
+        assertTrue(out.text, out.text.contains("送进输入框"))
     }
 
     @Test fun submitTravelsWithTheText() {
@@ -92,13 +91,14 @@ class PhoneImeTest {
         assertTrue(out.text, out.text.contains("提交"))
     }
 
-    @Test fun withoutTheInputMethodTheModelIsToldWhichOne() {
-        imeReady = false
+    @Test fun withoutAPrivilegedPathTheModelIsToldWhatToOpen() {
+        // Both ways in are shut: the engine refuses (no Shizuku / self-ADB) and the input method
+        // cannot bind. The answer has to name the switch instead of pretending the field is filled.
+        commitAnswer = "这个页面没有输入框编号，文字要经特权通道送进去：先在 设置 › 手机操控 › 进阶 开通 不打扰模式 或 自连 ADB。"
         val out = type("银行卡")
         assertTrue(out.isError)
-        assertTrue(typedIn.isEmpty())
-        assertTrue(out.text, out.text.contains("DSH 输入法"))
-        assertTrue(out.text, out.text.contains("tap_xy"))
+        assertTrue(out.text, out.text.contains("不打扰模式"))
+        assertEquals("failed", core.log.last()!!.decision)
     }
 
     @Test fun aPasswordFieldIsNeverFilled() {

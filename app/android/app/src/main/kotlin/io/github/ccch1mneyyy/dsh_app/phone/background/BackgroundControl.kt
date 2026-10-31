@@ -128,6 +128,46 @@ class BackgroundControl private constructor(context: Context) {
         return ok
     }
 
+    // ---- 0·A text injection (see TextInjector) -------------------------------
+
+    /**
+     * Ask the engine to type [text] with `input text`: it goes through the input pipeline of
+     * whatever field has focus, needs no accessibility node, and never touches the person's
+     * keyboard. ASCII only — the engine refuses anything else.
+     */
+    fun typeAscii(text: String): Boolean =
+        engineCall(Proto.OP_INPUT_TEXT) { putString(Proto.TEXT, text) }
+
+    /** One key event on the main display (`input keyevent <code>`), for the enter after a typed answer. */
+    fun key(code: Int): Boolean = engineCall(Proto.OP_INPUT_KEY) { putInt(Proto.KEY, code) }
+
+    /** `ime enable|set|disable <component>`: borrow the person's input method for one commit. */
+    fun ime(action: String, component: String): Boolean = engineCall(Proto.OP_IME) {
+        putString(Proto.IME_ACTION, action)
+        putString(Proto.TEXT, component)
+    }
+
+    /**
+     * One op over the same channel 不打扰模式 uses. With the mode off nothing holds a channel, so
+     * one is opened for this call and closed after: a pure-GUI task never needs a virtual display
+     * but still needs the shell uid behind it.
+     */
+    private fun engineCall(op: String, fill: Bundle.() -> Unit): Boolean {
+        val shared = mode != "off"
+        val ch = if (shared) activeChannel() else openAny()
+        val ok = ch != null && runCatching {
+            ch.execute(Bundle().apply { putString(Proto.OP, op); fill() }).getBoolean(Proto.OK)
+        }.getOrDefault(false)
+        if (!shared) disconnectAll()
+        return ok
+    }
+
+    private fun openAny(): PrivilegedChannel? = when (SecureSettingsGrant.path(false, shizuku.status(), adb.status())) {
+        SecureSettingsGrant.SHIZUKU -> shizuku.connect()
+        SecureSettingsGrant.ADB -> adb.connect()
+        else -> null
+    }
+
     fun requestShizukuPermission(then: () -> Unit): Boolean = shizuku.requestPermission(then)
 
     // ---- task lifecycle (called by the bridge/core) ------------------------

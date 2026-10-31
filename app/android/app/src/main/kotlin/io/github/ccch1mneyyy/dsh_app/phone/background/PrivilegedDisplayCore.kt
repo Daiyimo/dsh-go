@@ -38,6 +38,7 @@ import android.view.MotionEvent
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import android.view.accessibility.AccessibilityWindowInfo
+import java.util.concurrent.TimeUnit
 import io.github.ccch1mneyyy.dsh_app.phone.SensitiveWords
 import java.io.ByteArrayOutputStream
 import java.lang.reflect.InvocationTargetException
@@ -96,6 +97,10 @@ class PrivilegedDisplayCore(private val context: Context) {
                 if (!response.containsKey(Proto.ERROR)) response.putBoolean(Proto.OK, true)
                 return response
             }
+            if (op == Proto.OP_INPUT_TEXT || op == Proto.OP_INPUT_KEY || op == Proto.OP_IME) {
+                typing(op, request, response)
+                return response
+            }
             if (op == Proto.OP_GRANT_SECURE_SETTINGS) {
                 grantSecureSettings(request.getInt(Proto.USER))
                 response.putBoolean(Proto.OK, true)
@@ -115,6 +120,47 @@ class PrivilegedDisplayCore(private val context: Context) {
         }
         return response
     }
+
+    /**
+     * 0·A keyboard-free typing: `input text` for a page with no nodes (ASCII only — it is key
+     * injection, not a clipboard write) and `ime …` to borrow the person's input method for the one
+     * commit that has to carry Chinese. Both run as the shell uid this engine already is; every
+     * argument is passed as argv, never through a shell string, and the component name is checked
+     * against [IME_COMPONENT] before it reaches `ime`.
+     */
+    private fun typing(op: String, request: Bundle, response: Bundle) {
+        if (op == Proto.OP_INPUT_TEXT) {
+            val text = request.getString(Proto.TEXT).orEmpty()
+            if (text.isEmpty() || text.length > MAX_TEXT) throw Fault("invalidArguments")
+            if (!TEXT.matches(text) || text.contains("%s")) throw Fault("invalidArguments")
+            if (!runShell("/system/bin/input", "text", text)) throw Fault("toolFailed")
+            response.putBoolean(Proto.OK, true)
+            return
+        }
+        if (op == Proto.OP_INPUT_KEY) {
+            val key = request.getInt(Proto.KEY)
+            if (key !in KEYS_ALLOWED) throw Fault("invalidArguments")
+            if (!runShell("/system/bin/input", "keyevent", key.toString())) throw Fault("toolFailed")
+            response.putBoolean(Proto.OK, true)
+            return
+        }
+        val component = request.getString(Proto.TEXT).orEmpty()
+        val tool = when (request.getString(Proto.IME_ACTION)) {
+            Proto.IME_ENABLE -> "enable"
+            Proto.IME_SET -> "set"
+            Proto.IME_DISABLE -> "disable"
+            else -> throw Fault("invalidArguments")
+        }
+        if (!IME_COMPONENT.matches(component)) throw Fault("invalidArguments")
+        if (!runShell("/system/bin/ime", tool, component)) throw Fault("toolFailed")
+        response.putBoolean(Proto.OK, true)
+    }
+
+    private fun runShell(vararg args: String): Boolean = runCatching {
+        val process = ProcessBuilder(*args).redirectErrorStream(true).start()
+        process.inputStream.readBytes()
+        process.waitFor(SHELL_TIMEOUT_MS, TimeUnit.MILLISECONDS) && process.exitValue() == 0
+    }.getOrDefault(false)
 
     private fun dispatch(op: String?, request: Bundle, response: Bundle) {
         val ownerId = request.getString(Proto.OWNER).orEmpty()
@@ -801,6 +847,14 @@ class PrivilegedDisplayCore(private val context: Context) {
         private val FLAG_NAMES = listOf(
             "PUBLIC", "OWN_CONTENT_ONLY", "SUPPORTS_TOUCH", "DESTROY_CONTENT_ON_REMOVAL",
             "TRUSTED", "OWN_FOCUS", "STEAL_TOP_FOCUS_DISABLED")
+        /** `input text` types ASCII keys; anything else has to go through an input method. */
+        private val TEXT = Regex("[\\x20-\\x7E]+")
+        private val IME_COMPONENT = Regex("[a-zA-Z][a-zA-Z0-9_]*(\\.[a-zA-Z0-9_]+)+/(\\.?[a-zA-Z][a-zA-Z0-9_$.]*)")
+        private const val MAX_TEXT = 2_000
+        private const val SHELL_TIMEOUT_MS = 6_000L
+        /** Enter, delete, back, home: the keys a typed answer ever needs to press. */
+        private val KEYS_ALLOWED = setOf(66, 67, 4, 3)
+
         private val KEYS = mapOf(
             "back" to KeyEvent.KEYCODE_BACK, "home" to KeyEvent.KEYCODE_HOME,
             "enter" to KeyEvent.KEYCODE_ENTER, "delete" to KeyEvent.KEYCODE_DEL,

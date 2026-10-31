@@ -27,6 +27,9 @@ import io.github.ccch1mneyyy.dsh_app.phone.a11y.PhoneA11yService
 import io.github.ccch1mneyyy.dsh_app.phone.background.BackgroundControl
 import io.github.ccch1mneyyy.dsh_app.phone.background.SecureSettingsGrant
 import io.github.ccch1mneyyy.dsh_app.phone.input.DshIme
+import io.github.ccch1mneyyy.dsh_app.phone.input.DshImePort
+import io.github.ccch1mneyyy.dsh_app.phone.input.TextInjector
+import io.github.ccch1mneyyy.dsh_app.phone.input.TypingChannel
 import io.github.ccch1mneyyy.dsh_app.runtime.DshService
 import io.github.ccch1mneyyy.dsh_app.shortcuts.EntryActivity
 import java.io.File
@@ -139,6 +142,16 @@ class PhoneControl private constructor(private val app: Context) : PhoneEnv, Con
     private var screenReceiver: BroadcastReceiver? = null
     private val sinks = CopyOnWriteArraySet<(Map<String, Any?>) -> Unit>()
     val background: BackgroundControl = BackgroundControl.get(app)
+    private val injector by lazy {
+        TextInjector(
+            object : TypingChannel {
+                override fun typeAscii(text: String): Boolean = background.typeAscii(text)
+                override fun key(code: Int): Boolean = background.key(code)
+                override fun ime(action: String, component: String): Boolean = background.ime(action, component)
+            },
+            DshImePort(app),
+        )
+    }
 
     init {
         PhoneRegistry.notificationGate = notificationGate
@@ -646,9 +659,8 @@ class PhoneControl private constructor(private val app: Context) : PhoneEnv, Con
     /** Asked on every tool call: never waits for 自动恢复无障碍 to hand the driver back. */
     override fun peekPackage(): String? = runCatching { PhoneRegistry.mainDriver?.foregroundPackage() }.getOrNull()
 
-    override fun imeReady(): Boolean = DshIme.ready()
     override fun imePassword(): Boolean = DshIme.password()
-    override fun imeCommit(text: String, submit: Boolean): String? = DshIme.commit(text, submit)
+    override fun typeIntoPage(text: String, submit: Boolean): String? = injector.type(text, submit)
 
     /** 设置 › 手机操控 › 进阶 › DSH 输入法: whether it is enabled, chosen, and holding a field right now. */
     fun imeStatus(): Map<String, Any?> = linkedMapOf(

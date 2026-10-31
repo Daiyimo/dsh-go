@@ -9385,19 +9385,19 @@ class L10nZh extends L10n {
   String get phoneModelVisionHint => '纯 GUI 的页面只有画面：模型读不了图片时关掉它，DSH 会直接交还给你，不再猜坐标。';
 
   @override
-  String get phoneImeTitle => 'DSH 输入法';
+  String get phoneImeTitle => 'DSH 输入法（兜底）';
 
   @override
-  String get phoneImeHint => '画面页面没有输入框编号，文字只能从这里进。它不画键盘，只占一条。';
+  String get phoneImeHint => '画面页面没有输入框编号时，DSH 先走特权通道直接敲字；通道没开才临时借用它一下，用完立刻还回你的键盘。它不画键盘，只占一条。';
 
   @override
-  String get phoneImeReady => '正在用：可以给画面页面输入文字';
+  String get phoneImeReady => '兜底可用：需要时会临时借用';
 
   @override
-  String get phoneImeOff => '没有启用：微信这类页面输不进文字';
+  String get phoneImeOff => '没有启用：特权通道没开时，微信这类页面输不进文字';
 
   @override
-  String get phoneImeNotChosen => '已启用，但不是当前键盘';
+  String get phoneImeNotChosen => '已启用，但不是当前键盘（需要时自动切过去再切回来）';
 
   @override
   String get phoneImeNoField => '已启用，等一个输入框';
@@ -9415,7 +9415,7 @@ class L10nZh extends L10n {
   String get phoneImeChooseHint => '弹出系统的输入法选择器';
 
   @override
-  String get phoneImeNote => '别的用法不需要它：能读到输入框编号的页面直接用 type。';
+  String get phoneImeNote => '平时不用设置它：能读到编号的页面直接 type，画面页优先走特权通道（不打扰模式 或 自连 ADB）。';
 
   @override
   String get phoneTaskResultReady => '任务完成 · 查看结果';

@@ -9874,20 +9874,20 @@ class L10nEn extends L10n {
       'A pure-GUI page is only a picture: when the model cannot read images, turn this off and DSH hands the phone back instead of guessing coordinates.';
 
   @override
-  String get phoneImeTitle => 'DSH Keyboard';
+  String get phoneImeTitle => 'DSH Keyboard (fallback)';
 
   @override
   String get phoneImeHint =>
-      'A picture page has no field ids, so text has to come in through this. It draws no keyboard, only a strip.';
+      'When a picture page has no field ids, DSH types through the privileged channel first and only borrows this keyboard if that channel is not set up — then hands it straight back. It draws no keyboard, only a strip.';
 
   @override
-  String get phoneImeReady => 'In use: text can go into a picture page';
+  String get phoneImeReady => 'Available as a fallback: borrowed when needed';
 
   @override
-  String get phoneImeOff => 'Off: typing into a picture page like WeChat does not work';
+  String get phoneImeOff => 'Off: without the privileged channel, a page like WeChat cannot be typed into';
 
   @override
-  String get phoneImeNotChosen => 'On, but not the keyboard in use';
+  String get phoneImeNotChosen => 'On, but not the keyboard in use (it switches over and back by itself when needed)';
 
   @override
   String get phoneImeNoField => 'On, waiting for a text field';
@@ -9905,7 +9905,8 @@ class L10nEn extends L10n {
   String get phoneImeChooseHint => 'Opens the system\'s keyboard picker';
 
   @override
-  String get phoneImeNote => 'Nothing else needs it: a page whose fields can be read is typed into directly.';
+  String get phoneImeNote =>
+      'You do not have to set this up: a page whose fields can be read is typed into directly, and a picture page goes through the privileged channel first (Do not disturb or self-ADB).';
 
   @override
   String get phoneTaskResultReady => 'Task complete · View result';

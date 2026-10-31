@@ -260,7 +260,8 @@ class FakePhoneNative {
         if (!accept) return false;
         status = {
           ...status,
-          'ime': {'enabled': true, 'selected': true, 'ready': imeReady},
+          // Just chosen in the system picker: nothing is bound to a field yet.
+          'ime': {'enabled': true, 'selected': true, 'ready': false},
         };
         return true;
       case 'actionLog':
