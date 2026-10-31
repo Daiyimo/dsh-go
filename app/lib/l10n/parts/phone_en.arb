@@ -426,5 +426,22 @@
         "type": "String"
       }
     }
-  }
+  },
+  "phonePureGuiTitle": "Pure GUI apps",
+  "phonePureGuiSubtitle": "A task runs in one fullscreen app: no virtual screen, nothing drawn over it.",
+  "phonePureGuiEmpty": "The list is empty: apps like WeChat are handled like any other app.",
+  "phonePureGuiNone": "None added",
+  "phonePureGuiAdd": "Add an app",
+  "phonePureGuiAddHint": "Add by package name",
+  "phonePureGuiRemoveTitle": "Remove “{app}” from the list?",
+  "@phonePureGuiRemoveTitle": {
+    "placeholders": {
+      "app": {
+        "type": "String"
+      }
+    }
+  },
+  "phonePureGuiRemoveBody": "It will be treated like any other app: the virtual screen may come back, and hints may be drawn over it.",
+  "phonePureGuiRemove": "Remove",
+  "phonePureGuiNote": "Games and pages with only a picture switch to pure GUI on their own when the screen is read; they don't need to be listed."
 }

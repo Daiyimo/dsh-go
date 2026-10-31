@@ -9820,6 +9820,40 @@ class L10nEn extends L10n {
   }
 
   @override
+  String get phonePureGuiTitle => 'Pure GUI apps';
+
+  @override
+  String get phonePureGuiSubtitle => 'A task runs in one fullscreen app: no virtual screen, nothing drawn over it.';
+
+  @override
+  String get phonePureGuiEmpty => 'The list is empty: apps like WeChat are handled like any other app.';
+
+  @override
+  String get phonePureGuiNone => 'None added';
+
+  @override
+  String get phonePureGuiAdd => 'Add an app';
+
+  @override
+  String get phonePureGuiAddHint => 'Add by package name';
+
+  @override
+  String phonePureGuiRemoveTitle(String app) {
+    return 'Remove “$app” from the list?';
+  }
+
+  @override
+  String get phonePureGuiRemoveBody =>
+      'It will be treated like any other app: the virtual screen may come back, and hints may be drawn over it.';
+
+  @override
+  String get phonePureGuiRemove => 'Remove';
+
+  @override
+  String get phonePureGuiNote =>
+      'Games and pages with only a picture switch to pure GUI on their own when the screen is read; they don\'t need to be listed.';
+
+  @override
   String get phoneTaskResultReady => 'Task complete · View result';
 
   @override

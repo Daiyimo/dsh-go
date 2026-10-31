@@ -212,6 +212,23 @@ class PhoneController extends Notifier<PhoneState> {
 
   Future<PhoneResult> adbConnect() => _thenRefresh(_channel.adbConnect());
 
+  /// 纯 GUI 应用: replaces the list; false when the native side refused.
+  /// The labels stay as they were until the status event lands with the new ones.
+  Future<bool> setGuiScheme(List<String> packages) async {
+    final ok = await _channel.setGuiScheme(packages);
+    if (!ok || !ref.mounted) return false;
+    final before = state.status.guiScheme;
+    state = state.copyWith(
+      status: state.status.copyWith(
+        guiScheme: PhoneGuiScheme(
+          packages: packages,
+          labels: {for (final p in packages) p: before.labelFor(p)},
+        ),
+      ),
+    );
+    return true;
+  }
+
   /// Changes one app's rule; false when the native side refused (nothing changes).
   Future<bool> setRule(String package, AppRule rule) async {
     final current = state.policies;

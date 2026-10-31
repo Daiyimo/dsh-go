@@ -117,6 +117,10 @@ class PhonePlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCallHandle
             "adbConnect" -> async(result) { control.background.adbConnect() }
             "getPolicies" -> async(result) { control.policiesMap() }
             "setPolicies" -> async(result) { control.setPolicies(call.arguments as? Map<*, *>) }
+            "setGuiScheme" -> async(result) {
+                val raw = call.argument<List<*>>("packages") ?: emptyList<Any?>()
+                control.setGuiScheme(raw.mapNotNull { it as? String })
+            }
             "actionLog" -> result.success(control.log.toMaps(call.argument<Int>("limit") ?: 100))
             // l10n:keep agent stop reason
             "stopTask" -> result.success(control.stopTask("用户在 App 里停止"))

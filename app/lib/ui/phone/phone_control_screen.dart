@@ -33,6 +33,7 @@ import 'dnd_mode_page.dart';
 import 'phone_disclosure_sheet.dart';
 import 'phone_background_guide.dart';
 import 'phone_unlock_page.dart';
+import 'pure_gui_page.dart';
 import 'phone_widgets.dart';
 import 'restricted_settings_guide.dart';
 import 'screen_text_sheet.dart';
@@ -543,6 +544,13 @@ class _PhoneControlScreenState extends ConsumerState<PhoneControlScreen> {
             spot: SettingsIndex.entry(SettingsPageId.phoneAppRules),
             subtitle: apps,
             onTap: () => _push(const PhoneAppRulesPage()),
+          ),
+          ListPageRow(
+            icon: AppIcons.operate,
+            iconColor: state.status.guiScheme.packages.isEmpty ? DshColors.of(context).warning : null,
+            title: context.l10n.phonePureGuiTitle,
+            subtitle: pureGuiSummary(context.l10n, state.status.guiScheme),
+            onTap: () => _push(const PhonePureGuiPage()),
           ),
           ListPageRow(
             icon: policies?.confirmMode.icon ?? AppIcons.askFirst,

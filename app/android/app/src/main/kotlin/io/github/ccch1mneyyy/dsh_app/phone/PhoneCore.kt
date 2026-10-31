@@ -37,6 +37,8 @@ interface PhoneEnv {
      * [driver] for seconds waiting for 自动恢复无障碍, and every tool call asks this one.
      */
     fun peekPackage(): String? = driver(PhoneScreen.MAIN)?.foregroundPackage()
+    /** The apps the person listed as pure GUI (设置 › 手机操控); shipped default: 微信. */
+    fun guiScheme(): Set<String> = PhoneCore.DEFAULT_GUI_SCHEME
     fun sleep(ms: Long) = Thread.sleep(ms)
 }
 
@@ -85,7 +87,7 @@ class PhoneCore(
      */
     private fun pureGui(): Boolean {
         val pkg = mainPackage()
-        if (pkg != null && pkg in GUI_SCHEME_PACKAGES) return true
+        if (pkg != null && pkg in env.guiScheme()) return true
         val latched = pictureApp ?: return false
         // A latch is that task's picture. The next task may start while the old app is still in
         // front (or while nobody can name the screen at all), and inheriting it would keep a task
@@ -128,7 +130,7 @@ class PhoneCore(
     private fun rememberPicture(screen: PhoneScreen, snap: ScreenSnapshot) {
         if (screen != PhoneScreen.MAIN) return
         val pkg = snap.packageName
-        val scheme = pkg != null && pkg in GUI_SCHEME_PACKAGES
+        val scheme = pkg != null && pkg in env.guiScheme()
         if (snap.kind == ScreenKind.CANVAS || snap.kind == ScreenKind.BLANKED || scheme) {
             enterPureGui(pkg, snap.appLabel)
         } else if (pkg != null && pkg != pictureApp) {
@@ -334,7 +336,7 @@ class PhoneCore(
         if (!background) {
             return afterSystem(env.system().launch(app), ui.get("phone_log_open_app", "打开 %1\$s", app.packageName), app.label) // l10n:keep test default
         }
-        if (app.packageName in GUI_SCHEME_PACKAGES || pureGui()) {
+        if (app.packageName in env.guiScheme() || pureGui()) {
             return Out(pureGuiSentence(app.label), error = true, app = app.label,
                 summary = ui.get("phone_log_open_background", "后台屏打开 %1\$s", app.packageName), decision = "refused:pure-gui") // l10n:keep test default
         }
@@ -836,10 +838,11 @@ class PhoneCore(
          * overlay's status line would land inside that picture and shift the targets it looks for.
          */
         /**
-         * Apps an outside GUI scheme reads and drives on its own (微信): a task on one of them is
-         * pure GUI — one fullscreen app, no virtual screen, nothing drawn over it.
+         * The apps shipped as pure GUI: a task on one of them is one fullscreen app — no virtual
+         * screen, nothing drawn over it. The person edits the list in 设置 › 手机操控, and while
+         * they haven't, this is it (微信 is read and driven by an outside GUI scheme of its own).
          */
-        private val GUI_SCHEME_PACKAGES = setOf("com.tencent.mm")
+        val DEFAULT_GUI_SCHEME = setOf("com.tencent.mm")
 
         /** The call's own time, not counting waits for the person. */
         fun budgetMs(tool: String): Long = when (tool) {

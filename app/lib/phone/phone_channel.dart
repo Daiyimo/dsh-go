@@ -230,6 +230,7 @@ class PhoneStatus {
     this.overlay = false,
     this.notifications = false,
     this.confirmationNotifications,
+    this.guiScheme = const PhoneGuiScheme(),
     this.background = const PhoneBackgroundStatus(),
     this.task = const PhoneTaskStatus(),
     this.device = const PhoneDevice(),
@@ -245,6 +246,7 @@ class PhoneStatus {
       overlay = false,
       notifications = false,
       confirmationNotifications = null,
+      guiScheme = const PhoneGuiScheme(),
       background = const PhoneBackgroundStatus(),
       task = const PhoneTaskStatus(),
       device = const PhoneDevice();
@@ -257,6 +259,7 @@ class PhoneStatus {
     overlay: _flag(m['overlay']),
     notifications: _flag(m['notifications']),
     confirmationNotifications: _maybeFlag(m['confirmationNotifications']),
+    guiScheme: PhoneGuiScheme.fromMap(_map(m['guiScheme'])),
     background: PhoneBackgroundStatus.fromMap(_map(m['background'])),
     task: PhoneTaskStatus.fromMap(_map(m['task'])),
     device: PhoneDevice.fromMap(_map(m['device'])),
@@ -281,11 +284,14 @@ class PhoneStatus {
   /// Dedicated phone-confirmation channel is available at high importance.
   /// Null on older native modules; it does not replace the global switch.
   final bool? confirmationNotifications;
+
+  /// 纯 GUI 应用: a task on one of these runs one fullscreen app, no virtual screen.
+  final PhoneGuiScheme guiScheme;
   final PhoneBackgroundStatus background;
   final PhoneTaskStatus task;
   final PhoneDevice device;
 
-  PhoneStatus copyWith({bool? enabled}) => PhoneStatus(
+  PhoneStatus copyWith({bool? enabled, PhoneGuiScheme? guiScheme}) => PhoneStatus(
     ready: ready,
     error: error,
     enabled: enabled ?? this.enabled,
@@ -295,10 +301,33 @@ class PhoneStatus {
     overlay: overlay,
     notifications: notifications,
     confirmationNotifications: confirmationNotifications,
+    guiScheme: guiScheme ?? this.guiScheme,
     background: background,
     task: task,
     device: device,
   );
+}
+
+/// The list behind 设置 › 手机操控 › 纯 GUI 应用: packages plus a label each.
+class PhoneGuiScheme {
+  const PhoneGuiScheme({this.packages = const [], this.labels = const {}});
+
+  factory PhoneGuiScheme.fromMap(Map<Object?, Object?> m) => PhoneGuiScheme(
+    packages: _strings(m['packages']),
+    labels: {
+      for (final e in _map(m['labels']).entries)
+        if (e.key is String && e.value is String) e.key as String: e.value as String,
+    },
+  );
+
+  final List<String> packages;
+
+  /// Package → app label, from the native side (only for listed packages).
+  final Map<String, String> labels;
+
+  bool contains(String package) => packages.contains(package);
+
+  String labelFor(String package) => labels[package] ?? knownAppLabels[package] ?? package;
 }
 
 // ── 悬浮条 ───────────────────────────────────────────────────────────────────
@@ -823,6 +852,10 @@ class PhoneChannel {
   }
 
   Future<bool> setPolicies(PhonePolicies policies) => _bool('setPolicies', policies.toWire());
+
+  /// 纯 GUI 应用: replaces the list. An empty list means no app is pure GUI by
+  /// name (games and canvas pages still are, page by page).
+  Future<bool> setGuiScheme(List<String> packages) => _bool('setGuiScheme', {'packages': packages});
 
   /// Tells the phone gate whether the model in use can read images. A model that
   /// refuses a picture at admission gets `false`, which makes the gate refuse point

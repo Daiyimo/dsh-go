@@ -130,6 +130,7 @@ class PhoneControl private constructor(private val app: Context) : PhoneEnv, Con
     @Volatile private var logger: (String) -> Unit = {}
     @Volatile private var rootfs: File? = null
     @Volatile private var policiesCache: PhonePolicies? = null
+    @Volatile private var guiCache: Set<String>? = null
     @Volatile private var statusLine: String? = null
     @Volatile private var lastStatus: Map<String, Any?>? = null
     @Volatile private var keptTask = 0L
@@ -196,6 +197,40 @@ class PhoneControl private constructor(private val app: Context) : PhoneEnv, Con
             label(pkg)?.let { labels[pkg] = it }
         }
         return p.toMap() + mapOf("labels" to labels, "defaults" to PhonePolicies().toMap())
+    }
+
+    /**
+     * The apps whose tasks run pure GUI (one fullscreen app, no virtual screen). Unset means the
+     * shipped default; an empty list means the person removed every app on purpose.
+     */
+    override fun guiScheme(): Set<String> = guiCache ?: run {
+        val stored = prefs.getStringSet(K_GUI_SCHEME, null)?.toSet()
+        val s = stored ?: PhoneCore.DEFAULT_GUI_SCHEME
+        guiCache = s
+        s
+    }
+
+    /** Saves the list as typed; packages are kept as-is, only blanks and repeats go. */
+    fun setGuiScheme(packages: List<String>?): Boolean {
+        val set = LinkedHashSet<String>()
+        for (raw in packages ?: emptyList()) {
+            val pkg = raw.trim()
+            if (pkg.isEmpty() || pkg.length > 128) continue
+            set.add(pkg)
+            if (set.size >= MAX_GUI_SCHEME) break
+        }
+        prefs.edit().putStringSet(K_GUI_SCHEME, set).apply()
+        guiCache = set
+        emitStatus()
+        return true
+    }
+
+    /** `guiScheme` in the status map: the list plus a label for each, for the settings page. */
+    fun guiSchemeMap(): Map<String, Any?> {
+        val packages = guiScheme().sorted()
+        val labels = LinkedHashMap<String, String>()
+        for (pkg in packages) label(pkg)?.let { labels[pkg] = it }
+        return linkedMapOf("packages" to packages, "labels" to labels)
     }
 
     private fun label(pkg: String): String? = try {
@@ -430,6 +465,7 @@ class PhoneControl private constructor(private val app: Context) : PhoneEnv, Con
         "confirmationNotifications" to notificationGate.available(),
         "background" to backgroundStatus(),
         "a11yKeeper" to keeperStatus(),
+        "guiScheme" to guiSchemeMap(),
         "task" to tasks.snapshot().toMap(),
         "device" to linkedMapOf(
             "manufacturer" to Build.MANUFACTURER,
@@ -626,6 +662,10 @@ class PhoneControl private constructor(private val app: Context) : PhoneEnv, Con
         private const val K_ENABLED = "enabled"
         private const val K_POLICIES = "policies"
         private const val K_TCP_FALLBACK = "tcpFallback"
+        private const val K_GUI_SCHEME = "guiScheme"
+
+        /** Enough for the hand-written list, small enough that a typo storm can't grow it forever. */
+        private const val MAX_GUI_SCHEME = 40
         private const val CHANNEL_FIX = "dsh-phone-fix"
         private const val NOTIFY_FIX_ID = 4099
 

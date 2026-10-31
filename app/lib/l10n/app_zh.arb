@@ -5803,6 +5803,23 @@
       }
     }
   },
+  "phonePureGuiTitle": "纯 GUI 应用",
+  "phonePureGuiSubtitle": "任务只在一张全屏 App 上做：不开虚拟屏，屏幕上不投任何提示。",
+  "phonePureGuiEmpty": "名单是空的：微信这类应用也照常处理。",
+  "phonePureGuiNone": "没有添加",
+  "phonePureGuiAdd": "添加应用",
+  "phonePureGuiAddHint": "按包名添加",
+  "phonePureGuiRemoveTitle": "把「{app}」移出名单？",
+  "@phonePureGuiRemoveTitle": {
+    "placeholders": {
+      "app": {
+        "type": "String"
+      }
+    }
+  },
+  "phonePureGuiRemoveBody": "移出后它按普通应用处理：可能又开虚拟屏，也可能在屏幕上投提示。",
+  "phonePureGuiRemove": "移出名单",
+  "phonePureGuiNote": "游戏和只有画面的页面看屏时会自动进纯 GUI，不用加进名单。",
   "phoneTaskResultReady": "任务完成 · 查看结果",
   "phoneTaskEndedResult": "任务已结束 · 查看结果",
   "phoneBackgroundGuideTitle": "后台确认与返回",

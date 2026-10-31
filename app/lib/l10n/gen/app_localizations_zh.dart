@@ -9336,6 +9336,38 @@ class L10nZh extends L10n {
   }
 
   @override
+  String get phonePureGuiTitle => '纯 GUI 应用';
+
+  @override
+  String get phonePureGuiSubtitle => '任务只在一张全屏 App 上做：不开虚拟屏，屏幕上不投任何提示。';
+
+  @override
+  String get phonePureGuiEmpty => '名单是空的：微信这类应用也照常处理。';
+
+  @override
+  String get phonePureGuiNone => '没有添加';
+
+  @override
+  String get phonePureGuiAdd => '添加应用';
+
+  @override
+  String get phonePureGuiAddHint => '按包名添加';
+
+  @override
+  String phonePureGuiRemoveTitle(String app) {
+    return '把「$app」移出名单？';
+  }
+
+  @override
+  String get phonePureGuiRemoveBody => '移出后它按普通应用处理：可能又开虚拟屏，也可能在屏幕上投提示。';
+
+  @override
+  String get phonePureGuiRemove => '移出名单';
+
+  @override
+  String get phonePureGuiNote => '游戏和只有画面的页面看屏时会自动进纯 GUI，不用加进名单。';
+
+  @override
   String get phoneTaskResultReady => '任务完成 · 查看结果';
 
   @override

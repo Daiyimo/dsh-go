@@ -34,6 +34,8 @@ Map<String, Object?> phoneStatus({
   bool taskPaused = false,
   bool taskStopped = false,
   bool taskWaived = false,
+  List<String> guiScheme = const ['com.tencent.mm'],
+  Map<String, String> guiSchemeLabels = const {'com.tencent.mm': '微信'},
   Map<String, Object?>? device = const {'manufacturer': 'vivo', 'sdkInt': 35, 'sideloaded': true},
 }) => {
   'enabled': enabled,
@@ -49,6 +51,7 @@ Map<String, Object?> phoneStatus({
     'shizuku': {'installed': shizukuInstalled, 'running': shizukuRunning, 'granted': shizukuGranted},
     'adb': {'wirelessDebugging': wirelessDebugging, 'paired': paired, 'connected': adbConnected},
   },
+  'guiScheme': {'packages': guiScheme, 'labels': guiSchemeLabels},
   'task': {
     'id': ?taskId,
     'active': taskActive,
@@ -220,6 +223,19 @@ class FakePhoneNative {
             ...policies,
             ...args,
             if (unlocks is Map) 'unlocks': {...?(policies['unlocks'] as Map?)?.cast<String, Object?>(), ...unlocks},
+          };
+        }
+        return accept;
+      case 'setGuiScheme':
+        if (accept) {
+          final packages = [for (final p in (args['packages'] as List? ?? const [])) p as String];
+          final labels = (status['guiScheme'] as Map?)?['labels'] as Map? ?? const {};
+          status = {
+            ...status,
+            'guiScheme': {
+              'packages': packages,
+              'labels': {for (final p in packages) if (labels[p] != null) p: labels[p]},
+            },
           };
         }
         return accept;

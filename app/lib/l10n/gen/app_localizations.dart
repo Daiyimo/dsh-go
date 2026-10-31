@@ -17204,6 +17204,66 @@ abstract class L10n {
   /// **'退出码 {code}'**
   String phoneLaunchExited(String code);
 
+  /// No description provided for @phonePureGuiTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'纯 GUI 应用'**
+  String get phonePureGuiTitle;
+
+  /// No description provided for @phonePureGuiSubtitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'任务只在一张全屏 App 上做：不开虚拟屏，屏幕上不投任何提示。'**
+  String get phonePureGuiSubtitle;
+
+  /// No description provided for @phonePureGuiEmpty.
+  ///
+  /// In zh, this message translates to:
+  /// **'名单是空的：微信这类应用也照常处理。'**
+  String get phonePureGuiEmpty;
+
+  /// No description provided for @phonePureGuiNone.
+  ///
+  /// In zh, this message translates to:
+  /// **'没有添加'**
+  String get phonePureGuiNone;
+
+  /// No description provided for @phonePureGuiAdd.
+  ///
+  /// In zh, this message translates to:
+  /// **'添加应用'**
+  String get phonePureGuiAdd;
+
+  /// No description provided for @phonePureGuiAddHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'按包名添加'**
+  String get phonePureGuiAddHint;
+
+  /// No description provided for @phonePureGuiRemoveTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'把「{app}」移出名单？'**
+  String phonePureGuiRemoveTitle(String app);
+
+  /// No description provided for @phonePureGuiRemoveBody.
+  ///
+  /// In zh, this message translates to:
+  /// **'移出后它按普通应用处理：可能又开虚拟屏，也可能在屏幕上投提示。'**
+  String get phonePureGuiRemoveBody;
+
+  /// No description provided for @phonePureGuiRemove.
+  ///
+  /// In zh, this message translates to:
+  /// **'移出名单'**
+  String get phonePureGuiRemove;
+
+  /// No description provided for @phonePureGuiNote.
+  ///
+  /// In zh, this message translates to:
+  /// **'游戏和只有画面的页面看屏时会自动进纯 GUI，不用加进名单。'**
+  String get phonePureGuiNote;
+
   /// No description provided for @phoneTaskResultReady.
   ///
   /// In zh, this message translates to:

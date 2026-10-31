@@ -54,6 +54,8 @@ These pages and WeChat are worked pure GUI, one fullscreen app for the whole tas
 - One fullscreen app only: asking for the back screen later in the task is refused, and the reply says the task works from the picture.
 - No floating bar: anything drawn on the picture moves every position measured against it, and on WeChat an outside setup reading the screen gets pushed around. To stop the task, use the stop on the **Operating your phone** card in the app.
 
+WeChat is on that list out of the box (**Pure GUI apps**, under **App rules** on the phone control page): add one by package name, removing one asks once; an empty list means every app is treated like any other. Games and canvas pages don't need adding — one read that turns out to be all picture switches the task to pure GUI.
+
 ## Floating bar
 
 When a task starts, a floating bar appears at the top of the screen showing what DSH is doing, with **Pause**, **Stop** and **Collapse**:

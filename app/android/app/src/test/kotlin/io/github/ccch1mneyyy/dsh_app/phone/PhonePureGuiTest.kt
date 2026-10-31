@@ -22,6 +22,7 @@ class PhonePureGuiTest {
     private var pkg: String? = "example.app"
     private var appLabel: String? = "Example"
     private var kind = ScreenKind.TREE
+    private var scheme = PhoneCore.DEFAULT_GUI_SCHEME
 
     private fun driver(screen: PhoneScreen, id: String) = object : PhoneDriver {
         override val screen = screen
@@ -57,6 +58,7 @@ class PhonePureGuiTest {
         override fun a11yState() = A11yState.CONNECTED
         override fun backgroundUnavailable() = "后台屏用不了。"
         override fun closeBackground() { closeCount++ }
+        override fun guiScheme() = scheme
         override fun zone() = ZoneId.of("UTC")
         override fun notifyFix(kind: String) {}
         override fun beforeHandoff(screen: PhoneScreen): String? = null
@@ -170,6 +172,26 @@ class PhonePureGuiTest {
         assertEquals(listOf<String?>("DSH 正在看屏幕"), statuses)
         backgroundRequests = 0
         assertFalse(readBack().isError)
+        assertEquals(1, backgroundRequests)
+    }
+
+    @Test fun aListedAppIsPureGuiBeforeAnythingIsRead() {
+        // 设置 › 手机操控 › 纯 GUI 应用 wrote this one; nothing has been read yet.
+        pkg = "com.example.foo"
+        appLabel = "Foo"
+        scheme = setOf("com.tencent.mm", "com.example.foo")
+        val out = readBack()
+        assertTrue(out.text, out.isError)
+        assertTrue(out.text, out.text.contains("纯 GUI"))
+        assertEquals("the display was asked for before the refusal", 0, backgroundRequests)
+    }
+
+    @Test fun anEmptiedListLetsWeChatBackOntoTheVirtualScreen() {
+        pkg = "com.tencent.mm"
+        appLabel = "微信"
+        scheme = emptySet()
+        val out = readBack()
+        assertFalse("every app was removed from the list and 微信 was still refused: ${out.text}", out.isError)
         assertEquals(1, backgroundRequests)
     }
 }

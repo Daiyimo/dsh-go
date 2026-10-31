@@ -1,5 +1,5 @@
 // The sub-pages: restricted-settings guide, 不打扰模式 (Shizuku / 自连 ADB),
-// 应用名单 with its risk notes.
+// 应用名单 with its risk notes, 纯 GUI 应用.
 
 import 'package:dsh_app/state/phone_state.dart';
 import 'package:dsh_app/ui/common/app_sheet.dart';
@@ -9,6 +9,7 @@ import 'package:dsh_app/ui/common/risk_notice.dart';
 import 'package:dsh_app/ui/phone/app_rules_page.dart';
 import 'package:dsh_app/ui/phone/dnd_mode_page.dart';
 import 'package:dsh_app/ui/phone/phone_widgets.dart';
+import 'package:dsh_app/ui/phone/pure_gui_page.dart';
 import 'package:dsh_app/ui/phone/restricted_settings_guide.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -295,6 +296,39 @@ void main() {
       await pumpPhone(tester, const PhoneAppRulesPage(), missingNative: true);
       expect(find.text('读不到应用名单'), findsOneWidget);
       expect(find.byType(ListPageRow), findsNothing);
+    });
+  });
+
+  group('纯 GUI 应用', () {
+    testWidgets('lists the shipped app, adds one by package, removes one', (tester) async {
+      final h = await pumpPhone(tester, const PhonePureGuiPage());
+      expect(find.text('纯 GUI 应用'), findsOneWidget);
+      expect(find.text('微信'), findsOneWidget);
+      expect(find.text('com.tencent.mm'), findsOneWidget);
+
+      await tester.tap(find.text('添加应用'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField), 'com.game.example');
+      await tester.tap(find.text('添加'));
+      await tester.pumpAndSettle();
+      expect(h.native!.callsOf('setGuiScheme').single.arguments, {
+        'packages': ['com.tencent.mm', 'com.game.example'],
+      });
+      expect(find.text('com.game.example'), findsOneWidget);
+
+      // Removing the last one leaves the list empty, and the page says so.
+      await tester.tap(find.text('微信'));
+      await tester.pumpAndSettle();
+      expect(find.text('把「微信」移出名单？'), findsOneWidget);
+      await tester.tap(find.text('移出名单'));
+      await tester.pumpAndSettle();
+      expect((h.native!.callsOf('setGuiScheme').last.arguments as Map)['packages'], ['com.game.example']);
+
+      await tester.tap(find.text('com.game.example'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('移出名单'));
+      await tester.pumpAndSettle();
+      expect(find.text('名单是空的：微信这类应用也照常处理。'), findsOneWidget);
     });
   });
 
