@@ -74,6 +74,12 @@ internal class ScreenShooter(private val service: AccessibilityService, private 
             // l10n:keep agent screenshot result
             if (looksBlack(bitmap)) return Shot(null, null, null, true, "截图全黑，可能是禁止截图的页面")
             val full = if (useWindow) window.bounds else screen
+            // A frame from the middle of a rotation is the other shape: the geometry derived from
+            // it would map every point somewhere else without failing, so say so instead.
+            if (!ScreenGeom.fits(full.width, full.height, bitmap.width, bitmap.height)) {
+                // l10n:keep agent screenshot result
+                return Shot(null, null, null, false, "截图和屏幕对不上（画面 ${bitmap.width}×${bitmap.height}，屏幕 ${full.width}×${full.height}）：屏幕正在转屏，等它停下来再 screen 一次。")
+            }
             val zoom = region?.let { zoomBox(it, full) }?.takeIf { it.width > 0 && it.height > 0 }
             val source = if (zoom == null) bitmap else crop(bitmap, zoom, full)
                 // l10n:keep agent screenshot result

@@ -287,12 +287,19 @@ internal class MainScreenDriver(private val service: PhoneA11yService, private v
             // own metrics can still describe the display the service was configured on.
             val box = screenBox()
             val full = Rect(box.left, box.top, box.right, box.bottom)
+            // A game that declares landscape must not be launched inside a portrait-shaped bounds:
+            // on some ROMs the activity is then letterboxed into that box and every screenshot and
+            // tap of the task is offset. The windowing mode alone already keeps it on the display.
+            val landscapeOnly = box.height >= box.width && wantsLandscape(intent)
             try {
-                val options = ActivityOptions.makeBasic().setLaunchBounds(full).toBundle()
+                val options = ActivityOptions.makeBasic()
+                if (!landscapeOnly) options.setLaunchBounds(full)
+                val bundle = options.toBundle()
+                Log.i(TAG, "open $packageName bounds=${if (landscapeOnly) "none (landscape app)" else "${full.width()}x${full.height()}"}")
                 // WindowConfiguration.WINDOWING_MODE_FULLSCREEN: hidden from the SDK, but the
                 // framework still reads this key when it picks the windowing mode to launch into.
-                options.putInt(KEY_LAUNCH_WINDOWING_MODE, WINDOWING_MODE_FULLSCREEN)
-                service.startActivity(intent, options)
+                bundle.putInt(KEY_LAUNCH_WINDOWING_MODE, WINDOWING_MODE_FULLSCREEN)
+                service.startActivity(intent, bundle)
             } catch (e: Exception) {
                 try { service.startActivity(intent) } catch (e2: Exception) {
                     // l10n:keep agent screen result
@@ -588,6 +595,18 @@ internal class MainScreenDriver(private val service: PhoneA11yService, private v
         // l10n:keep agent screen result
         if (snap.protectedPage && !lifted.systemPages) return ActionResult(false, "这是系统权限 / 安全相关页面，DSH 不在这里点击。需要的话请用 handoff 交给用户。")
         val cap = capture()
+        // The picture the model measured was taken before the screen turned over (a game going
+        // landscape, 微信 opening a mini program): the same normalized point now lands on a
+        // different control, and nothing would fail. Refuse and hand back a fresh screen instead.
+        if (cap.screen.width != snap.display.width || cap.screen.height != snap.display.height) {
+            val now = try { publish(cap, false).let { toSnapshot(it) } } finally { cap.recycle() }
+            // l10n:keep agent screen result
+            return ActionResult(
+                false,
+                "屏幕方向变了（截图是 ${snap.display.width}×${snap.display.height}，现在是 ${cap.screen.width}×${cap.screen.height}）：坐标要按新画面重新量，请再 screen 一次再点。",
+                now,
+            )
+        }
         val same = try { cap.packageName == snap.packageName && cap.windows.lastOrNull()?.id == snap.mainWindowId } finally { cap.recycle() }
         // l10n:keep agent screen result
         if (!same) return ActionResult(false, "截图之后界面已经换了，没有点击。请重新看屏幕。", observeQuiet())
@@ -913,6 +932,19 @@ internal class MainScreenDriver(private val service: PhoneA11yService, private v
 
     // l10n:keep agent screen result
     private fun blank(reason: String) = ScreenSnapshot("${PhoneScreen.MAIN.prefix}0", "屏幕读不到：$reason", null, null)
+
+    /** Whether the launcher activity asks for a landscape-only window. */
+    private fun wantsLandscape(intent: Intent): Boolean = try {
+        val info = service.packageManager.resolveActivity(intent, 0)?.activityInfo
+        info != null && info.screenOrientation in setOf(
+            android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE,
+            android.content.pm.ActivityInfo.SCREEN_ORIENTATION_REVERSE_LANDSCAPE,
+            android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE,
+            android.content.pm.ActivityInfo.SCREEN_ORIENTATION_USER_LANDSCAPE,
+        )
+    } catch (_: Exception) {
+        false
+    }
 
     private fun screenBox(): Box {
         val p = Point()

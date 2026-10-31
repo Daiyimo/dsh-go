@@ -265,6 +265,8 @@ object PhoneToolCatalog {
                 // l10n:keep agent tool catalog
                 "只给没有控件编号的页面（canvas / 加密混淆页）用，这种页面 DSH 会自动附图；能读到编号就说明目标有编号，用 tap / scroll 点编号，别用坐标。" +
                 // l10n:keep agent tool catalog
+                // l10n:keep agent tool catalog
+                "游戏进横屏这类转屏之后，旧截图上的坐标就作废了：结果会说方向变了，先 screen 重新读一次再点。" +
                 "点了没变化时，结果里会说明原因（坐标单位、状态栏、目标不在这一屏）；同一位置连续两次没变化就停手，改 handoff 交给用户。" +
                 // l10n:keep agent tool catalog
                 "默认每次点击都请用户确认；在本任务免确认模式下、且这个 App 本任务已经批准过，canvas 类页面的坐标点击不再逐次问。",

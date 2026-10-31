@@ -53,6 +53,7 @@ These pages and WeChat are worked pure GUI, one fullscreen app for the whole tas
 - The virtual screen is taken down: such a task has no use for a second screen. When the page is recognised, DSH closes it and the app works on your screen.
 - One fullscreen app only: asking for the back screen later in the task is refused, and the reply says the task works from the picture.
 - No floating bar: anything drawn on the picture moves every position measured against it, and on WeChat an outside setup reading the screen gets pushed around. To stop the task, use the stop on the **Operating your phone** card in the app.
+- Landscape works too: an app that declares landscape is no longer launched inside a portrait-shaped window (that letterboxes it and shifts every coordinate). Turning the screen voids an older screenshot: tapping on it is refused with a request to screen again, and a frame caught mid-turn says the picture and the screen disagree — wait for it to settle and read again.
 - Home is not another app: pressing home mid-task and opening WeChat from the launcher keeps the same task, so the bar does not come back. Anything drawn before that is taken down as WeChat comes to the front.
 
 WeChat is on that list out of the box (**Pure GUI apps**, under **App rules** on the phone control page): add one by package name, removing one asks once; an empty list means every app is treated like any other. Games and canvas pages don't need adding — one read that turns out to be all picture switches the task to pure GUI.

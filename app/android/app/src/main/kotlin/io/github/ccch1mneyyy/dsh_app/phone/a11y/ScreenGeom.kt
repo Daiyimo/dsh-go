@@ -32,4 +32,21 @@ object ScreenGeom {
     }
 
     fun inRange(v: Int): Boolean = v in 0..NORM
+
+    /**
+     * Whether a [shotW]×[shotH] frame can be a picture of the [boxW]×[boxH] display at all: the same
+     * shape within [tolerance] (12% by default, which absorbs a screenshot the ROM scaled and a
+     * cutout a point or two off).
+     *
+     * Why this exists: a frame captured while the screen turns over arrives in the *other*
+     * orientation. The scale derived from it ([ImageGeometry]) is still a positive number, so every
+     * normalized point maps somewhere plausible and nothing raises an error — the tap just lands on
+     * a different control. Games are where this bites, because they turn the screen on launch.
+     */
+    fun fits(boxW: Int, boxH: Int, shotW: Int, shotH: Int, tolerance: Double = 0.12): Boolean {
+        if (boxW <= 0 || boxH <= 0 || shotW <= 0 || shotH <= 0) return false
+        val picture = shotW.toDouble() / shotH
+        val screen = boxW.toDouble() / boxH
+        return kotlin.math.abs(picture - screen) <= screen * tolerance
+    }
 }

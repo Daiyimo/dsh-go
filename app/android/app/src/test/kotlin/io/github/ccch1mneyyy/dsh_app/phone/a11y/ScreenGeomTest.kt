@@ -54,4 +54,27 @@ class ScreenGeomTest {
         assertEquals(1194, ScreenGeom.normToPx(996, 1200))
         assertEquals(574, ScreenGeom.normToPx(215, 2670))
     }
+
+    @Test fun aFrameFromTheRightOrientationFits() {
+        assertTrue(ScreenGeom.fits(1080, 2400, 1080, 2400))
+        assertTrue(ScreenGeom.fits(2400, 1080, 2400, 1080))
+        // A ROM that hands the screenshot back scaled keeps the shape, so the maths stays right.
+        assertTrue(ScreenGeom.fits(1080, 2400, 540, 1200))
+        assertTrue(ScreenGeom.fits(2400, 1080, 1300, 585))
+        assertTrue(ScreenGeom.fits(1080, 2400, 1082, 2400))
+    }
+
+    @Test fun aFrameFromTheWrongOrientationDoesNotFit() {
+        // A game turning the screen over: the frame that arrives mid-turn is the other shape, and
+        // the scale derived from it would put every tap somewhere else without failing.
+        assertFalse(ScreenGeom.fits(1080, 2400, 2400, 1080))
+        assertFalse(ScreenGeom.fits(2400, 1080, 1080, 2400))
+        assertFalse(ScreenGeom.fits(1440, 3200, 1300, 1300))
+    }
+
+    @Test fun nothingFitsADegenerateBox() {
+        assertFalse(ScreenGeom.fits(0, 0, 1080, 2400))
+        assertFalse(ScreenGeom.fits(1080, 2400, 0, 0))
+        assertFalse(ScreenGeom.fits(-1, 2400, 1080, 2400))
+    }
 }
