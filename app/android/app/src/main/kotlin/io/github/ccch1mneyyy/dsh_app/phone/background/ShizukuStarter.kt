@@ -4,6 +4,7 @@ package io.github.ccch1mneyyy.dsh_app.phone.background
 
 import io.github.ccch1mneyyy.dsh_app.i18n.AppStrings
 import io.github.ccch1mneyyy.dsh_app.R
+import io.github.ccch1mneyyy.dsh_app.phone.PhoneLog
 import android.content.ComponentName
 import android.content.Context
 import android.content.ServiceConnection
@@ -103,7 +104,11 @@ class ShizukuStarter(private val context: Context, private val onChanged: () -> 
     /** Binds the UserService (blocking, 15 s). Returns a live channel, or null with [reason]. */
     fun connect(): PrivilegedChannel? {
         channel?.takeIf { it.alive() }?.let { return it }
-        if (!granted()) return null
+        if (!granted()) {
+            val st = status()
+            PhoneLog.i("shizuku: no permission (running=${st.running} granted=${st.granted})")
+            return null
+        }
         val latch = CountDownLatch(1)
         val holder = arrayOfNulls<IBinder>(1)
         val serviceArgs = args0

@@ -56,6 +56,9 @@ internal class MainScreenDriver(private val service: PhoneA11yService, private v
     private val lock = Any()
     private var latest: Snapshot? = null
 
+    /** The app this task launched last: a page with no tree cannot name itself. */
+    private val hint = ForegroundHint()
+
     /**
      * Consecutive no-change hits on one target, kept across `screen` calls: a target the model
      * keeps re-aiming at without any reaction is reported once with a checklist and then stopped,
@@ -111,7 +114,8 @@ internal class MainScreenDriver(private val service: PhoneA11yService, private v
 
     override fun screenKind(): ScreenKind = latest?.screen?.kind ?: ScreenKind.TREE
 
-    override fun foregroundPackage(): String? = TreeCapture.foregroundPackage(service, screenBox())
+    override fun foregroundPackage(): String? =
+        hint.seen(TreeCapture.foregroundPackage(service, screenBox()), SystemClock.uptimeMillis())
 
     override fun observe(detail: Boolean, image: Boolean, region: Box?): ScreenSnapshot = synchronized(lock) {
         val start = SystemClock.uptimeMillis()
@@ -256,6 +260,8 @@ internal class MainScreenDriver(private val service: PhoneA11yService, private v
                     return ActionResult(false, "打开「$name」失败：${e2.message ?: e2.javaClass.simpleName}")
                 }
             }
+            // A page with no tree cannot say who it is; this keeps `open` answerable for it.
+            hint.opened(packageName, SystemClock.uptimeMillis())
             val deadline = SystemClock.uptimeMillis() + 6_000
             var front: String? = null
             while (SystemClock.uptimeMillis() < deadline && !cancelled(gen)) {
@@ -269,7 +275,16 @@ internal class MainScreenDriver(private val service: PhoneA11yService, private v
                 try { toSnapshot(publish(cap, false)) } finally { cap.recycle() }
             } else observeQuiet()
             // l10n:keep agent screen result
-            return if (front == packageName) ActionResult(true, "已打开「$name」。", snap)
+            val opened = when (snap?.kind) {
+                null, ScreenKind.CANVAS, ScreenKind.BLANKED -> ActionResult(true, "已打开「$name」。", snap)
+                // l10n:keep agent screen result
+                else -> ActionResult(
+                    true,
+                    "已打开「$name」。页面可能还在加载：直接再 screen 读一次，不要回桌面找图标。",
+                    snap,
+                )
+            }
+            return if (front == packageName) opened
             // l10n:keep agent screen result
             else ActionResult(false, "已请求打开「$name」，但 6 秒内它没有到前台（现在是「${label(front) ?: front ?: "未知"}」）。", snap)
         }

@@ -162,7 +162,15 @@ internal object TreeCapture {
                 if (w.type != AccessibilityWindowInfo.TYPE_APPLICATION && w.type != AccessibilityWindowInfo.TYPE_SYSTEM) continue
                 w.getBoundsInScreen(rect)
                 val share = Box(rect.left, rect.top, rect.right, rect.bottom).intersect(screen).area.toDouble() / screen.area.coerceAtLeast(1)
-                val root = w.root ?: (if (w.isActive || w.isFocused) activeRoot(service, w.id) else null) ?: continue
+                val root = w.root ?: (if (w.isActive || w.isFocused) activeRoot(service, w.id) else null)
+                if (root == null) {
+                    // WeChat's real page and most games hand accessibility no tree at all. That
+                    // window is still what the person is looking at: the window under it is NOT
+                    // the foreground, and naming that one sent the model to the home screen to
+                    // look for the app it had just opened. Unknown is the honest answer.
+                    if (w.type == AccessibilityWindowInfo.TYPE_APPLICATION && share >= 0.5) return null
+                    continue
+                }
                 // The freeform decorations of a background-started app: see [isChrome].
                 if (isChrome(w.type, share, root.packageName?.toString())) { release(root); continue }
                 try { return root.packageName?.toString() } finally { release(root) }

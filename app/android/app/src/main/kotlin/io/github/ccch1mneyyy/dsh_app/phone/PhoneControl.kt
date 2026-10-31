@@ -1,5 +1,6 @@
 package io.github.ccch1mneyyy.dsh_app.phone
 
+import android.content.pm.PackageManager
 import io.github.ccch1mneyyy.dsh_app.i18n.AppStrings
 import android.app.Application
 import android.app.KeyguardManager
@@ -660,7 +661,11 @@ class PhoneControl private constructor(private val app: Context) : PhoneEnv, Con
     override fun peekPackage(): String? = runCatching { PhoneRegistry.mainDriver?.foregroundPackage() }.getOrNull()
 
     override fun imePassword(): Boolean = DshIme.password()
-    override fun typeIntoPage(text: String, submit: Boolean): String? = injector.type(text, submit)
+    override fun typeIntoPage(text: String, submit: Boolean): String? {
+        val answer = injector.type(text, submit)
+        log("type ${text.length} chars submit=$submit -> ${answer ?: "ok"}")
+        return answer
+    }
 
     /** 设置 › 手机操控 › 进阶 › DSH 输入法: whether it is enabled, chosen, and holding a field right now. */
     fun imeStatus(): Map<String, Any?> = linkedMapOf(
@@ -675,9 +680,16 @@ class PhoneControl private constructor(private val app: Context) : PhoneEnv, Con
      */
     override fun homePackages(): Set<String> = homeCache ?: run {
         val found = LinkedHashSet<String>()
+        val home = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)
+        // Everyone who can answer HOME, not only the default one: this ROM ships two
+        // launchers and either can be the window a task walks across on its way to an app.
         runCatching {
-            val home = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)
-            app.packageManager.queryIntentActivities(home, 0).forEach { found += it.activityInfo.packageName }
+            app.packageManager.queryIntentActivities(home, PackageManager.MATCH_ALL)
+                .forEach { found += it.activityInfo.packageName }
+        }
+        runCatching {
+            app.packageManager.queryIntentActivities(home, PackageManager.MATCH_DEFAULT_ONLY)
+                .forEach { found += it.activityInfo.packageName }
         }
         val answer = found.toSet()
         homeCache = answer

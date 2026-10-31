@@ -73,7 +73,9 @@ object PhoneToolCatalog {
                 // l10n:keep agent tool catalog
                 "background:true 在后台屏打开（不打扰模式，需用户在设置里开通）。开着无障碍时返回打开后的屏幕。" +
                 // l10n:keep agent tool catalog
-                "微信、游戏这类只能看画面的应用没有后台屏，只在全屏 App 上操作。",
+                "微信、游戏这类只能看画面的应用没有后台屏，只在全屏 App 上操作。"
+                // l10n:keep agent tool catalog
+                + "打开后不用回桌面：页面还在加载就直接再 screen 读一次。",
             linkedMapOf(
                 // l10n:keep agent tool catalog
                 "app" to str("包名或应用名"),

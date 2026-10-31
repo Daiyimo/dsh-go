@@ -5,6 +5,7 @@ package io.github.ccch1mneyyy.dsh_app.phone.background
 
 import io.github.ccch1mneyyy.dsh_app.i18n.AppStrings
 import io.github.ccch1mneyyy.dsh_app.R
+import io.github.ccch1mneyyy.dsh_app.phone.PhoneLog
 import android.content.Context
 import android.net.InetAddresses
 import android.os.Build
@@ -82,6 +83,7 @@ class AdbStarter(private val context: Context, private val onChanged: () -> Unit
         if (target <= 0) return fail(AppStrings.get(context, R.string.pairing_port_missing))
         return try {
             val ok = manager.pair(host.hostAddress ?: "127.0.0.1", target, code)
+            PhoneLog.i("adb pair ${host.hostAddress}:$target ok=$ok")
             if (ok) { pairedFlag.writeText("ok"); onChanged() }
             mapOf("ok" to ok, "reason" to if (ok) null else AppStrings.get(context, R.string.pairing_failed))
         } catch (e: Exception) {
@@ -101,6 +103,7 @@ class AdbStarter(private val context: Context, private val onChanged: () -> Unit
             } else {
                 manager.autoConnect(context, TimeUnit.SECONDS.toMillis(8))
             }
+            PhoneLog.i("adb connect connected=$connected isConnected=${manager.isConnected}")
             if (!connected && !manager.isConnected) return null
             val stream = manager.openStream("shell:" + appProcessCommand())
             val value = AdbChannel(stream)

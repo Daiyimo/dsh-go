@@ -6,6 +6,7 @@ import android.content.Context
 import android.os.Build
 import android.os.Bundle
 import android.os.Process
+import io.github.ccch1mneyyy.dsh_app.phone.PhoneLog
 import io.github.ccch1mneyyy.dsh_app.phone.PhoneRegistry
 import java.util.concurrent.atomic.AtomicLong
 
@@ -158,6 +159,7 @@ class BackgroundControl private constructor(context: Context) {
         val ok = ch != null && runCatching {
             ch.execute(Bundle().apply { putString(Proto.OP, op); fill() }).getBoolean(Proto.OK)
         }.getOrDefault(false)
+        PhoneLog.i("privileged $op via ${if (shared) mode else "one-shot"}: ok=$ok channel=${ch != null}")
         if (!shared) disconnectAll()
         return ok
     }
@@ -168,13 +170,20 @@ class BackgroundControl private constructor(context: Context) {
         else -> null
     }
 
-    fun requestShizukuPermission(then: () -> Unit): Boolean = shizuku.requestPermission(then)
+    fun requestShizukuPermission(then: () -> Unit): Boolean {
+        val s = shizuku.status()
+        PhoneLog.i("shizuku: installed=${s.installed} running=${s.running} granted=${s.granted}")
+        return shizuku.requestPermission(then)
+    }
 
     // ---- task lifecycle (called by the bridge/core) ------------------------
 
     /** Connects, probes the gate, and registers the driver for the running task. */
     fun beginTask(taskId: Long): Boolean {
-        if (mode == "off" || !androidOk()) return false
+        if (mode == "off" || !androidOk()) {
+            PhoneLog.i("display: not this task's (mode=$mode androidOk=${androidOk()})")
+            return false
+        }
         synchronized(this) {
             if (taskId <= endedTaskId.get() || (driverTaskId ?: Long.MIN_VALUE) > taskId) return false
             if (driverTaskId == taskId && driver != null && PhoneRegistry.backgroundDriver === driver) return true
