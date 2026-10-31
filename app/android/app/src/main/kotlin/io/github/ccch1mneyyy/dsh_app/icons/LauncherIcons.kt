@@ -5,15 +5,16 @@ package io.github.ccch1mneyyy.dsh_app.icons
  * between them. Pure, unit-tested on the JVM; [LauncherIconPlugin] reads and writes the states.
  *
  * Every alias points at MainActivity and carries only MAIN / LAUNCHER (plus the static shortcuts);
- * exactly one is enabled. Two rules keep the app on screen while it switches:
+ * one is enabled after any deferred switch-off. Two rules keep the app on screen while it switches:
  *
  * - A component the system sees as explicitly DISABLED takes every task opened through it down
  *   with it (ActivityManagerService.cleanupDisabledPackageComponentsLocked → RecentTasks); one put
  *   back to DEFAULT does not. So every alias but [ORIGINAL] is `enabled="false"` in the manifest,
  *   and switching off one of those means DEFAULT, never DISABLED.
  * - [ORIGINAL] (enabled in the manifest: fresh installs need an entry) can only be switched off
- *   with DISABLED. That waits until no task of ours was opened through it ([Plan.deferred]), and
- *   it happens once: going back to 雾蓝 later uses its twin, [MIST_ALT].
+ *   with DISABLED. That waits while its task is visible or has another app on top ([Plan.deferred]);
+ *   going Home settles it immediately. It happens once: going back to 雾蓝 later uses its twin,
+ *   [MIST_ALT]. No activity is recreated to switch an icon.
  *
  * New entry first, old ones after, so the app never has none.
  */
@@ -64,12 +65,22 @@ internal object LauncherIcons {
     /**
      * The icon on the launcher. [chosen] is the last pick (it settles the in-between states a
      * switch passes through); otherwise an alias other than [ORIGINAL] wins, since [ORIGINAL] is
-     * only still on next to one while its switch-off waits.
+     * only still on next to one until its switch-off.
      */
     fun current(stateOf: (String) -> Int, chosen: String?): String {
         val on = aliases.filter { isOn(it, stateOf(it.className)) }
         if (chosen != null && on.any { it.variant == chosen }) return chosen
         return on.firstOrNull { it !== ORIGINAL }?.variant ?: MIST
+    }
+
+    /**
+     * Restore the saved user intent, even when a reboot rolled PackageManager's asynchronous
+     * component writes back to an older state. [current] must still report the enabled icon until
+     * these steps succeed. Installs with no saved choice (or an obsolete value) keep their entry.
+     */
+    fun settlePlan(stateOf: (String) -> Int, chosen: String?, originalInUse: Boolean): Plan {
+        val target = chosen?.takeIf { it in variants } ?: current(stateOf, null)
+        return plan(target, stateOf, originalInUse)
     }
 
     /** The alias that shows [variant]: [ORIGINAL] for 雾蓝 while it is still on, else its own. */
@@ -83,7 +94,7 @@ internal object LauncherIcons {
 
     /**
      * Apply [enable], then [disable] (each step a setComponentEnabledSetting). [deferred]: [ORIGINAL]
-     * stays on for now and has to be switched off later (see [plan]).
+     * stays on for now, and goes once its task is safely out of sight (see [keepOriginal]).
      */
     class Plan(val target: Alias, val enable: List<Step>, val disable: List<Step>, val deferred: Boolean) {
         val isEmpty get() = enable.isEmpty() && disable.isEmpty()
@@ -109,5 +120,40 @@ internal object LauncherIcons {
             }
         }
         return Plan(target, enable, disable, deferred)
+    }
+
+    /** A task of ours as ActivityManager lists it: the components it was opened through, and its activity count. */
+    class Task(
+        val openedThrough: List<String?>,
+        val activities: Int,
+        val id: Int = -1,
+        val topPackage: String? = null,
+    ) {
+        val openedThroughOriginal get() = ORIGINAL.className in openedThrough
+    }
+
+    /**
+     * Switching [ORIGINAL] off would close one of [tasks] that is open. A Recents card whose
+     * activities are gone doesn't count: switching off only takes the card away. A killed process
+     * can also leave activity records behind, which [keepOriginal] handles at the next resume.
+     */
+    fun originalInUse(tasks: List<Task>): Boolean =
+        tasks.any { it.activities > 0 && it.openedThroughOriginal }
+
+    /** Retire only once a different task is resumed, or the app is safely out of sight. */
+    fun keepOriginal(
+        tasks: List<Task>,
+        ownPackage: String,
+        appVisible: Boolean,
+        resumedTask: Int?,
+        interactive: Boolean,
+        locked: Boolean,
+    ): Boolean {
+        val open = tasks.filter { it.activities > 0 && it.openedThroughOriginal }
+        if (open.isEmpty()) return false
+        // Unknown tops are protected too: a missing snapshot is not permission to close a picker.
+        if (open.any { it.topPackage != ownPackage }) return true
+        if (!interactive || locked) return true
+        return appVisible && (resumedTask == null || open.any { it.id == resumedTask })
     }
 }

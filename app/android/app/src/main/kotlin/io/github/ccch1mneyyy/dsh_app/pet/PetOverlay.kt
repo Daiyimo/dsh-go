@@ -1,6 +1,7 @@
 package io.github.ccch1mneyyy.dsh_app.pet
 
 import io.github.ccch1mneyyy.dsh_app.i18n.AppStrings
+import android.Manifest
 import android.animation.Animator
 import android.animation.AnimatorListenerAdapter
 import android.animation.ValueAnimator
@@ -19,10 +20,12 @@ import android.content.IntentFilter
 import android.content.SharedPreferences
 import android.content.pm.ActivityInfo
 import android.content.pm.ApplicationInfo
+import android.content.pm.PackageManager
 import android.content.res.Configuration
 import android.content.res.Resources
 import android.graphics.PixelFormat
 import android.hardware.display.DisplayManager
+import android.media.AudioManager
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
@@ -40,13 +43,16 @@ import android.view.View
 import android.view.WindowInsets
 import android.view.WindowManager
 import android.view.animation.PathInterpolator
+import android.view.inputmethod.InputMethodManager
 import io.github.ccch1mneyyy.dsh_app.MainActivity
 import io.github.ccch1mneyyy.dsh_app.R
+import io.github.ccch1mneyyy.dsh_app.nativemedia.MicArbiter
 import io.github.ccch1mneyyy.dsh_app.phone.PhoneControl
 import io.github.ccch1mneyyy.dsh_app.phone.a11y.PhoneA11yService
 import io.github.ccch1mneyyy.dsh_app.runtime.DshService
 import io.github.ccch1mneyyy.dsh_app.runtime.RuntimeController
 import io.github.ccch1mneyyy.dsh_app.shortcuts.EntryActivity
+import io.github.ccch1mneyyy.dsh_app.voice.WavRecorder
 import java.util.Calendar
 import java.util.IdentityHashMap
 import java.util.concurrent.Executors
@@ -55,9 +61,10 @@ import kotlin.math.roundToInt
 
 /**
  * The out-of-app pet (docs/design/pets.md): a window the size of the pack's wide hit
- * box (grown around the lifted pose while held, [PetFrames]), a separate bubble window, a
- * long-press menu, and a 「×」 target while dragging. Dart pushes
- * the reduced state ([push]); when it shows is [OverlayMachine]'s call, the permission branches
+ * box (grown around the lifted pose while held, [PetFrames]), a separate bubble window (with a
+ * request's answers on it), a long-press menu, 问一句's input bar, and a 「×」 target while
+ * dragging. Dart pushes the reduced state ([push]) and does what the bar and the bubble ask
+ * ([Listener.call]); when it shows is [OverlayMachine]'s call, the permission branches
  * [OverlayAccess]'s, the dock [EdgeSnap]'s, what plays [PetPlayer]'s.
  *
  * Window type: TYPE_ACCESSIBILITY_OVERLAY through the phone-control accessibility service when it
@@ -70,6 +77,9 @@ internal object PetOverlay {
     interface Listener {
         fun onStatus(status: Map<String, Any?>)
         fun onOpenSettings()
+
+        /** Asks Dart [method] (问一句, an answer, 停止, …); [reply] gets null when Dart can't answer. */
+        fun call(method: String, args: Any?, reply: (Any?) -> Unit)
     }
 
     private const val TAG = "DshPet"
@@ -87,6 +97,15 @@ internal object PetOverlay {
     private const val TARGET_GAP_DP = 28f
     private const val CHANNEL_OPEN = "dsh-pet-open"
     private const val NOTICE_ID = 3091
+    /** An answer key takes touches this long after its bubble shows (as phone control's prompt). */
+    private const val ARM_MS = 600L
+    /** 问一句's bar: as wide as there is room beside the pet, within these. */
+    private const val ASK_MIN_DP = 240f
+    private const val ASK_MAX_DP = 360f
+    /** Less than this much recording is nothing heard (the composer's rule, 0.3 s at 16 kHz). */
+    private const val MIN_WAV_BYTES = 44 + 9_600
+    /** A recording held this long without the system silencing it is a real one. */
+    private const val SILENCE_CHECK_MS = 400L
 
     private lateinit var app: Context
     private lateinit var prefs: SharedPreferences
@@ -110,6 +129,7 @@ internal object PetOverlay {
     private var lastAdd: AddResult? = null
     private var failedAt = 0L
     private var lastCanDraw: Boolean? = null
+    private val accessibilityRetry = AccessibilityOverlayRetry()
 
     // ---- pack ----
     private var loaded: PetSprites.Loaded? = null
@@ -135,7 +155,7 @@ internal object PetOverlay {
     private var target: DismissTargetView? = null
     private var targetCenter: WindowPos? = null
     private var dock = Dock.DEFAULT
-    private var tucked = false
+    private var dimmed = false
     private var dragStart: WindowPos? = null
     /** Where the finger puts the rest frame, kept on screen as before the window grew: release and 「×」 read it. */
     private var dropAt: WindowPos? = null
@@ -161,6 +181,7 @@ internal object PetOverlay {
         initialized = true
         app = context.applicationContext
         prefs = app.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        askDraft = prefs.getString("ask_draft", "").orEmpty()
         sprites = PetSprites(app, assetPath)
         machine.enabled = prefs.getBoolean(K_ENABLED, false)
         machine.alwaysShow = prefs.getBoolean(K_ALWAYS, false)
@@ -206,6 +227,11 @@ internal object PetOverlay {
         loadRequest++
         loadingKey = null
         pendingSettings = false
+        pendingVoice = false
+        returnAsk = false
+        voiceHandoff++
+        answerState.reset()
+        askDraftState.resetProducer()
         machine.resetProducer()
         removeWindows()
         evaluate()
@@ -293,11 +319,12 @@ internal object PetOverlay {
         if (!initialized) return
         main.removeCallbacks(evaluateRunnable)
         refreshCanDraw()
-        machine.canHost = OverlayAccess.host(a11yConnected(), lastAdd) != OverlayHost.NONE
+        machine.canHost = overlayHost() != OverlayHost.NONE
         machine.hasPet = loaded != null && loadedKey == packKey(machine.last)
         machine.phoneTask = PhoneControl.peek()?.foregroundLine() != null
         machine.dshService = DshService.isRunning
         machine.interactive = interactive()
+        machine.holding = askView != null || answerState.bubbleId != null || returnAsk
         val t = now()
         val d = machine.decide(t)
         if (d.visibility != lastVisibility || d.why != lastWhy) {
@@ -313,6 +340,7 @@ internal object PetOverlay {
             Visibility.PAUSED -> {
                 stopLoop()
                 dismissMenu()
+                removeAsk()
             }
             Visibility.SHOWN -> {
                 val before = lastAdd
@@ -321,9 +349,13 @@ internal object PetOverlay {
                     if (lastAdd != before) main.post(evaluateRunnable)
                 } else {
                     retarget()
-                    if (!dragging) setTucked(d.tucked)
-                    if (tucked || !systemShown) stopLoop() else startLoop()
+                    if (!dragging) setDimmed(d.dimmed)
+                    if (dimmed || !systemShown) stopLoop() else startLoop()
                     showBubble(d.bubble)
+                    if (returnAsk) {
+                        returnAsk = false
+                        main.post { if (!machine.appForeground && alive(petTicket)) showAsk(askFresh) }
+                    }
                 }
             }
         }
@@ -332,7 +364,10 @@ internal object PetOverlay {
         // Polled only while out (or held back by a phone task): the accessibility service, a phone
         // task and DshService change without telling us.
         val poll = d.visibility == Visibility.SHOWN || (machine.phoneTask && machine.enabled && !machine.appForeground)
-        val wake = listOfNotNull(d.wakeAt?.let { it - t }, if (poll) POLL_MS else null).minOrNull()
+        val wake = listOfNotNull(
+            d.wakeAt?.let { it - t }, if (poll) POLL_MS else null,
+            accessibilityRetry.remaining(PhoneA11yService.instance, t),
+        ).minOrNull()
         if (wake != null) main.postDelayed(evaluateRunnable, wake.coerceAtLeast(50))
         publishStatus()
     }
@@ -348,6 +383,12 @@ internal object PetOverlay {
     // ---- permission -----------------------------------------------------------------------------
 
     private fun a11yConnected() = PhoneA11yService.instance != null
+
+    private fun overlayHost(): OverlayHost = OverlayAccess.host(
+        a11yConnected(), lastAdd,
+        a11yFailed = accessibilityRetry.remaining(PhoneA11yService.instance, now()) != null,
+        canDraw = canDraw(),
+    )
 
     private fun canDraw(): Boolean = try { Settings.canDrawOverlays(app) } catch (_: Exception) { false }
 
@@ -492,7 +533,7 @@ internal object PetOverlay {
         }
     }
 
-    /** Paused or tucked: still draw the current picture once (sheet permitting). */
+    /** Paused or dimmed: still draw the current picture once (sheet permitting). */
     private fun drawStill() {
         val ticket = petTicket
         if (!alive(ticket)) return
@@ -574,38 +615,48 @@ internal object PetOverlay {
         title = AppStrings.get(app, R.string.pet_window_title)
         if (Build.VERSION.SDK_INT >= 28) layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
         if (Build.VERSION.SDK_INT >= 30) setFitInsetsTypes(0)
+        // A window whose size and place change in one layout gets the system's ~0.4 s move
+        // animation, and every move meanwhile is ignored: picked up, the pet grows around the
+        // lifted pose and then lagged the finger until it ended. Our windows move themselves.
+        if (Build.VERSION.SDK_INT >= 34) {
+            setCanPlayMoveAnimation(false)
+        } else {
+            // PRIVATE_FLAG_NO_MOVE_ANIMATION, what setCanPlayMoveAnimation sets.
+            runCatching { javaClass.getField("privateFlags").run { setInt(this@apply, getInt(this@apply) or 0x40) } }
+        }
     }
 
     private fun edge(ctx: Context) = ctx.dp(EDGE_DP)
 
     /** The pet window, on the right host; false when it couldn't be added. */
     private fun attachPet(): Boolean {
-        val want = OverlayAccess.host(a11yConnected(), lastAdd)
+        val want = overlayHost()
         if (want == OverlayHost.NONE) return false
-        val ctx = if (want == OverlayHost.ACCESSIBILITY) PhoneA11yService.instance ?: return false else appWindowContext()
-        val current = petView
-        if (current != null && host == want && windows.isHost(ctx) && alive(petTicket)) return true
-        removeWindows()
-        if (!windows.begin(ctx)) return false
-        val w = ctx.getSystemService(WindowManager::class.java) ?: return false
-        host = want
-        hostContext = ctx
-        wm = w
-        val ticket = windows.claim(OverlayWindowOwner.Role.PET) ?: return false
-        petTicket = ticket
-        val view = PetView(ctx, petListener(ticket)).apply { setSprites(loaded) }
-        if (view.pixelWidth <= 0) {
-            removeWindows()
-            return false
-        }
-        view.contentDescription = loaded?.pack?.name ?: AppStrings.get(app, R.string.pet_label)
-        tucked = false
-        systemShown = true
-        val pos = EdgeSnap.position(dock, view.reach, safeArea(), edge(ctx))
-        val params = baseParams(view.pixelWidth, view.pixelHeight, 0).apply { x = pos.x; y = pos.y }
-        petView = view
-        petParams = params
+        val service = PhoneA11yService.instance
         return try {
+            val ctx = if (want == OverlayHost.ACCESSIBILITY) service?.overlayWindowContext() ?: return false else appWindowContext()
+            val current = petView
+            if (current != null && host == want && windows.isHost(ctx) && alive(petTicket)) return true
+            removeWindows()
+            if (!windows.begin(ctx)) return false
+            val w = ctx.getSystemService(WindowManager::class.java) ?: return false
+            host = want
+            hostContext = ctx
+            wm = w
+            val ticket = windows.claim(OverlayWindowOwner.Role.PET) ?: return false
+            petTicket = ticket
+            val view = PetView(ctx, petListener(ticket)).apply { setSprites(loaded) }
+            if (view.pixelWidth <= 0) {
+                removeWindows()
+                return false
+            }
+            view.contentDescription = loaded?.pack?.name ?: AppStrings.get(app, R.string.pet_label)
+            dimmed = false
+            systemShown = true
+            val pos = EdgeSnap.position(dock, view.reach, safeArea(), edge(ctx))
+            val params = baseParams(view.pixelWidth, view.pixelHeight, 0).apply { x = pos.x; y = pos.y }
+            petView = view
+            petParams = params
             // The 「×」 goes in first, hidden, so the dragged pet stays above it.
             addTarget(ctx, w)
             if (!installWindow(ticket, view, w, params)) {
@@ -622,6 +673,9 @@ internal object PetOverlay {
             if (want == OverlayHost.APPLICATION) {
                 lastAdd = AddResult.FAILED
                 failedAt = now()
+            } else if (service != null) {
+                accessibilityRetry.failed(service, now())
+                service.invalidateOverlayWindowContext()
             }
             host = OverlayHost.NONE
             false
@@ -638,6 +692,7 @@ internal object PetOverlay {
         slideAnim?.cancel()
         slideAnim = null
         dismissMenu()
+        removeAsk()
         removeBubble()
         removeTarget()
         petView?.let { remove(it) }
@@ -645,7 +700,7 @@ internal object PetOverlay {
         petTicket = null
         petParams = null
         dragging = false
-        tucked = false
+        dimmed = false
         player.endReaction()
         speaksForResults = false
         host = OverlayHost.NONE
@@ -708,9 +763,13 @@ internal object PetOverlay {
             nextTurn = { confirm ->
                 main.post {
                     confirm()
-                    windows.retryRemovals()
+                    // A deferred removal still attached after this turn must wait for the poll;
+                    // retrying it here can post another confirmation forever on the main thread.
+                    if (!v.isAttachedToWindow && v.parent == null) {
+                        windows.retryRemovals()
+                        evaluate()
+                    }
                     scheduleCleanup()
-                    evaluate()
                 }
             },
         )
@@ -743,20 +802,17 @@ internal object PetOverlay {
         v.animate().alpha(1f).scaleX(1f).scaleY(1f).setDuration(220).setInterpolator(easing).start()
     }
 
-    /** Slides into or out of the half-hidden spot at the edge. */
-    private fun setTucked(on: Boolean) {
-        if (on == tucked) return
+    /** Fades to [OverlayMachine.DIM_ALPHA] and back where it docks; the whole pet stays on screen. */
+    private fun setDimmed(on: Boolean) {
+        if (on == dimmed) return
         val v = petView ?: return
-        val p = petParams ?: return
-        tucked = on
+        dimmed = on
         if (on) {
             dismissMenu()
             removeBubble()
         }
-        val area = safeArea()
-        val to = if (on) EdgeSnap.tucked(dock, v.pixelWidth, v.reach, area, edge(v.context)) else EdgeSnap.position(dock, v.reach, area, edge(v.context))
-        // Out again: the bubble that called it waits for the slide, then shows.
-        slide(v, p, to, then = if (on) null else ({ evaluate() }))
+        val alpha = if (on) OverlayMachine.DIM_ALPHA else 1f
+        if (animationsOn()) v.animate().alpha(alpha).setDuration(if (on) 400 else 150).setInterpolator(easing).start() else v.alpha = alpha
     }
 
     /** The screen minus status / navigation bars and the cutout. */
@@ -795,7 +851,7 @@ internal object PetOverlay {
             dragStart = restPos(v, p)
             dropAt = dragStart
             dragging = true
-            tucked = false
+            setDimmed(false)
             machine.onTouch(now())
             dismissMenu()
             removeBubble()
@@ -852,6 +908,7 @@ internal object PetOverlay {
         override fun onTap(leftHalf: Boolean) {
             if (!alive(ticket)) return
             machine.onTouch(now())
+            if (dimmed) evaluate()
             dismissMenu()
             react(if (leftHalf) "tapLeft" else "tapRight", loop = false)
             val push = machine.last
@@ -861,7 +918,7 @@ internal object PetOverlay {
         override fun onLongPress() {
             if (!alive(ticket)) return
             machine.onTouch(now())
-            if (tucked) evaluate()
+            if (dimmed) evaluate()
             showMenu()
         }
 
@@ -954,7 +1011,7 @@ internal object PetOverlay {
     // ---- bubble ---------------------------------------------------------------------------------
 
     private fun showBubble(b: PetBubble?) {
-        if (b == null || dragging || tucked || slideAnim != null) {
+        if (b == null || dragging || dimmed || slideAnim != null) {
             removeBubble()
             return
         }
@@ -964,6 +1021,13 @@ internal object PetOverlay {
         val ticket = windows.claim(OverlayWindowOwner.Role.BUBBLE) ?: return
         val view = BubbleView(ctx) { if (alive(ticket)) onBubbleTap(b) }
         view.bind(b)
+        b.ask?.let { ask ->
+            // Laid out once first: the buttons depend on whether the request's text shows whole.
+            view.measureCard()
+            view.setActions(BubbleAction.of(ask, view.detailWhole()), ask.kind, SystemClock.uptimeMillis() + ARM_MS) { a ->
+                if (alive(ticket)) onBubbleAction(b, a)
+            }
+        }
         val card = view.measureCard()
         val shown = petView?.shown?.name
         val place = bubblePlace(card, view.tailPx) ?: return
@@ -1075,9 +1139,66 @@ internal object PetOverlay {
         if (b.sessionId != null) open(b.sessionId, b.host, b.title) else open(push?.sessionId, push?.host, b.title)
     }
 
+    /** The bubble whose answer is on its way to Dart. */
+    private val answerState = PetAnswerState()
+
+    /**
+     * An answer from the bubble, through Dart's own path (the one the notification's buttons
+     * take). Answered or settled elsewhere, the bubble goes; refused, it says so and leads to the chat.
+     */
+    private fun onBubbleAction(b: PetBubble, a: BubbleAction) {
+        machine.onTouch(now())
+        val ask = b.ask ?: return
+        if (a.kind == BubbleAction.Kind.OPEN) return onBubbleTap(b)
+        val view = bubbleView ?: return
+        val answer = answerState.begin(b.id) ?: return
+        view.setBusy(a)
+        val args = mapOf(
+            "host" to b.host, "sessionId" to b.sessionId, "eventId" to ask.eventId, "token" to ask.token, "kind" to ask.kind,
+            "decision" to when (a.kind) {
+                BubbleAction.Kind.ALLOW -> "allow"
+                BubbleAction.Kind.REJECT -> "reject"
+                else -> null
+            },
+            "choice" to a.choice,
+        )
+        callDart("answer", args) { raw ->
+            if (!answerState.finish(answer)) return@callDart
+            val result = (raw as? Map<*, *>)?.get("result")
+            Log.i(TAG, "bubble answer ${a.kind.name.lowercase()}: $result")
+            if (bubbleId == b.id) {
+                if (result == "handled" || result == "gone") {
+                    machine.bubbles.dismiss()
+                    removeBubble()
+                } else {
+                    bubbleView?.let { v ->
+                        v.showFailed(AppStrings.get(app, R.string.pet_answer_failed), ask.kind) { onBubbleTap(b) }
+                        refitBubble(v)
+                    }
+                }
+            }
+            evaluate()
+        }
+    }
+
+    /** The bubble's content changed size: measured and placed again where it is. */
+    private fun refitBubble(view: BubbleView) {
+        val p = bubbleParams ?: return
+        val card = view.measureCard()
+        bubbleCard = card
+        val place = bubblePlace(card, view.tailPx) ?: return
+        view.setTail(place.tailAt, place.tail)
+        p.width = place.w
+        p.height = place.h
+        p.x = place.pos.x
+        p.y = place.pos.y
+        update(view, p)
+    }
+
     // ---- menu -----------------------------------------------------------------------------------
 
     private var menuTimeout: Runnable? = null
+    private var menuParams: WindowManager.LayoutParams? = null
 
     private fun showMenu() {
         val currentTicket = menuView?.let { windowTickets[it] }
@@ -1089,40 +1210,12 @@ internal object PetOverlay {
         }
         dismissMenu()
         val ctx = hostContext ?: return
-        val pv = petView ?: return
-        val reach = pv.reach
-        val ph = pv.pixelHeight
         val ticket = windows.claim(OverlayWindowOwner.Role.MENU) ?: return
-        val view = PetMenuView(
-            ctx,
-            onSnooze = {
-                if (alive(ticket)) {
-                    dismissMenu()
-                    snoozeToday()
-                }
-            },
-            onSettings = {
-                if (alive(ticket)) {
-                    dismissMenu()
-                    pendingSettings = true
-                    open(null, null, null)
-                    if (started > 0) deliverSettings()
-                }
-            },
-            onOutside = { if (alive(ticket)) dismissMenu() },
-        )
-        val (mw, mh) = view.measureFor()
-        val area = safeArea()
-        val gap = ctx.dp(8f)
-        // Beside the docked spot (the pet may still be sliding out of its tucked one), clear of
-        // whatever frame the window may grow to there.
-        val at = EdgeSnap.position(dock, reach, area, edge(ctx))
-        val x = if (dock.side == Side.RIGHT) at.x + reach.left - gap - mw else at.x + reach.right + gap
-        val y = at.y + ph / 2 - mh / 2
-        val params = baseParams(mw, mh, WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH).apply {
-            this.x = x.coerceIn(area.left + gap, max(area.left + gap, area.screenW - area.right - gap - mw))
-            this.y = y.coerceIn(area.top + gap, max(area.top + gap, area.screenH - area.bottom - gap - mh))
-        }
+        val menuTarget = machine.last
+        val rows = PetMenuItem.of(menuTarget).map { item -> PetMenuView.Row(menuLabel(item)) { if (alive(ticket)) onMenu(item, ticket, menuTarget) } }
+        val view = PetMenuView(ctx, rows, onOutside = { if (alive(ticket)) dismissMenu() })
+        val params = baseParams(0, 0, WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH)
+        if (!placeMenu(view, params)) return
         try {
             val manager = wm ?: return
             if (!installWindow(ticket, view, manager, params)) return
@@ -1131,10 +1224,82 @@ internal object PetOverlay {
             return
         }
         menuView = view
+        menuParams = params
         if (animationsOn()) {
             view.alpha = 0f
             view.animate().alpha(1f).setDuration(150).setInterpolator(easing).start()
         }
+        scheduleMenuTimeout(ticket)
+    }
+
+    /**
+     * Sizes [params] to the menu's rows and puts it beside the docked spot (the pet may still be
+     * sliding there after a drag), clear of whatever frame the window may grow to there.
+     */
+    private fun placeMenu(view: PetMenuView, params: WindowManager.LayoutParams): Boolean {
+        val ctx = hostContext ?: return false
+        val pv = petView ?: return false
+        val reach = pv.reach
+        val (mw, mh) = view.measureFor()
+        val area = safeArea()
+        val gap = ctx.dp(8f)
+        val at = EdgeSnap.position(dock, reach, area, edge(ctx))
+        val x = if (dock.side == Side.RIGHT) at.x + reach.left - gap - mw else at.x + reach.right + gap
+        val y = at.y + pv.pixelHeight / 2 - mh / 2
+        params.width = mw
+        params.height = mh
+        params.x = x.coerceIn(area.left + gap, max(area.left + gap, area.screenW - area.right - gap - mw))
+        params.y = y.coerceIn(area.top + gap, max(area.top + gap, area.screenH - area.bottom - gap - mh))
+        return true
+    }
+
+    private fun menuLabel(item: PetMenuItem): String = AppStrings.get(app, when (item) {
+        PetMenuItem.ASK -> R.string.pet_ask
+        PetMenuItem.NEW_CHAT -> R.string.pet_new_chat
+        PetMenuItem.STOP -> R.string.pet_stop
+        PetMenuItem.SWITCH_HOST -> R.string.pet_switch_host
+        PetMenuItem.SNOOZE -> R.string.pet_snooze
+        PetMenuItem.SETTINGS -> R.string.pet_settings
+    })
+
+    private fun onMenu(item: PetMenuItem, ticket: OverlayWindowOwner.Ticket, target: PetPush?) {
+        machine.onTouch(now())
+        when (item) {
+            PetMenuItem.ASK, PetMenuItem.NEW_CHAT -> {
+                dismissMenu()
+                showAsk(fresh = item == PetMenuItem.NEW_CHAT)
+            }
+            PetMenuItem.STOP -> {
+                dismissMenu()
+                callDart("stop", mapOf("host" to target?.host, "sessionId" to target?.sessionId)) { evaluate() }
+            }
+            PetMenuItem.SWITCH_HOST -> showHosts(ticket)
+            PetMenuItem.SNOOZE -> {
+                dismissMenu()
+                snoozeToday()
+            }
+            PetMenuItem.SETTINGS -> {
+                dismissMenu()
+                pendingSettings = true
+                open(null, null, null)
+                if (started > 0) deliverSettings()
+            }
+        }
+    }
+
+    /** 切换主机: the menu's rows become the hosts, the one in use muted. */
+    private fun showHosts(ticket: OverlayWindowOwner.Ticket) {
+        val view = menuView ?: return
+        val params = menuParams ?: return
+        view.setRows(machine.last?.hosts.orEmpty().map { h ->
+            PetMenuView.Row(h.label, muted = h.current) {
+                if (alive(ticket)) {
+                    dismissMenu()
+                    if (!h.current) callDart("switchHost", mapOf("host" to h.ref)) { evaluate() }
+                }
+            }
+        })
+        if (placeMenu(view, params)) update(view, params)
         scheduleMenuTimeout(ticket)
     }
 
@@ -1151,12 +1316,331 @@ internal object PetOverlay {
         menuTimeout = null
         menuView?.let { remove(it) }
         menuView = null
+        menuParams = null
     }
 
     private fun deliverSettings() {
         if (!pendingSettings) return
         pendingSettings = false
         listener?.onOpenSettings()
+    }
+
+    private fun callDart(method: String, args: Any?, reply: (Any?) -> Unit) {
+        val l = listener ?: return reply(null)
+        l.call(method, args, reply)
+    }
+
+    // ---- 问一句 ---------------------------------------------------------------------------------
+
+    private var askView: AskBarView? = null
+    private var askParams: WindowManager.LayoutParams? = null
+
+    /** Where the bar sits with the keyboard down. */
+    private var askY = 0
+    private var askFresh = false
+
+    /** Dart's answer to `askTarget`; null until it comes. */
+    private var askTarget: AskTarget? = null
+
+    /** What was typed: kept when the bar closes, until it is sent. */
+    private val askDraftState = PetAskDraft()
+    private var askDraft: String
+        get() = askDraftState.text
+        set(value) { askDraftState.edit(value) }
+    private var voiceHandoff = 0L
+    private var pendingVoice = false
+    private var returnAsk = false
+    private var askRequest = 0L
+
+    /**
+     * Opens the bar beside the docked pet ([fresh]: on 「新对话」), focused, the keyboard up; asks
+     * Dart where a send would go meanwhile.
+     */
+    private fun showAsk(fresh: Boolean) {
+        removeAsk()
+        val ctx = hostContext ?: return
+        val pv = petView ?: return
+        val f = loaded?.frames ?: return
+        val ticket = windows.claim(OverlayWindowOwner.Role.ASK) ?: return
+        askFresh = fresh
+        askTarget = null
+        val view = AskBarView(ctx, askListener(ticket))
+        view.input.setText(askDraft)
+        view.setState(problem = true, sending = askDraftState.sending)
+        view.input.setSelection(view.input.length())
+        view.setTarget(null, switchShown = false, on = fresh)
+        val area = safeArea()
+        val gap = ctx.dp(8f)
+        val margin = edge(ctx)
+        val at = EdgeSnap.position(dock, pv.reach, area, margin)
+        val body = f.body.at(at)
+        val pet = ScreenRect(at.x + pv.reach.left, body.top, at.x + pv.reach.right, body.bottom)
+        val w = AskPlace.width(pet, dock.side, area, gap, margin, ctx.dp(ASK_MIN_DP), ctx.dp(ASK_MAX_DP))
+        val (_, h) = view.measureFor(w)
+        val pos = AskPlace.beside(pet, dock.side, w, h, area, gap, margin)
+        // The one window that takes focus, and only while it is open: the keyboard needs it.
+        val params = baseParams(w, WindowManager.LayoutParams.WRAP_CONTENT, WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH).apply {
+            flags = flags and WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE.inv()
+            softInputMode = WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_VISIBLE or WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING
+            x = pos.x
+            y = pos.y
+        }
+        try {
+            val manager = wm ?: return
+            if (!installWindow(ticket, view, manager, params)) return
+        } catch (e: Exception) {
+            Log.w(TAG, "ask bar add failed", e)
+            return
+        }
+        askView = view
+        askParams = params
+        askY = pos.y
+        dismissMenu()
+        removeBubble()
+        if (animationsOn()) {
+            view.alpha = 0f
+            view.animate().alpha(1f).setDuration(150).setInterpolator(easing).start()
+        }
+        view.input.requestFocus()
+        view.post { if (askView === view) view.context.getSystemService(InputMethodManager::class.java)?.showSoftInput(view.input, 0) }
+        evaluate()
+        val request = ++askRequest
+        callDart("askTarget", mapOf("fresh" to fresh)) { raw ->
+            if (request != askRequest || askView !== view) return@callDart
+            // No answer: nothing known to stand in the way; a send hands the text to the app.
+            askTarget = AskTarget.fromMap(raw) ?: AskTarget(null, null, null, AskTarget.VOICE_OFF)
+            showTarget(view)
+        }
+    }
+
+    private fun showTarget(view: AskBarView) {
+        val t = askTarget ?: return
+        val fresh = askFresh || t.current == null
+        view.setTarget(t.chat(fresh)?.line ?: AppStrings.get(app, R.string.pet_new_chat), t.canSwitch, fresh)
+        view.setStatus(t.problem, error = t.problem != null)
+        view.setState(problem = t.problem != null)
+    }
+
+    private fun askListener(ticket: OverlayWindowOwner.Ticket) = object : AskBarView.Listener {
+        override fun onSend(text: String) {
+            if (alive(ticket)) sendAsk(text)
+        }
+
+        override fun onSwitch() {
+            if (!alive(ticket)) return
+            askFresh = !askFresh
+            askView?.let(::showTarget)
+        }
+
+        override fun onMic(down: Boolean, cancelled: Boolean) {
+            if (!alive(ticket)) return
+            if (down) micDown() else micUp(cancelled)
+        }
+
+        override fun onDraft(text: String) {
+            if (alive(ticket)) {
+                askDraft = text
+                prefs.edit().putString("ask_draft", text).apply()
+            }
+        }
+
+        override fun onClose() {
+            if (!alive(ticket)) return
+            removeAsk()
+            evaluate()
+        }
+
+        override fun onIme(overlap: Int, visible: Boolean) {
+            if (alive(ticket)) liftAsk(overlap, visible)
+        }
+    }
+
+    /** Above the keyboard while it covers the bar, back in place once it goes. */
+    private fun liftAsk(overlap: Int, visible: Boolean) {
+        val v = askView ?: return
+        val p = askParams ?: return
+        val ctx = hostContext ?: return
+        // Use the laid-out position, not params.y (which may already contain a pending move).
+        val location = IntArray(2).also(v::getLocationOnScreen)
+        val y = when {
+            overlap > 0 -> AskPlace.lift(askY, location[1], overlap, ctx.dp(8f), safeArea(), edge(ctx))
+            visible -> p.y
+            else -> askY
+        }
+        if (y == p.y) return
+        p.y = y
+        update(v, p)
+    }
+
+    /**
+     * Sends through Dart's own send path. Sent: the bar goes and the pet thinks. Refused (the
+     * engine is off, no host, the send failed): the bar says why and keeps the text. No Dart to
+     * answer: the app comes up with the text in a new chat's composer, unsent.
+     */
+    private fun sendAsk(text: String) {
+        val view = askView ?: return
+        val send = askDraftState.beginSend(text) ?: return
+        machine.onTouch(now())
+        val fresh = askFresh || askTarget?.current == null
+        val chat = askTarget?.chat(fresh)
+        view.setState(sending = true)
+        view.setStatus(AppStrings.get(app, R.string.pet_ask_sending))
+        val request = askRequest
+        val args = mapOf("offer" to askTarget?.offer, "text" to text, "fresh" to (chat?.sessionId == null), "sessionId" to chat?.sessionId, "host" to chat?.host)
+        callDart("ask", args) { raw ->
+            val r = raw as? Map<*, *>
+            val completion = askDraftState.finish(send, accepted = r?.get("sent") == true) ?: return@callDart
+            val current = request == askRequest && askView === view
+            askView?.setState(sending = false)
+            when {
+                r?.get("sent") == true -> {
+                    Log.i(TAG, "ask sent (${if (chat?.sessionId == null) "new chat" else "same chat"})")
+                    if (completion.cleared) {
+                        // A reopened bar shares this draft. Clear its copy too so closing it
+                        // cannot resurrect text the host already accepted.
+                        askView?.input?.setText("")
+                        prefs.edit().remove("ask_draft").apply()
+                        if (current) removeAsk()
+                    }
+                }
+                r != null -> if (current) {
+                    view.setState(sending = false)
+                    view.setStatus((r["problem"] as? String) ?: AppStrings.get(app, R.string.pet_ask_failed), error = true)
+                }
+                // Closed meanwhile, the text stays the bar's draft (removeAsk kept it).
+                current -> {
+                    removeAsk()
+                    openIntent(EntryActivity.newChat(app).putExtra(EntryActivity.EXTRA_TEXT, text), null)
+                }
+            }
+            evaluate()
+        }
+    }
+
+    private fun removeAsk() {
+        askRequest++
+        stopRecording()
+        askView?.let { v ->
+            askDraft = v.input.text?.toString() ?: askDraft
+            remove(v)
+        }
+        askView = null
+        askParams = null
+        askTarget = null
+    }
+
+    // ---- 语音问 ---------------------------------------------------------------------------------
+
+    private var recorder: WavRecorder? = null
+    private var recorderMic = 0
+    private var recording = 0L
+
+    /** Hold to talk: the offline voice model's recorder, as the chat's dictation records for it. */
+    private fun micDown() {
+        val view = askView ?: return
+        machine.onTouch(now())
+        val voice = askTarget?.voice
+        when {
+            voice == AskTarget.VOICE_MISSING -> view.setStatus(AppStrings.get(app, R.string.pet_ask_voice_missing))
+            voice != AskTarget.VOICE_READY -> view.setStatus(AppStrings.get(app, R.string.pet_ask_voice_off))
+            app.checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED -> foregroundVoice(view)
+            else -> startRecording(view)
+        }
+    }
+
+    private fun startRecording(view: AskBarView) {
+        stopRecording()
+        val gen = ++recording
+        val r = WavRecorder(maxSeconds = 60, onLevel = {}, onLimit = { main.post { if (gen == recording) micUp(cancelled = false) } })
+        val mic = MicArbiter.beginDictation()
+        if (!runCatching { r.start() }.getOrDefault(false)) {
+            MicArbiter.endDictation(mic)
+            foregroundVoice(view)
+            return
+        }
+        recorder = r
+        recorderMic = mic
+        view.setState(listening = true)
+        view.setStatus(AppStrings.get(app, R.string.pet_ask_listening))
+        main.postDelayed({ if (gen == recording && recorder === r) checkSilenced(r, view) }, SILENCE_CHECK_MS)
+    }
+
+    /**
+     * Android hands a background app silence instead of the microphone (while-in-use, docs/design/
+     * pets.md §6.3): the recording then goes to the app, brought to the front with the text so far.
+     */
+    private fun checkSilenced(r: WavRecorder, view: AskBarView) {
+        if (Build.VERSION.SDK_INT < 29) return
+        val am = app.getSystemService(AudioManager::class.java) ?: return
+        val mine = am.activeRecordingConfigurations.filter { it.clientAudioSessionId == r.sessionId }
+        val silenced = mine.any { it.isClientSilenced }
+        Log.i(TAG, "pet mic: configs=${mine.size} silenced=$silenced dshService=${DshService.isRunning} petService=${PetOverlayService.running}")
+        if (!silenced) return
+        foregroundVoice(view)
+    }
+
+    private fun foregroundVoice(view: AskBarView) {
+        if (askView !== view) return
+        stopRecording()
+        // Keep the overlay draft until the app accepts the handoff. A vendor
+        // may block Activity launch and notifications at the same time.
+        removeAsk()
+        evaluate()
+        pendingVoice = true
+        openIntent(EntryActivity.openApp(app), null)
+    }
+
+    /** Let go: the recording goes to the voice model, its words into the box. Slid off: dropped. */
+    private fun micUp(cancelled: Boolean) {
+        val r = recorder ?: return
+        val view = askView
+        val mic = recorderMic
+        recorder = null
+        val gen = ++recording
+        view?.setState(listening = false)
+        if (cancelled) {
+            worker.execute {
+                runCatching { r.discard() }
+                main.post { MicArbiter.endDictation(mic) }
+            }
+            view?.setStatus(null)
+            return
+        }
+        view?.setStatus(AppStrings.get(app, R.string.pet_ask_transcribing))
+        worker.execute {
+            val wav = runCatching { r.finish() }.getOrNull()
+            main.post {
+                MicArbiter.endDictation(mic)
+                if (gen != recording || view == null || askView !== view) return@post
+                if (wav == null || wav.size < MIN_WAV_BYTES) {
+                    view.setStatus(AppStrings.get(app, R.string.pet_ask_not_heard))
+                    return@post
+                }
+                callDart("transcribe", mapOf("wav" to wav)) { raw ->
+                    if (gen != recording || askView !== view) return@callDart
+                    val r2 = raw as? Map<*, *>
+                    val words = (r2?.get("text") as? String)?.trim()
+                    if (words.isNullOrEmpty()) {
+                        view.setStatus((r2?.get("problem") as? String) ?: AppStrings.get(app, R.string.pet_ask_not_heard), error = r2?.get("problem") != null)
+                    } else {
+                        view.setStatus(null)
+                        view.insert(words)
+                    }
+                }
+            }
+        }
+    }
+
+    private fun stopRecording() {
+        recording++
+        val r = recorder ?: return
+        val mic = recorderMic
+        recorder = null
+        askView?.setState(listening = false)
+        worker.execute {
+            runCatching { r.discard() }
+            main.post { MicArbiter.endDictation(mic) }
+        }
     }
 
     // ---- opening the app ------------------------------------------------------------------------
@@ -1166,13 +1650,14 @@ internal object PetOverlay {
      * activity on stock Android, but some vendors block 「后台弹出界面」 on their own: when the app
      * isn't up shortly after, a notification takes the tap instead (as SystemActions.kt does).
      */
-    private fun open(sessionId: String?, host: String?, title: String?) {
+    private fun open(sessionId: String?, host: String?, title: String?) = openIntent(
+        if (sessionId != null) EntryActivity.openChat(app, sessionId, host) else EntryActivity.openApp(app),
+        title,
+    )
+
+    private fun openIntent(entry: Intent, title: String?) {
         val token = windows.openToken() ?: return
-        val intent = if (sessionId != null) {
-            EntryActivity.openChat(app, sessionId, host)
-        } else {
-            EntryActivity.openApp(app)
-        }.putExtra(EntryActivity.EXTRA_PET_GENERATION, token).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        val intent = entry.putExtra(EntryActivity.EXTRA_PET_GENERATION, token).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         try {
             app.startActivity(intent)
         } catch (e: Exception) {
@@ -1257,15 +1742,34 @@ internal object PetOverlay {
             started = (started - 1).coerceAtLeast(0)
             if (started == 0) {
                 machine.onForeground(false, now())
+                if (returnAsk) machine.onTouch(now())
                 evaluate()
             }
         }
 
         override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) = Unit
-        override fun onActivityResumed(activity: Activity) = Unit
+        override fun onActivityResumed(activity: Activity) {
+            if (activity !is MainActivity || !pendingVoice) return
+            pendingVoice = false
+            val owner = listener
+            val generation = ++voiceHandoff
+            callDart("voiceFallback", mapOf("text" to askDraft)) { raw ->
+                if (listener !== owner || generation != voiceHandoff) return@callDart
+                val text = (raw as? Map<*, *>)?.get("text") as? String ?: return@callDart
+                askDraft = text.take(AskBarView.MAX_TEXT)
+                prefs.edit().putString("ask_draft", askDraft).apply()
+                returnAsk = true
+                activity.moveTaskToBack(true)
+            }
+        }
         override fun onActivityPaused(activity: Activity) = Unit
         override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) = Unit
         override fun onActivityDestroyed(activity: Activity) = Unit
+    }
+
+    /** For the debug probe: 问一句's bar, as the menu opens it. */
+    fun probeAsk(fresh: Boolean) {
+        if (alive(petTicket)) showAsk(fresh)
     }
 
     /** For the debug probe: what the window is doing now. */
@@ -1278,10 +1782,15 @@ internal object PetOverlay {
         "shown" to petView?.shown?.name,
         "dragging" to dragging,
         "dock" to "${dock.side.name.lowercase()}@${"%.2f".format(dock.yFraction)}",
-        "tucked" to tucked,
+        "dimmed" to dimmed,
+        "alpha" to petView?.alpha,
         "looping" to looping,
         "bubble" to bubbleId,
+        "bubbleAsk" to machine.bubbles.current(now())?.ask?.let { "${it.kind}:${it.approvable}:${it.choices.size}" },
         "menu" to (menuView != null),
+        "ask" to askView?.let { askParams?.let { p -> "${p.x},${p.y} ${p.width}w" } ?: "open" },
+        "askTarget" to askTarget?.let { it.chat(askFresh || it.current == null)?.line },
+        "answering" to answerState.bubbleId,
         "service" to PetOverlayService.running,
         "scale" to loaded?.screenScale,
         "pack" to loadedKey,

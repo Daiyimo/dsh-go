@@ -96,7 +96,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(launcher.sets, [AppIcon.frost]);
       expect(_chosen(tester), AppIcon.frost);
-      expect(find.text('桌面图标已更换，几秒后生效'), findsOneWidget);
+      expect(find.text('桌面图标已选择，回到桌面后更新'), findsOneWidget);
       handle.dispose();
     });
 

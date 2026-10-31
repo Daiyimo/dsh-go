@@ -116,6 +116,9 @@ abstract interface class UpdateInstaller {
   /// Resolves when the session ends: the person confirmed (the process is
   /// usually replaced before this returns), cancelled, or it failed.
   Future<InstallResult> install(String path);
+
+  /// Opens the package in the system's own installer; false when it couldn't.
+  Future<bool> openWithSystemInstaller(String path);
 }
 
 class ChannelUpdateInstaller implements UpdateInstaller {
@@ -140,4 +143,8 @@ class ChannelUpdateInstaller implements UpdateInstaller {
 
   @override
   Future<InstallResult> install(String path) async => InstallResult.fromMap(await _map('install', {'path': path}));
+
+  @override
+  Future<bool> openWithSystemInstaller(String path) async =>
+      await _channel.invokeMethod<bool>('openWithSystem', {'path': path}) ?? false;
 }

@@ -590,6 +590,15 @@ class AppUpdateController extends Notifier<AppUpdateState> {
 
   // ── Install ────────────────────────────────────────────────────────────────
 
+  /// 「用系统安装器安装」: the downloaded package, already checked by [install],
+  /// in the system's own installer. Some OEM builds stop the in-app install
+  /// before asking and it reads as cancelled. False when it couldn't open.
+  Future<bool> installWithSystem() async {
+    final apk = _apk;
+    if (!ref.mounted || apk == null || state.busy || !apk.isFor(state) || !await apk.file.exists()) return false;
+    return _installer.openWithSystemInstaller(apk.file.path);
+  }
+
   Future<void> install() async {
     final apk = _apk;
     if (!ref.mounted || apk == null || state.busy) return;

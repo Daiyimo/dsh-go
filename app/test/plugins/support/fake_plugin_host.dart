@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
 
 import 'package:dsh_app/state/connection_state.dart';
 import 'package:dsh_app/state/hosts_state.dart';
@@ -130,9 +132,13 @@ class _SelectedHost extends ActiveHostController {
 
 /// [selectHost]: also select [host] as the active host. Pass false when the
 /// test overrides `activeHostProvider` itself (a provider is overridden once).
+/// [official]: the official market (default: not published yet, empty);
+/// [npmIntegrity]: what npm reports (default: no answer).
 List<Override> pluginOverrides(
   HostConnection? host, {
   Map<String, Object?>? index,
+  OfficialMarketFetcher? official,
+  NpmIntegrityReader? npmIntegrity,
   bool safeMode = false,
   bool selectHost = true,
 }) => [
@@ -143,7 +149,28 @@ List<Override> pluginOverrides(
   readListIdentityProvider.overrideWithValue(null),
   localSafeModeProvider.overrideWithValue(safeMode),
   marketIndexFetcherProvider.overrideWithValue((url) async => parseMarketIndex(index ?? sampleIndex, url)),
+  officialMarketFetcherProvider.overrideWithValue(official ?? () async => emptyOfficialMarket),
+  npmIntegrityProvider.overrideWithValue(npmIntegrity ?? (_, _) async => null),
 ];
+
+/// The official market before anything is published (index.json is a 404).
+final emptyOfficialMarket = MarketCatalog(
+  MarketIndex(url: Uri.parse(officialIndexUrl), title: LocalizedText.plain('go.dshtui.com')),
+);
+
+/// The official fixtures (`fixtures/official-index.json` and
+/// `fixtures/dsh-go.json`), written to the contract in
+/// docs/design/plugin-market.md §3.
+Map<String, Object?> officialIndexJson() =>
+    jsonDecode(File('test/plugins/fixtures/official-index.json').readAsStringSync()) as Map<String, Object?>;
+Map<String, Object?> officialSidecarJson() =>
+    jsonDecode(File('test/plugins/fixtures/dsh-go.json').readAsStringSync()) as Map<String, Object?>;
+
+/// The official market read from the fixtures, as the app reads the live one.
+MarketCatalog officialFixtureMarket({Map<String, Object?>? index, Map<String, Object?>? sidecar}) => MarketCatalog(
+  parseMarketIndex(index ?? officialIndexJson(), Uri.parse(officialIndexUrl)),
+  listings: parseMarketSidecar(sidecar ?? officialSidecarJson()).plugins,
+);
 
 Map<String, Object?> ok(Object? value) => {'ok': true, 'value': value};
 

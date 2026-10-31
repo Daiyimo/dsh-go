@@ -6,20 +6,53 @@
 /// channel). Implementations:
 ///
 /// * [RelayTransport] — ciphertext inside `relay` frames, on the Control
-///   socket or on the Relay node data socket the Server assigns (the only
-///   one today);
-/// * planned: LAN / WebRTC P2P / TURN — a DataChannel named `dsh`
+///   socket or on the Relay node data socket the Server assigns;
+/// * [WebRtcTransport] — LAN / P2P / TURN: a DataChannel named `dsh`
 ///   (`ordered: true`) carrying binary ciphertext, negotiated with
 ///   `signal.offer/answer/ice` and announced with `transport.selected`
-///   before the handshake, falling back to Relay.
-///   They implement the same interface, so the secure channel, RPC layer and
-///   carrier do not change.
+///   before the handshake; a failed attempt falls back to the Relay.
+///
+/// Both implement this interface, so the secure channel, RPC layer and
+/// carrier do not change.
 library;
 
 import 'dart:typed_data';
 
+import 'relay_transport.dart' show RelayTransport;
+import 'webrtc_transport.dart' show WebRtcTransport;
+
 /// Data plane in use; mirrors the `transport.selected` vocabulary.
 enum RemoteTransportMode { lan, p2p, turn, relay }
+
+/// Payload-free reasons for trying a less preferred data plane.
+enum RemoteNetworkFallbackReason {
+  webrtcUnavailable,
+  directFailed,
+  directTimeout,
+  directRecentlyFailed,
+  turnUnavailable,
+  turnFailed,
+  turnTimeout,
+  pathUnverified,
+}
+
+/// A snapshot of the actual data plane. No SDP, candidate addresses, relay
+/// URLs, credentials or exception text is exposed. Unknown stats stay null.
+class RemoteNetworkDiagnostics {
+  const RemoteNetworkDiagnostics({
+    required this.transportMode,
+    required this.observedAt,
+    this.connectionDuration,
+    this.roundTripTime,
+    this.fallbackReason,
+  });
+
+  final RemoteTransportMode? transportMode;
+  final Duration? connectionDuration;
+  final Duration? roundTripTime;
+  final RemoteNetworkFallbackReason? fallbackReason;
+  final DateTime observedAt;
+}
 
 /// Identities bound into the Noise prologue.
 class RemoteConnectionInfo {

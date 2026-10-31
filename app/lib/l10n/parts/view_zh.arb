@@ -94,6 +94,8 @@
   "viewBalanceChecking": "正在查询余额…",
   "viewBalanceCheckFailed": "暂时无法查询余额",
   "viewBalanceNoAlert": "不提醒",
+  "viewBalanceBannerHidden": "本次运行不再显示余额提醒",
+  "viewBalanceTurnOff": "不再提醒",
   "viewBalanceBelow": "低于 {value}",
   "@viewBalanceBelow": {
     "placeholders": {

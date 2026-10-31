@@ -124,6 +124,8 @@
   "updateOpenReleasePage": "打开发布页",
   "updateUpdateNow": "立即更新",
   "updateSkipVersion": "跳过这个版本",
+  "updateInstallWithSystem": "用系统安装器安装",
+  "updateSystemInstallerFailed": "没能打开系统安装器",
   "updateStarProject": "去 Star",
   "updateCancelDownload": "取消下载",
   "updateDownloadInBackground": "后台下载",

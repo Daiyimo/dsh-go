@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import z from '@deepseek-ai/schemastery';
+import { cnyMicros } from './budget-ledger.js';
 import { formatGenerationMessage } from './header.js';
 
 export const CATALOG_META_KEY = 'dsh-go/media/catalog';
@@ -14,6 +15,7 @@ export const HARD_LIMITS = Object.freeze({
   maxImageBytes: 20 * 1024 * 1024,
   maxResponseBytes: 32 * 1024 * 1024,
   maxTotalImageBytes: 64 * 1024 * 1024,
+  maxVideoBytes: 300 * 1024 * 1024,
 });
 
 function freeze(value) {
@@ -57,11 +59,12 @@ const rawCatalog = JSON.parse(readFileSync(
   new URL('../data/models.json', import.meta.url), 'utf8',
 ));
 if (rawCatalog.v !== 1 || !Array.isArray(rawCatalog.models)) invalid();
+export const PROFILES = Object.freeze(['openai-compatible', 'openai-gpt-image', ...Object.keys(rawCatalog.profiles)]);
 const catalogIds = new Set();
 for (const model of rawCatalog.models) {
   if (!model || typeof model.id !== 'string' || catalogIds.has(model.id)
-    || model.kind !== 'image' || typeof model.label !== 'string'
-    || !['openai-compatible', 'openai-gpt-image'].includes(model.profile)
+    || !['image', 'video'].includes(model.kind) || typeof model.label !== 'string'
+    || !PROFILES.includes(model.profile)
     || !Array.isArray(model.sizes) || !Array.isArray(model.qualities)
     || !Number.isSafeInteger(model.maxN) || model.maxN < 1 || model.maxN > 4) invalid();
   validateCatalogHeaderModel(model);
@@ -100,7 +103,7 @@ export function validateServices(services) {
       || !/^[a-z][a-z0-9_]{0,31}$/.test(service.id ?? '')
       || ids.has(service.id)
       || !/^[A-Za-z_][A-Za-z0-9_]{0,127}$/.test(service.keyRef ?? '')
-      || !['openai-compatible', 'openai-gpt-image'].includes(service.profile)
+      || !PROFILES.includes(service.profile)
       || typeof service.provider !== 'string' || !service.provider.trim()
       || Buffer.byteLength(service.provider, 'utf8') > 80
       || /[\u0000-\u001f]/.test(service.provider)
@@ -109,7 +112,11 @@ export function validateServices(services) {
     try { url = new URL(service.baseUrl); } catch { invalid(); }
     if (url.protocol !== 'https:' || url.username || url.password
       || url.search || url.hash) invalid();
-    if (service.profile === 'openai-gpt-image' && service.responseFormat) invalid();
+    if (service.profile !== 'openai-compatible' && service.responseFormat) invalid();
+    const profile = rawCatalog.profiles[service.profile];
+    if (profile && (url.pathname !== '/' || url.port || !(profile.hosts.includes(url.hostname)
+      || (profile.workspaceHostSuffix && /^[a-zA-Z0-9-]+$/.test(url.hostname.slice(0, -profile.workspaceHostSuffix.length))
+        && url.hostname.endsWith(profile.workspaceHostSuffix))))) invalid();
     const models = modelIdsOf(service).map(catalogModel);
     if (models.some(model => model.profile !== service.profile)) invalid();
     // A catalog whitelist requires an explicit evidenced response format.
@@ -129,7 +136,7 @@ const Service = z.object({
   provider: z.string().max(80).default('openai').description('服务商标识'),
   baseUrl: z.string().max(2048).default('https://api.openai.com/v1')
     .description('服务地址（HTTPS API 根路径）'),
-  profile: z.union(['openai-gpt-image', 'openai-compatible'])
+  profile: z.union(PROFILES)
     .default('openai-gpt-image').description('请求协议'),
   responseFormat: z.union(['', 'url', 'b64_json']).default('')
     .description('兼容接口返回格式（按模型目录；GPT Image 留空）'),
@@ -165,7 +172,7 @@ export const Config = z.object({
   services: z.transform(z.array(Service).max(8), validateServices, true)
     .default([]).volatile()
     .extra('extra', { [CATALOG_META_KEY]: CATALOG })
-    .description('图像服务'),
+    .description('媒体服务'),
   credentials: Credentials.volatile().description('密钥（固定目标，只写）'),
   defaults: z.object({
     serviceId: z.string().max(32).default('')
@@ -173,7 +180,13 @@ export const Config = z.object({
     modelId: z.string().max(160).default('')
       .description('默认模型 ID（留空使用所选服务首项）'),
   }).volatile().description('默认值'),
+  budget: z.object({
+    dailyCny: z.string().default('20').description('每日本地预算（人民币，上海日期）'),
+    unknownPriceHoldCny: z.string().default('20').description('无可靠价格时每次预留金额；逐次确认，非供应商收费上限'),
+  }).volatile().description('费用保护'),
   limits: z.object({
+    maxVideoBytes: z.number().step(1).min(1).max(HARD_LIMITS.maxVideoBytes)
+      .default(HARD_LIMITS.maxVideoBytes).description('视频原件字节上限'),
     maxImages: z.number().step(1).min(1).max(HARD_LIMITS.maxImages)
       .default(HARD_LIMITS.maxImages).description('单次图片张数上限'),
     maxImageBytes: z.number().step(1).min(1).max(HARD_LIMITS.maxImageBytes)
@@ -196,12 +209,17 @@ export function runtimeSnapshot(config) {
   const limits = current(config.limits);
   const cleanLimits = {};
   for (const [name, maximum] of Object.entries(HARD_LIMITS)) {
-    const value = limits[name];
+    const value = limits[name] ?? maximum;
     if (!Number.isSafeInteger(value) || value < 1 || value > maximum) invalid();
     cleanLimits[name] = value;
   }
   if (typeof defaults.serviceId !== 'string' || typeof defaults.modelId !== 'string') invalid();
+  const budget = config.budget ? current(config.budget) : { dailyCny: '20', unknownPriceHoldCny: '20' };
+  let dailyMicros, unknownHoldMicros;
+  try { dailyMicros = cnyMicros(budget.dailyCny); unknownHoldMicros = cnyMicros(budget.unknownPriceHoldCny); } catch { invalid(); }
+  if (dailyMicros < 1 || unknownHoldMicros < 1 || unknownHoldMicros > dailyMicros) invalid();
   return freeze({
+    budget: { dailyMicros, unknownHoldMicros },
     services: services.filter(service => service.enabled === true).map(service => ({
       id: service.id, label: service.label || service.id, provider: service.provider,
       baseUrl: service.baseUrl, profile: service.profile,

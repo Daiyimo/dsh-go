@@ -29,7 +29,7 @@ import 'share_out.dart';
 
 /// The link (or file) for [payload], and the ways out.
 class ShareCodePanel extends ConsumerStatefulWidget {
-  const ShareCodePanel({super.key, required this.payload, required this.title, this.onImage});
+  const ShareCodePanel({super.key, required this.payload, required this.title, this.onImage, this.webLink});
 
   final SharePayload payload;
 
@@ -38,6 +38,10 @@ class ShareCodePanel extends ConsumerStatefulWidget {
 
   /// 「图片」: a picture card of it (a plugin the market knows).
   final VoidCallback? onImage;
+
+  /// A link of its own (a plugin's page in the official market) copied,
+  /// shown and shared instead of the share code's.
+  final String? webLink;
 
   @override
   ConsumerState<ShareCodePanel> createState() => _ShareCodePanelState();
@@ -70,7 +74,7 @@ class _ShareCodePanelState extends ConsumerState<ShareCodePanel> {
   void _encode() {
     _code = encodeShareCode(widget.payload);
     final inline = ShareLink.inline(widget.payload.kind, _code);
-    _fits = inline.webLink.length <= maxInlineLinkChars;
+    _fits = widget.webLink != null || inline.webLink.length <= maxInlineLinkChars;
     _link = _fits ? inline : null;
   }
 
@@ -92,9 +96,12 @@ class _ShareCodePanelState extends ConsumerState<ShareCodePanel> {
     });
   }
 
+  /// The link that goes out: [ShareCodePanel.webLink], else the code's.
+  String? get _web => widget.webLink ?? _link?.webLink;
+
   String get _shareText {
     final what = widget.payload is PluginShare ? appL10n.pluginsPluginShareTitle : appL10n.pluginsProfileTitle;
-    return '「${widget.title}」· $what\n${_link!.webLink}';
+    return '「${widget.title}」· $what\n${_web!}';
   }
 
   String get _fileName => ref
@@ -108,17 +115,17 @@ class _ShareCodePanelState extends ConsumerState<ShareCodePanel> {
       );
 
   Future<void> _copy() async {
-    final link = _link;
+    final link = _web;
     if (link == null) return;
-    await ref.read(shareOutProvider).copy(link.webLink);
+    await ref.read(shareOutProvider).copy(link);
     if (mounted) _flash(_Done.copied);
   }
 
   void _qr() {
-    final link = _link;
+    final link = _web;
     if (link == null) return;
     final sheet = SheetNavigator.maybeOf(context);
-    final page = ShareQrPage(link: link.webLink, title: widget.title);
+    final page = ShareQrPage(link: link, title: widget.title);
     if (sheet != null) {
       sheet.push((_) => page);
     } else {
@@ -142,7 +149,7 @@ class _ShareCodePanelState extends ConsumerState<ShareCodePanel> {
     final out = ref.read(shareOutProvider);
     String? error;
     try {
-      if (_link != null) {
+      if (_web != null) {
         await out.shareText(_shareText);
       } else {
         final file = await out.write(_fileName, encodeShareFile(widget.payload, code: _code));
@@ -194,7 +201,7 @@ class _ShareCodePanelState extends ConsumerState<ShareCodePanel> {
     final l10n = context.l10n;
     final theme = Theme.of(context);
     final colors = DshColors.of(context);
-    final hasLink = _link != null;
+    final hasLink = _web != null;
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,

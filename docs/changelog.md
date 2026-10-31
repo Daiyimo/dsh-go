@@ -2,6 +2,40 @@
 
 每个版本先中文、后英文。发版时把对应版本的正文（不含版本标题）作为 Release 正文，见 `docs/release.md`。
 
+## 1.0.4 · 2026-10-31
+
+### 中文
+
+- 正式下载统一为 arm64 安装包，发布页明确标出安装包和辅助更新文件的用途。
+- DSH Remote 默认自动选择连接方式，优先尝试局域网 / P2P，再尝试 TURN，最后回落 Relay。升级后不再需要打开直连开关，旧的关闭设置也会迁移到自动策略；相应路径需服务端与主机支持。
+- 新增网络详情：点击连接卡或主机旁的网络标签，查看实际路径、连接耗时、可测的往返延迟及回落原因。重连后清除旧测量，改善 Wi-Fi 与蜂窝网络切换时的连接恢复。
+- 官方插件市场已上架「生图生视频」，支持在当前主机上生成图片和视频。可从「设置 → 插件 → 插件市场 → 官方」安装；主机尚未安装时，「设置 → 图像与视频」也有安装入口。插件需单独安装并配置服务商。
+
+### English
+
+- Public downloads now provide one arm64 installer, with release-page guidance distinguishing it from update and verification files.
+- DSH Remote now selects its connection automatically, trying LAN / P2P first, then TURN, and finally Relay. Upgrading also migrates the old disabled-direct setting to the automatic policy. Compatible server and Host support is required for each path.
+- Added network details. Tap the route label on the connection card or beside a Host to see the actual route, connection time, available round-trip latency and fallback reason. Old measurements are cleared after reconnects, with improved recovery when switching between Wi-Fi and cellular networks.
+- The official plugin market now includes Images and video for generation on the selected Host. Install it from Settings → Plugins → Plugin market → Official, or from Settings → Images and video when it is missing. The plugin remains a separate install and requires provider configuration.
+
+## 1.0.3 · 2026-10-31
+
+### 中文
+
+- 修复更换桌面图标后出现两个入口的问题：保留正在使用的页面，回到桌面后完成切换；连续更换、强停后重开和刚切换就重启也能恢复最后选择。
+- 手机操控新增无障碍自动恢复设置。授予系统设置权限后，手机操控开启期间会尝试恢复被关闭或断开的服务，并保留其他无障碍服务。Android 强制停止 App 后仍需手动重新打开。
+- 桌宠新增「问一句」和新会话入口，可直接在气泡里处理支持的工具审批与简单问题；语音识别结果先回填草稿，由你确认发送。修复无障碍浮窗异常时的窗口创建、频繁重试，以及键盘遮挡输入栏的问题。
+- DSH Remote 新增可选 P2P 直连和 TURN 配置，默认关闭；直连不可用时回退中继。需服务端与主机支持相应协议。
+- 插件市场支持官方目录、固定版本更新、风险说明和分享链接，媒体生成设置也可跳转到对应插件。插件仍需单独安装，未上架的插件不会显示为可安装。
+
+### English
+
+- Fixed duplicate launcher entries after changing the app icon. The current page stays open, and the switch finishes when you return home. Rapid changes, relaunches after force-stop, and reboots immediately after a change retain the saved choice.
+- Added optional accessibility recovery for Phone Control. After granting secure-settings access, the app can restore a disabled or disconnected service while Phone Control is enabled, preserving other accessibility services. Android force-stop still requires reopening the app.
+- Added quick asks and new chats from the floating pet, supported approval and simple-question actions in bubbles, and voice input that fills a draft for explicit sending. Fixed accessibility-overlay window creation, excessive retries after a window failure, and the keyboard covering the input bar.
+- Added opt-in P2P and TURN configuration for DSH Remote, off by default, with Relay fallback when direct connection is unavailable. Compatible server and Host support is required.
+- The plugin market now supports an official catalog, pinned-version updates, risk notices and share links. Media generation settings link to the relevant plugin. Plugins remain separate installs; unpublished packages are not offered as installable.
+
 ## 1.0.2 · 2026-10-30
 
 ### 中文

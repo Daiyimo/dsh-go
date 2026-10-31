@@ -10,8 +10,14 @@ import 'package:flutter/widgets.dart' show AppLifecycleListener, AppLifecycleSta
 
 import '../l10n/l10n.dart';
 import '../runtime/runtime_state.dart';
+import '../share_code/share_net.dart';
+import '../update/version.dart';
 import '../usage/usage_stats.dart';
+import 'app_info.dart';
 import 'connection_state.dart';
+import 'market_sidecar.dart';
+
+export 'market_sidecar.dart';
 import 'read_list_cache.dart';
 import 'read_list_identity.dart';
 import 'engine_error_text.dart';
@@ -39,8 +45,11 @@ typedef MarketIndexFetcher = Future<MarketIndex> Function(Uri url);
 
 /// Thrown when the index could not be downloaded.
 class MarketFetchException implements Exception {
-  const MarketFetchException(this.message);
+  const MarketFetchException(this.message, {this.statusCode});
   final String message;
+
+  /// The HTTP status when the server answered with something other than 200.
+  final int? statusCode;
 
   @override
   String toString() => message;
@@ -48,6 +57,14 @@ class MarketFetchException implements Exception {
 
 /// GETs [url] and reads it in a background isolate (≈3 MB for dshfind).
 Future<MarketIndex> fetchMarketIndex(Uri url) async {
+  final body = await _fetchMarketText(url);
+  return Isolate.run(() => parseMarketIndexText(body, url));
+}
+
+/// GETs the official sidecar ([officialSidecarUrl]); small, read in place.
+Future<MarketSidecar> fetchMarketSidecar(Uri url) async => parseMarketSidecarText(await _fetchMarketText(url));
+
+Future<String> _fetchMarketText(Uri url) async {
   final http = HttpClient()
     ..connectionTimeout = const Duration(seconds: 15)
     ..userAgent = 'dsh-app';
@@ -57,7 +74,7 @@ Future<MarketIndex> fetchMarketIndex(Uri url) async {
     final response = await request.close().timeout(const Duration(seconds: 30));
     if (response.statusCode != HttpStatus.ok) {
       await response.drain<void>();
-      throw MarketFetchException(appL10n.stateMarketHttpError(response.statusCode));
+      throw MarketFetchException(appL10n.stateMarketHttpError(response.statusCode), statusCode: response.statusCode);
     }
     final text = await response
         .transform(utf8.decoder)
@@ -68,8 +85,7 @@ Future<MarketIndex> fetchMarketIndex(Uri url) async {
           return buffer..write(chunk);
         })
         .timeout(const Duration(seconds: 60));
-    final body = text.toString();
-    return await Isolate.run(() => parseMarketIndexText(body, url));
+    return text.toString();
   } on SocketException {
     throw MarketFetchException(appL10n.stateMarketUnreachable);
   } on TimeoutException {
@@ -93,8 +109,8 @@ final marketIndexFetcherProvider = Provider<MarketIndexFetcher>((ref) => fetchMa
 
 /// One market entry with what the list needs precomputed.
 class MarketEntry {
-  MarketEntry(this.plugin, {required this.webOnly, required this.categoryTitle})
-    : haystack = _haystack(plugin),
+  MarketEntry(this.plugin, {required this.webOnly, required this.categoryTitle, this.listing})
+    : haystack = _haystack(plugin, listing),
       featured = plugin.labels.contains('featured');
 
   final MarketPlugin plugin;
@@ -104,30 +120,74 @@ class MarketEntry {
   final bool featured;
   final String? categoryTitle;
 
+  /// The official sidecar's word on the pinned version; null outside the
+  /// official index (dshfind) or when the sidecar doesn't list it.
+  final DshGoListing? listing;
+
   /// Lowercased name, titles, descriptions, keywords and author.
   final String haystack;
 
   String get name => plugin.name;
 
-  static String _haystack(MarketPlugin p) =>
-      [p.name, ...?p.title?.all, ...?p.description?.all, ...p.keywords, ?p.author].join('\n').toLowerCase();
+  /// The official section it is listed under, if any.
+  MarketSection? get section => switch (listing) {
+    DshGoListing(tier: MarketTier.official) => MarketSection.official,
+    final listing? when listing.isAdapted => MarketSection.adapted,
+    _ => null,
+  };
+
+  /// The sidecar's title in [locale], else the index's.
+  String title([String locale = 'zh']) => listing?.title?.resolve(locale) ?? plugin.displayTitle(locale);
+
+  /// The sidecar's summary in [locale], else the index's description.
+  String? summary([String locale = 'zh']) => listing?.summary?.resolve(locale) ?? plugin.displayDescription(locale);
+
+  static String _haystack(MarketPlugin p, DshGoListing? listing) => [
+    p.name,
+    ...?p.title?.all,
+    ...?p.description?.all,
+    ...?listing?.title?.all,
+    ...?listing?.summary?.all,
+    ...p.keywords,
+    ?p.author,
+  ].join('\n').toLowerCase();
 
   /// Every whitespace-separated term is a substring (works for Chinese
   /// without tokenizing: "小说 写作" matches "小说创作…写作").
   bool matches(List<String> terms) => terms.every(haystack.contains);
 }
 
+/// The two sections the official index fills (§2); 全部 is everything.
+enum MarketSection { official, adapted }
+
 /// The fetched index plus derived entries.
 class MarketCatalog {
-  MarketCatalog(this.index)
+  /// [listings] (the official sidecar) apply to the version the index pins;
+  /// one written for another version is ignored.
+  MarketCatalog(this.index, {Map<String, DshGoListing> listings = const {}})
     : entries = [
         for (final plugin in index.plugins)
           MarketEntry(
             plugin,
             webOnly: isWebOnlyPlugin(plugin, index),
             categoryTitle: index.categories[plugin.category]?.title.resolve('zh'),
+            listing: listings[plugin.name]?.version == plugin.latest.version ? listings[plugin.name] : null,
           ),
       ];
+
+  MarketCatalog._(this.index, this.entries);
+
+  /// [all] with [official]'s entry in place of its own for the same package
+  /// (the pinned version and its risk), and the official entries [all]
+  /// doesn't have added at the end.
+  factory MarketCatalog.merged(MarketCatalog all, MarketCatalog official) {
+    final listed = {for (final e in all.entries) e.name};
+    return MarketCatalog._(all.index, [
+      for (final e in all.entries) official.byName[e.name] ?? e,
+      for (final e in official.entries)
+        if (!listed.contains(e.name)) e,
+    ]);
+  }
 
   final MarketIndex index;
   final List<MarketEntry> entries;
@@ -146,6 +206,129 @@ final marketCatalogProvider = FutureProvider<MarketCatalog>((ref) async {
   final index = await ref.watch(marketIndexFetcherProvider)(Uri.parse(dshfindIndexUrl));
   return MarketCatalog(index);
 }, retry: (_, _) => null);
+
+// ── Official index ───────────────────────────────────────────────────────────
+
+/// The official market (docs/design/plugin-market.md): a format-1 index with
+/// one pinned version per plugin, and the DSH Go sidecar beside it.
+const officialIndexUrl = 'https://go.dshtui.com/market/index.json';
+const officialSidecarUrl = 'https://go.dshtui.com/market/dsh-go.json';
+
+typedef OfficialMarketFetcher = Future<MarketCatalog> Function();
+
+bool _notPublished(Object error) => error is MarketFetchException && error.statusCode == 404;
+
+/// Both files at once ([index] and [sidecar] fetch them). An index not
+/// published yet (404) is an empty market. A sidecar that is missing or not
+/// schema 1 leaves the plugins without a tier (under 全部 only); one that
+/// can't be fetched fails the read, so a network problem doesn't pass for 暂无.
+Future<MarketCatalog> fetchOfficialMarket({
+  MarketIndexFetcher index = fetchMarketIndex,
+  Future<MarketSidecar> Function(Uri url) sidecar = fetchMarketSidecar,
+}) async {
+  final url = Uri.parse(officialIndexUrl);
+  Future<MarketSidecar> readSidecar() async {
+    try {
+      return await sidecar(Uri.parse(officialSidecarUrl));
+    } on MarketIndexException {
+      return MarketSidecar.empty;
+    } on MarketFetchException catch (error) {
+      if (_notPublished(error)) return MarketSidecar.empty;
+      rethrow;
+    }
+  }
+
+  // Read alongside the index; a failure of its own counts once the index is in.
+  final listings = readSidecar();
+  unawaited(listings.then((_) {}, onError: (Object _) {}));
+  final MarketIndex fetched;
+  try {
+    fetched = await index(url);
+  } on Object catch (error) {
+    if (_notPublished(error)) return MarketCatalog(MarketIndex(url: url, title: LocalizedText.plain(url.host)));
+    rethrow;
+  }
+  return MarketCatalog(fetched, listings: (await listings).plugins);
+}
+
+final officialMarketFetcherProvider = Provider<OfficialMarketFetcher>((ref) => fetchOfficialMarket);
+
+/// Fetched once per app session like dshfind's; the chat's 生成 entry reads
+/// it too (the media plugin it offers).
+final officialMarketProvider = FutureProvider<MarketCatalog>(
+  (ref) => ref.watch(officialMarketFetcherProvider)(),
+  retry: (_, _) => null,
+);
+
+/// 全部: dshfind with the official entries merged in; dshfind alone while
+/// the official index loads or when it failed.
+final marketAllProvider = Provider<AsyncValue<MarketCatalog>>((ref) {
+  final official = ref.watch(officialMarketProvider).value;
+  return ref
+      .watch(marketCatalogProvider)
+      .whenData((all) => official == null ? all : MarketCatalog.merged(all, official));
+});
+
+/// [section]'s entries passing the search box, in index order. Categories
+/// and the web-only switch belong to 全部.
+List<MarketEntry> marketSection(MarketCatalog official, MarketSection section, MarketFilter filter) {
+  final terms = filter.terms;
+  return [
+    for (final entry in official.entries)
+      if (entry.section == section && (terms.isEmpty || entry.matches(terms))) entry,
+  ];
+}
+
+/// The app's own version, for `dshGo.minApp`.
+final appVersionProvider = Provider<AppVersion>((ref) => AppVersion.tryParse(AppInfo.version)!);
+
+/// The version [entry] needs when this app is older: it shows but doesn't
+/// install. Null when it can be installed.
+AppVersion? marketNeedsApp(MarketEntry entry, AppVersion app) {
+  final min = entry.listing?.minApp;
+  return min != null && min.isNewerThan(app) ? min : null;
+}
+
+/// [installed] (the host's copy of [entry]'s package) is a withdrawn version.
+bool marketBlockedInstall(MarketEntry entry, PluginBundle? installed) {
+  final version = installed?.version;
+  return version != null &&
+      (installed!.installed || installed.availability == 'profile') &&
+      (entry.listing?.blockedVersions.contains(version) ?? false);
+}
+
+typedef NpmIntegrityReader = Future<String?> Function(String name, String version);
+
+/// What npm reports as `dist.integrity` for `name@version` (the public
+/// registry, then npmmirror); null when neither answers in time.
+///
+/// The host can't be asked: `pluginManager/inspect` and the install result
+/// carry no integrity, and pnpm checks the tarball against whichever
+/// registry the host uses without saying what it saw. So this proves the
+/// registry serves the version the market checked, not the host's download.
+final npmIntegrityProvider = Provider<NpmIntegrityReader>((ref) {
+  final net = ref.watch(shareNetProvider);
+  return (name, version) async =>
+      (await net.npmFacts(name, version).timeout(const Duration(seconds: 10), onTimeout: () => null))?.integrity;
+});
+
+/// [entry]'s pinned `name@version`; an npm entry the sidecar gives an
+/// integrity for is checked against the registry before pnpm runs.
+PluginInstallRequest marketInstallRequest(MarketEntry entry, {bool replace = false}) {
+  final plugin = entry.plugin;
+  final latest = plugin.latest;
+  final target = latest.installTarget(plugin.name);
+  final integrity = latest.source is MarketNpmSource ? entry.listing?.integrity : null;
+  return PluginInstallRequest(
+    name: plugin.name,
+    spec: target.spec,
+    registry: target.registry,
+    title: entry.title(AppLocale.current.languageCode),
+    published: latest.published,
+    replaceInstalled: replace,
+    integrity: integrity == null ? null : (version: latest.version, integrity: integrity),
+  );
+}
 
 const _webOnlyCategoryIds = {'ui', 'skin', 'skins', 'theme', 'themes', 'client', 'clients', 'web', 'webui', 'web-ui'};
 final _webOnlyCategoryTitle = RegExp(r'\b(?:ui|themes?|skins?|panels?|clients?|appearance)\b', caseSensitive: false);
@@ -736,6 +919,9 @@ enum PluginFailureKind {
   diskFull,
   permission,
   integrity,
+
+  /// The registry's version isn't the one the official market checked.
+  mismatch,
   buildBlocked,
   alreadyInstalled,
   notBundle,
@@ -1038,6 +1224,7 @@ class PluginInstallRequest {
     this.finishesUpdate = false,
     this.approvedBuilds = const [],
     this.published,
+    this.integrity,
   });
 
   final String name;
@@ -1051,12 +1238,16 @@ class PluginInstallRequest {
   final List<String> approvedBuilds;
   final DateTime? published;
 
+  /// What the official market recorded for the npm version being installed:
+  /// checked against what the registry reports before anything is removed or
+  /// installed ([PluginInstallPhase.verifying]).
+  final ({String version, String integrity})? integrity;
+
   /// An update needs an engine restart even when the Host answers `applied`:
   /// the running engine keeps executing the old module (Node's module cache)
   /// until it restarts.
   bool needsRestartAfter(PluginOperationResult result) =>
-      result.needsRestart ||
-      ((replaceInstalled || finishesUpdate) && result.application == PluginApplication.applied);
+      result.needsRestart || ((replaceInstalled || finishesUpdate) && result.application == PluginApplication.applied);
 
   PluginInstallRequest withApprovedBuilds(List<String> builds) => PluginInstallRequest(
     name: name,
@@ -1066,10 +1257,11 @@ class PluginInstallRequest {
     finishesUpdate: replaceInstalled || finishesUpdate,
     approvedBuilds: builds,
     published: published,
+    integrity: integrity,
   );
 }
 
-enum PluginInstallPhase { queued, removing, installing, applying, cancelling, succeeded, failed, cancelled }
+enum PluginInstallPhase { queued, verifying, removing, installing, applying, cancelling, succeeded, failed, cancelled }
 
 class PluginInstallJob {
   const PluginInstallJob({
@@ -1100,6 +1292,7 @@ class PluginInstallJob {
 
   bool get isActive => switch (phase) {
     PluginInstallPhase.queued ||
+    PluginInstallPhase.verifying ||
     PluginInstallPhase.removing ||
     PluginInstallPhase.installing ||
     PluginInstallPhase.applying ||
@@ -1115,11 +1308,13 @@ class PluginInstallJob {
   /// Cancellable until the bundle is being applied.
   bool get cancellable =>
       phase == PluginInstallPhase.queued ||
+      phase == PluginInstallPhase.verifying ||
       phase == PluginInstallPhase.installing ||
       phase == PluginInstallPhase.removing;
 
   String get phaseLabel => switch (phase) {
     PluginInstallPhase.queued => appL10n.statePluginQueued,
+    PluginInstallPhase.verifying => appL10n.marketVerifying,
     PluginInstallPhase.removing => appL10n.statePluginRemoving,
     PluginInstallPhase.installing =>
       (attempt ?? 1) > 1
@@ -1220,7 +1415,7 @@ class PluginInstallsController extends Notifier<Map<String, PluginInstallJob>> {
     final job = state[name];
     final host = _host;
     if (job == null || !job.cancellable || host == null) return;
-    if (job.phase == PluginInstallPhase.queued) {
+    if (job.phase == PluginInstallPhase.queued || job.phase == PluginInstallPhase.verifying) {
       _cancelledQueued.add(job.requestId);
       _put(job.copyWith(phase: PluginInstallPhase.cancelled, failure: describeCancelled));
       return;
@@ -1257,9 +1452,7 @@ class PluginInstallsController extends Notifier<Map<String, PluginInstallJob>> {
     final requestId = job.requestId;
     if (_cancelledQueued.remove(requestId) || generation != _generation || !ref.mounted) {
       final current = ref.mounted ? state[name] : null;
-      final cancelled = current?.requestId == requestId
-          ? current!
-          : job.copyWith(phase: PluginInstallPhase.cancelled);
+      final cancelled = current?.requestId == requestId ? current! : job.copyWith(phase: PluginInstallPhase.cancelled);
       _settle(cancelled);
       return cancelled;
     }
@@ -1304,6 +1497,38 @@ class PluginInstallsController extends Notifier<Map<String, PluginInstallJob>> {
     }
 
     try {
+      if (job.request.integrity case final expected?) {
+        _update(name, requestId, (j) => j.copyWith(phase: PluginInstallPhase.verifying));
+        final reported = await ref.read(npmIntegrityProvider)(name, expected.version);
+        if (_cancelledQueued.remove(requestId) || generation != _generation || !ref.mounted) {
+          return finish((j) => j.copyWith(phase: PluginInstallPhase.cancelled, failure: describeCancelled));
+        }
+        if (reported == null) {
+          return finish(
+            (j) => j.copyWith(
+              phase: PluginInstallPhase.failed,
+              failure: PluginFailure(
+                PluginFailureKind.network,
+                appL10n.marketVerificationUnavailableTitle,
+                appL10n.marketVerificationUnavailableBody,
+              ),
+            ),
+          );
+        }
+        if (reported != expected.integrity) {
+          return finish(
+            (j) => j.copyWith(
+              phase: PluginInstallPhase.failed,
+              failure: PluginFailure(
+                PluginFailureKind.mismatch,
+                appL10n.marketMismatchTitle,
+                appL10n.marketMismatchMessage(expected.version),
+                detail: 'dsh-go.json  ${expected.integrity}\nnpm          $reported',
+              ),
+            ),
+          );
+        }
+      }
       if (job.request.replaceInstalled) {
         _update(name, requestId, (j) => j.copyWith(phase: PluginInstallPhase.removing));
         final removed = await client.removeBundle(name);

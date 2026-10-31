@@ -28,6 +28,7 @@ import { accessMode, download, isDownloadPath } from './download';
 export { StatsSalt } from './stats';
 import { usage } from './usage';
 import { githubStars } from './github';
+import { isMarketPath, market } from './market';
 import type { Ctx } from './files';
 import { HOME_PAGE, LANDING_PAGE, VIEWER_PAGE, asset, homeFile, notFound, redirect } from './site';
 
@@ -58,6 +59,7 @@ async function route(request: Request, env: Env, ctx: Ctx): Promise<Response> {
     return json(404, { error: 'not_found' });
   }
 
+  if (isMarketPath(path)) return market(request, env);
   if (isBetaPath(path)) return beta(request, env, ctx);
   if (isDownloadPath(path) && accessMode(env) === 'public') return download(request, env, ctx);
   // public/home/ is served at the root only.

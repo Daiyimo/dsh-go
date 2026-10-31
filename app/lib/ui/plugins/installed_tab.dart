@@ -139,15 +139,27 @@ class BundleTile extends ConsumerWidget {
         !readOnly &&
         !ref.read(pluginListViewProvider).readOnly &&
         (ref.read(installedPluginsProvider).value?.any((b) => identical(b, bundle)) ?? false);
-    final error = bundleErrorText(bundle);
     final summary = bundle.summary();
     final switchable = bundle.readOnlyReason == null && (bundle.installed || bundle.optional);
     final running = job?.isActive ?? false;
+    // The official market's entry: a newer pinned version, or this one withdrawn.
+    final listed = ref.watch(officialMarketProvider.select((c) => c.value?.byName[bundle.name]));
+    final update =
+        listed != null && marketInstallStatus(listed.plugin, [bundle]) == MarketInstallStatus.updateAvailable;
+    final blocked = listed != null && marketBlockedInstall(listed, bundle);
+    final error = blocked ? l10n.marketBlockedRow : bundleErrorText(bundle);
     final subtitle = running
         ? job!.phaseLabel
         : error.isNotEmpty
         ? error
         : [?bundle.version, ?summary].join(' · ');
+    final badges = [
+      if (bundle.official) PluginBadge(l10n.pluginsOfficial, tone: PluginBadgeTone.official),
+      if (blocked)
+        PluginBadge(l10n.marketBlockedBadge, tone: PluginBadgeTone.danger)
+      else if (update)
+        PluginBadge(l10n.marketUpdateAvailable, tone: PluginBadgeTone.official),
+    ];
 
     Widget? trailing;
     if (running) {
@@ -184,7 +196,7 @@ class BundleTile extends ConsumerWidget {
         leadingWidth: 40,
         title: title,
         titleStyle: pluginRowTitle(context),
-        badge: bundle.official ? PluginBadge(l10n.pluginsOfficial, tone: PluginBadgeTone.official) : null,
+        badge: badges.isEmpty ? null : Row(mainAxisSize: MainAxisSize.min, spacing: 4, children: badges),
         subtitle: subtitle.isEmpty ? null : subtitle,
         subtitleColor: error.isNotEmpty && !running ? colors.danger : null,
         trailing: trailing,

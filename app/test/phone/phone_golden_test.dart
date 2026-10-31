@@ -5,6 +5,7 @@
 
 import 'package:dsh_app/phone/phone_channel.dart';
 import 'package:dsh_app/ui/phone/app_rules_page.dart';
+import 'package:dsh_app/ui/phone/a11y_restore_sheet.dart';
 import 'package:dsh_app/ui/phone/dnd_mode_page.dart';
 import 'package:dsh_app/ui/phone/hold_to_confirm.dart';
 import 'package:dsh_app/ui/phone/phone_control_screen.dart';
@@ -42,6 +43,20 @@ void main() {
 
   // Turned on, accessibility still off on a sideloaded vivo: the usual first visit.
   phoneGolden('phone_main', () => const PhoneControlScreen(), size: const Size(390, 1720));
+
+  phoneGolden(
+    'a11y_restore',
+    () => const Scaffold(body: A11yRestoreSheet()),
+    size: const Size(320, 680),
+    native: () => FakePhoneNative(status: {
+      ...phoneStatus(),
+      'a11yKeeper': {
+        'granted': false,
+        'path': 'shizuku',
+        'command': 'adb shell pm grant io.github.ccch1mneyyy.dsh_app android.permission.WRITE_SECURE_SETTINGS',
+      },
+    }),
+  );
 
   phoneGolden(
     'phone_off',

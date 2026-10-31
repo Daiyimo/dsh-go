@@ -85,13 +85,15 @@ async function writeNew(path, bytes, signal, onCreated) {
  * This is NOT a kernel sandbox or an atomic transaction across two directories.
  */
 export async function prepareImageStore({
-  authorizeWorkspace, hostStateDir, signal, rid, date,
+  authorizeWorkspace, hostStateDir, signal, rid, date, publicationSuffix,
 }) {
   if (!/^m_[a-f0-9-]{36}$/.test(rid) || !/^\d{4}-\d{2}-\d{2}$/.test(date)
     || typeof authorizeWorkspace !== 'function'
     || typeof hostStateDir !== 'string' || !isAbsolute(hostStateDir)) {
     fail('invalid_request');
   }
+  if (publicationSuffix !== undefined && !/^[a-f0-9-]{36}$/.test(publicationSuffix)) fail('invalid_request');
+  const fileStem = rid + (publicationSuffix ? '-' + publicationSuffix : '');
   checkAbort(signal);
   let initial;
   try { initial = await authorizeWorkspace(); }
@@ -102,8 +104,9 @@ export async function prepareImageStore({
   const cwd = await realpath(initial.cwd);
   const generated = join(cwd, 'generated');
   const dated = join(generated, date);
-  const stagedDir = join(dated, '.' + rid + '.pending');
+  const stagedDir = join(dated, '.' + rid + '-' + randomUUID() + '.pending');
   const staged = [];
+  const downloads = [];
   const published = [];
   let indexPublished;
   let committed = false;
@@ -202,7 +205,7 @@ export async function prepareImageStore({
       } catch { return false; }
     }
     const failures = [];
-    for (const entry of [...published, ...staged].reverse()) {
+    for (const entry of [...published, ...staged, ...downloads].reverse()) {
       try {
         if (!await removeOwned(entry)) failures.push(entry.path);
       } catch { failures.push(entry.path); }
@@ -225,6 +228,39 @@ export async function prepareImageStore({
 
   return {
     cwd,
+    stagingDirectory: stagedDir,
+    outputPath(slot, extension) { return join(dated, fileStem + '-' + slot + '.' + extension); },
+    async ownDownload(receipt) {
+      await guard();
+      if (dirname(receipt.path) !== stagedDir) fail('invalid_request');
+      const identity = await lstat(receipt.path, { bigint: true });
+      if (!identity.isFile() || identity.isSymbolicLink()) fail('storage');
+      downloads.push({ path: receipt.path, identity });
+    },
+    async stageDownloaded(receipt, extension) {
+      if (committed || extension !== 'mp4' || receipt?.kind !== 'private-download'
+        || dirname(receipt.path) !== stagedDir || !/^[a-f0-9]{64}$/.test(receipt.sha256)) fail('invalid_request');
+      await guard();
+      const handle = await open(receipt.path, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0));
+      let identity;
+      try {
+        identity = await handle.stat({ bigint: true });
+        if (!identity.isFile() || Number(identity.size) !== receipt.bytes) fail('storage');
+        const hash = createHash('sha256');
+        for await (const chunk of handle.createReadStream({ autoClose: false })) { checkAbort(signal); hash.update(chunk); }
+        if (hash.digest('hex') !== receipt.sha256) fail('storage');
+        await guard();
+        if (!sameFile(await lstat(receipt.path, { bigint: true }), identity)) fail('storage');
+        const slot = staged.length + 1;
+        const path = join(stagedDir, String(slot) + '.mp4');
+        await link(receipt.path, path);
+        staged.push({ path, identity, contentDigest: { bytes: receipt.bytes, sha256: receipt.sha256 } });
+        if (!await removeOwned({ path: receipt.path, identity })) fail('storage');
+        await syncDirectory(stagedDir);
+        await guard();
+        return join(dated, fileStem + '-' + slot + '.mp4');
+      } finally { await handle.close(); }
+    },
     async recheck() { await guard(); },
     async stage(bytes, extension) {
       if (committed || !['png', 'jpg', 'webp', 'gif'].includes(extension)) {
@@ -241,7 +277,7 @@ export async function prepareImageStore({
       const entry = await writeNew(temporaryPath, snapshot, signal, entry => staged.push(entry));
       entry.contentDigest = { bytes: snapshot.length, sha256 };
       await guard();
-      return join(dated, rid + '-' + slot + '.' + extension);
+      return join(dated, fileStem + '-' + slot + '.' + extension);
     },
     async commit(meta, { sessionId, createdAt }) {
       if (committed || !meta?.items || meta.items.length !== staged.length
@@ -252,7 +288,7 @@ export async function prepareImageStore({
       for (let i = 0; i < staged.length; i += 1) {
         await guard();
         const target = meta.items[i].path;
-        const expected = join(dated, rid + '-' + (i + 1) + '.'
+        const expected = join(dated, fileStem + '-' + (i + 1) + '.'
           + staged[i].path.split('.').at(-1));
         if (target !== expected) fail('invalid_request');
         // link fails on an existing target; unlike rename it never overwrites.

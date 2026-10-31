@@ -71,6 +71,7 @@ class VoiceInputController extends ChangeNotifier with WidgetsBindingObserver {
     Future<VoiceMode> Function()? mode,
     bool Function()? modelReady,
     this.onRecognized,
+    this.requiredProviderId,
     bool observeLifecycle = true,
   }) : _mode = mode ?? _automatic,
        _modelReady = modelReady ?? _noModel,
@@ -81,6 +82,9 @@ class VoiceInputController extends ChangeNotifier with WidgetsBindingObserver {
 
   static Future<VoiceMode> _automatic() async => VoiceMode.auto;
   static bool _noModel() => false;
+
+  /// Optional strict offline provider for the pet foreground fallback.
+  final String? requiredProviderId;
   final TextEditingController input;
   final VoiceBridge bridge;
   final DshClient? Function() client;
@@ -171,7 +175,18 @@ class VoiceInputController extends ChangeNotifier with WidgetsBindingObserver {
     final probe = ++_catalogProbe;
     _VoiceTarget? target;
     try {
-      final catalog = await c.speechCatalog().timeout(const Duration(seconds: 4));
+      var catalog = await c.speechCatalog().timeout(const Duration(seconds: 4));
+      if (requiredProviderId case final id?) {
+        final provider = catalog?.providers.where((p) => p.id == id && p.location == 'host-local').firstOrNull;
+        if (provider == null || !provider.usable) return null;
+        catalog = SpeechCatalog(
+          providers: catalog!.providers,
+          providerId: id,
+          language: catalog.language,
+          maxAudioBytes: catalog.maxAudioBytes,
+          maxDurationSeconds: catalog.maxDurationSeconds,
+        );
+      }
       if (catalog?.selected?.usable ?? false) target = _VoiceTarget(c, generation, catalog!);
     } catch (_) {
       // Missing speech bundle, unavailable provider, or disconnected host.

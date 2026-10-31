@@ -299,6 +299,10 @@ void main() {
       await controller.install();
       expect(c.read(appUpdateProvider).task, UpdateTaskPhase.ready);
       expect(c.read(appUpdateProvider).problem, UpdateProblem.installCancelled);
+      // The same checked file goes to the system's own installer.
+      expect(await controller.installWithSystem(), isTrue);
+      expect(installer.calls.last, 'openWithSystemInstaller');
+      expect(installer.installed.last, installer.installed.first);
 
       installer.result = const InstallResult(InstallStatus.signature, 'INSTALL_FAILED_UPDATE_INCOMPATIBLE');
       await controller.install();

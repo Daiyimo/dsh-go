@@ -4,7 +4,8 @@ import java.util.UUID
 
 /** Main-thread ownership, independent of Android's later View attachment notification. */
 internal class OverlayWindowOwner(private val nonce: String = UUID.randomUUID().toString()) {
-    enum class Role { PET, TARGET, BUBBLE, MENU }
+    /** [ASK]: 问一句's input bar, the one window that takes focus (for the keyboard), only while open. */
+    enum class Role { PET, TARGET, BUBBLE, MENU, ASK }
 
     class Ticket internal constructor(val generation: Long, val sequence: Long, val role: Role)
 

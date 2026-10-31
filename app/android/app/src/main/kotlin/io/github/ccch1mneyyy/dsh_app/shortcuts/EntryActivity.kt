@@ -32,6 +32,10 @@ class EntryActivity : Activity() {
                     putExtra(ShortcutsPlugin.EXTRA_KIND, kind)
                     intent.getStringExtra(EXTRA_SESSION)?.let { putExtra(ShortcutsPlugin.EXTRA_SESSION, it) }
                     intent.getStringExtra(EXTRA_HOST)?.let { putExtra(ShortcutsPlugin.EXTRA_HOST, it) }
+                    // 问一句's text the pet couldn't send: into the composer, unsent. Only from the pet.
+                    if (intent.hasExtra(EXTRA_PET_GENERATION)) {
+                        intent.getStringExtra(EXTRA_TEXT)?.take(MAX_TEXT)?.let { putExtra(ShortcutsPlugin.EXTRA_TEXT, it) }
+                    }
                     putExtra(ShortcutsPlugin.EXTRA_TOKEN, ShortcutsPlugin.token)
                 }
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or
@@ -56,6 +60,8 @@ class EntryActivity : Activity() {
         const val EXTRA_PET_GENERATION = "pet_generation"
         const val EXTRA_SESSION = "session_id"
         const val EXTRA_HOST = "host"
+        const val EXTRA_TEXT = "text"
+        private const val MAX_TEXT = 4_000
 
         fun kindOf(action: String?): String? = when (action) {
             ACTION_NEW_CHAT -> ShortcutsPlugin.KIND_NEW
@@ -65,6 +71,8 @@ class EntryActivity : Activity() {
         }
 
         fun newChat(context: Context): Intent = Intent(context, EntryActivity::class.java).setAction(ACTION_NEW_CHAT)
+
+        fun voice(context: Context): Intent = Intent(context, EntryActivity::class.java).setAction(ACTION_VOICE)
 
         fun openApp(context: Context): Intent = Intent(context, EntryActivity::class.java).setAction(ACTION_OPEN_APP)
 

@@ -92,6 +92,72 @@ abstract class L10n {
   /// A list of this localizations delegate's supported locales.
   static const List<Locale> supportedLocales = <Locale>[Locale('en'), Locale('zh')];
 
+  /// No description provided for @a11yRestoreTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'自动恢复无障碍'**
+  String get a11yRestoreTitle;
+
+  /// No description provided for @searchKwA11yRestore.
+  ///
+  /// In zh, this message translates to:
+  /// **'无障碍,恢复,重连,自动恢复,掉线,授权,ADB,Shizuku'**
+  String get searchKwA11yRestore;
+
+  /// No description provided for @a11yRestoreNeedsGrant.
+  ///
+  /// In zh, this message translates to:
+  /// **'需要授权'**
+  String get a11yRestoreNeedsGrant;
+
+  /// No description provided for @a11yRestoreNotice.
+  ///
+  /// In zh, this message translates to:
+  /// **'开启后，在系统设置里关掉无障碍会被自动打开；要关闭手机操控，请在 DSH Go 里关。'**
+  String get a11yRestoreNotice;
+
+  /// No description provided for @a11yRestoreForceStop.
+  ///
+  /// In zh, this message translates to:
+  /// **'被强制停止后，重新打开 DSH Go 才能恢复。'**
+  String get a11yRestoreForceStop;
+
+  /// No description provided for @a11yRestoreGrant.
+  ///
+  /// In zh, this message translates to:
+  /// **'授权并开启'**
+  String get a11yRestoreGrant;
+
+  /// No description provided for @a11yRestoreSetup.
+  ///
+  /// In zh, this message translates to:
+  /// **'配置 Shizuku 或无线调试'**
+  String get a11yRestoreSetup;
+
+  /// No description provided for @a11yRestoreWaiting.
+  ///
+  /// In zh, this message translates to:
+  /// **'请在 Shizuku 中允许授权'**
+  String get a11yRestoreWaiting;
+
+  /// No description provided for @a11yRestoreComputer.
+  ///
+  /// In zh, this message translates to:
+  /// **'也可以连接电脑，执行一次：'**
+  String get a11yRestoreComputer;
+
+  /// No description provided for @a11yRestoreCopy.
+  ///
+  /// In zh, this message translates to:
+  /// **'复制授权命令'**
+  String get a11yRestoreCopy;
+
+  /// No description provided for @a11yRestoreCopied.
+  ///
+  /// In zh, this message translates to:
+  /// **'授权命令已复制'**
+  String get a11yRestoreCopied;
+
   /// No description provided for @accessPickTitle.
   ///
   /// In zh, this message translates to:
@@ -13646,6 +13712,300 @@ abstract class L10n {
   /// **'安装后即可登录'**
   String get localEnvSignInInstallFirst;
 
+  /// No description provided for @marketSectionOfficial.
+  ///
+  /// In zh, this message translates to:
+  /// **'官方'**
+  String get marketSectionOfficial;
+
+  /// No description provided for @marketSectionAdapted.
+  ///
+  /// In zh, this message translates to:
+  /// **'适配 DSH Go'**
+  String get marketSectionAdapted;
+
+  /// No description provided for @marketSectionAll.
+  ///
+  /// In zh, this message translates to:
+  /// **'全部'**
+  String get marketSectionAll;
+
+  /// No description provided for @marketSectionLoading.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在载入…'**
+  String get marketSectionLoading;
+
+  /// No description provided for @marketSectionFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'官方目录没打开'**
+  String get marketSectionFailed;
+
+  /// No description provided for @marketSectionEmpty.
+  ///
+  /// In zh, this message translates to:
+  /// **'暂无'**
+  String get marketSectionEmpty;
+
+  /// No description provided for @marketTierOfficial.
+  ///
+  /// In zh, this message translates to:
+  /// **'官方'**
+  String get marketTierOfficial;
+
+  /// No description provided for @marketTierAdapted.
+  ///
+  /// In zh, this message translates to:
+  /// **'适配 DSH Go'**
+  String get marketTierAdapted;
+
+  /// No description provided for @marketRiskMedium.
+  ///
+  /// In zh, this message translates to:
+  /// **'中风险'**
+  String get marketRiskMedium;
+
+  /// No description provided for @marketRiskHigh.
+  ///
+  /// In zh, this message translates to:
+  /// **'高风险'**
+  String get marketRiskHigh;
+
+  /// No description provided for @marketFlagInstallScripts.
+  ///
+  /// In zh, this message translates to:
+  /// **'安装时运行脚本'**
+  String get marketFlagInstallScripts;
+
+  /// No description provided for @marketFlagInstallScriptsBody.
+  ///
+  /// In zh, this message translates to:
+  /// **'安装时会自动运行包里的脚本（preinstall、install 或 postinstall）'**
+  String get marketFlagInstallScriptsBody;
+
+  /// No description provided for @marketFlagNativeCode.
+  ///
+  /// In zh, this message translates to:
+  /// **'含原生程序'**
+  String get marketFlagNativeCode;
+
+  /// No description provided for @marketFlagNativeCodeBody.
+  ///
+  /// In zh, this message translates to:
+  /// **'包里有编译好的原生程序（.node、binding.gyp 或二进制文件），没法直接阅读'**
+  String get marketFlagNativeCodeBody;
+
+  /// No description provided for @marketFlagShell.
+  ///
+  /// In zh, this message translates to:
+  /// **'执行命令'**
+  String get marketFlagShell;
+
+  /// No description provided for @marketFlagShellBody.
+  ///
+  /// In zh, this message translates to:
+  /// **'代码里会调用系统命令（child_process）'**
+  String get marketFlagShellBody;
+
+  /// No description provided for @marketFlagNetwork.
+  ///
+  /// In zh, this message translates to:
+  /// **'联网'**
+  String get marketFlagNetwork;
+
+  /// No description provided for @marketFlagNetworkBody.
+  ///
+  /// In zh, this message translates to:
+  /// **'代码里会发起网络请求（fetch、http、WebSocket）'**
+  String get marketFlagNetworkBody;
+
+  /// No description provided for @marketFlagFilesystem.
+  ///
+  /// In zh, this message translates to:
+  /// **'写工作区外的文件'**
+  String get marketFlagFilesystem;
+
+  /// No description provided for @marketFlagFilesystemBody.
+  ///
+  /// In zh, this message translates to:
+  /// **'会写入工作区以外的路径'**
+  String get marketFlagFilesystemBody;
+
+  /// No description provided for @marketFlagObfuscated.
+  ///
+  /// In zh, this message translates to:
+  /// **'代码难以审阅'**
+  String get marketFlagObfuscated;
+
+  /// No description provided for @marketFlagObfuscatedBody.
+  ///
+  /// In zh, this message translates to:
+  /// **'有压缩或混淆过的大文件，看不出它做什么'**
+  String get marketFlagObfuscatedBody;
+
+  /// No description provided for @marketFlagNotAdapted.
+  ///
+  /// In zh, this message translates to:
+  /// **'未适配 DSH Go'**
+  String get marketFlagNotAdapted;
+
+  /// No description provided for @marketFlagNotAdaptedBody.
+  ///
+  /// In zh, this message translates to:
+  /// **'没有声明 DSH Go 原生协议，在 App 里没有原生界面'**
+  String get marketFlagNotAdaptedBody;
+
+  /// No description provided for @marketFlagOtherBody.
+  ///
+  /// In zh, this message translates to:
+  /// **'自动检查报告的其他特征'**
+  String get marketFlagOtherBody;
+
+  /// No description provided for @marketChecksTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'自动检查'**
+  String get marketChecksTitle;
+
+  /// No description provided for @marketChecksClean.
+  ///
+  /// In zh, this message translates to:
+  /// **'没有发现风险特征'**
+  String get marketChecksClean;
+
+  /// No description provided for @marketChecksNote.
+  ///
+  /// In zh, this message translates to:
+  /// **'自动检查发现的特征，不代表插件有恶意'**
+  String get marketChecksNote;
+
+  /// No description provided for @marketCheckedOn.
+  ///
+  /// In zh, this message translates to:
+  /// **'检查于 {date}'**
+  String marketCheckedOn(String date);
+
+  /// No description provided for @marketScreenshot.
+  ///
+  /// In zh, this message translates to:
+  /// **'截图 {index}'**
+  String marketScreenshot(int index);
+
+  /// No description provided for @marketRiskConfirmTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'「{name}」有风险特征'**
+  String marketRiskConfirmTitle(String name);
+
+  /// No description provided for @marketRiskConfirmAction.
+  ///
+  /// In zh, this message translates to:
+  /// **'仍然安装'**
+  String get marketRiskConfirmAction;
+
+  /// No description provided for @marketPinnedVersion.
+  ///
+  /// In zh, this message translates to:
+  /// **'锁定版本'**
+  String get marketPinnedVersion;
+
+  /// No description provided for @marketRequiresApp.
+  ///
+  /// In zh, this message translates to:
+  /// **'需要 DSH Go'**
+  String get marketRequiresApp;
+
+  /// No description provided for @marketNeedsApp.
+  ///
+  /// In zh, this message translates to:
+  /// **'需要 DSH Go {version} 或更高版本'**
+  String marketNeedsApp(String version);
+
+  /// No description provided for @marketUpdateAvailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'有更新'**
+  String get marketUpdateAvailable;
+
+  /// No description provided for @marketBlockedTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'这个版本已下架'**
+  String get marketBlockedTitle;
+
+  /// No description provided for @marketBlockedMessage.
+  ///
+  /// In zh, this message translates to:
+  /// **'已安装的 {version} 已从插件市场下架，建议卸载'**
+  String marketBlockedMessage(String version);
+
+  /// No description provided for @marketBlockedRow.
+  ///
+  /// In zh, this message translates to:
+  /// **'此版本已下架，建议卸载'**
+  String get marketBlockedRow;
+
+  /// No description provided for @marketBlockedBadge.
+  ///
+  /// In zh, this message translates to:
+  /// **'已下架'**
+  String get marketBlockedBadge;
+
+  /// No description provided for @marketVerifying.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在核对版本…'**
+  String get marketVerifying;
+
+  /// No description provided for @marketMismatchTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'版本校验不一致'**
+  String get marketMismatchTitle;
+
+  /// No description provided for @marketMismatchMessage.
+  ///
+  /// In zh, this message translates to:
+  /// **'npm 上的 {version} 和插件市场检查过的不是同一个包，已停止安装'**
+  String marketMismatchMessage(String version);
+
+  /// No description provided for @marketSubmit.
+  ///
+  /// In zh, this message translates to:
+  /// **'提交插件'**
+  String get marketSubmit;
+
+  /// No description provided for @marketSubmitHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'在 GitHub 提交，通过自动检查即上架'**
+  String get marketSubmitHint;
+
+  /// No description provided for @marketLinkNotFound.
+  ///
+  /// In zh, this message translates to:
+  /// **'插件市场里没有 {name}'**
+  String marketLinkNotFound(String name);
+
+  /// No description provided for @marketVerificationUnavailableTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'暂时无法核对版本'**
+  String get marketVerificationUnavailableTitle;
+
+  /// No description provided for @marketVerificationUnavailableBody.
+  ///
+  /// In zh, this message translates to:
+  /// **'没能取得 npm 的版本校验信息，尚未开始安装。请检查网络后重试。'**
+  String get marketVerificationUnavailableBody;
+
+  /// No description provided for @marketCombinedCount.
+  ///
+  /// In zh, this message translates to:
+  /// **'{count} 个插件'**
+  String marketCombinedCount(int count);
+
   /// No description provided for @mediaGenerateTile.
   ///
   /// In zh, this message translates to:
@@ -14263,6 +14623,60 @@ abstract class L10n {
   /// In zh, this message translates to:
   /// **'推荐连接电脑或服务器，减少本机负担'**
   String get performanceRemoteHint;
+
+  /// No description provided for @petActionSending.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在发送…'**
+  String get petActionSending;
+
+  /// No description provided for @petActionTargetChanged.
+  ///
+  /// In zh, this message translates to:
+  /// **'主机已变化，重新打开「问一句」；文字已保留'**
+  String get petActionTargetChanged;
+
+  /// No description provided for @petActionSendFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'没能发出，文字已保留，请重试'**
+  String get petActionSendFailed;
+
+  /// No description provided for @petActionBusy.
+  ///
+  /// In zh, this message translates to:
+  /// **'这个对话正在忙，请选择「新对话」'**
+  String get petActionBusy;
+
+  /// No description provided for @petActionVoiceMissing.
+  ///
+  /// In zh, this message translates to:
+  /// **'先到 App 下载离线语音模型'**
+  String get petActionVoiceMissing;
+
+  /// No description provided for @petActionVoiceTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'语音问一句'**
+  String get petActionVoiceTitle;
+
+  /// No description provided for @petActionVoiceReturn.
+  ///
+  /// In zh, this message translates to:
+  /// **'返回桌宠'**
+  String get petActionVoiceReturn;
+
+  /// No description provided for @petActionVoiceStop.
+  ///
+  /// In zh, this message translates to:
+  /// **'结束录音'**
+  String get petActionVoiceStop;
+
+  /// No description provided for @petActionVoiceStart.
+  ///
+  /// In zh, this message translates to:
+  /// **'开始录音'**
+  String get petActionVoiceStart;
 
   /// No description provided for @phoneDiagnosticsCollecting.
   ///
@@ -18683,7 +19097,7 @@ abstract class L10n {
   /// No description provided for @pluginsIconChanged.
   ///
   /// In zh, this message translates to:
-  /// **'桌面图标已更换，几秒后生效'**
+  /// **'桌面图标已选择，回到桌面后更新'**
   String get pluginsIconChanged;
 
   /// No description provided for @pluginsIconChangeFailed.
@@ -22058,6 +22472,30 @@ abstract class L10n {
   /// **'已连接 · 端到端加密'**
   String get remoteConnectedEncrypted;
 
+  /// No description provided for @remoteConnectedVia.
+  ///
+  /// In zh, this message translates to:
+  /// **'已连接 · {path} · 端到端加密'**
+  String remoteConnectedVia(String path);
+
+  /// No description provided for @remotePathDirect.
+  ///
+  /// In zh, this message translates to:
+  /// **'直连'**
+  String get remotePathDirect;
+
+  /// No description provided for @remotePathTurn.
+  ///
+  /// In zh, this message translates to:
+  /// **'TURN'**
+  String get remotePathTurn;
+
+  /// No description provided for @remotePathRelay.
+  ///
+  /// In zh, this message translates to:
+  /// **'Relay 中继'**
+  String get remotePathRelay;
+
   /// No description provided for @remoteConnectedSsh.
   ///
   /// In zh, this message translates to:
@@ -22939,6 +23377,162 @@ abstract class L10n {
   /// In zh, this message translates to:
   /// **'{message}（{detail}）'**
   String remoteErrorDetail(String message, String detail);
+
+  /// No description provided for @remotePathLan.
+  ///
+  /// In zh, this message translates to:
+  /// **'LAN 局域网'**
+  String get remotePathLan;
+
+  /// No description provided for @remotePathP2p.
+  ///
+  /// In zh, this message translates to:
+  /// **'P2P 点对点'**
+  String get remotePathP2p;
+
+  /// No description provided for @remoteNetworkDetails.
+  ///
+  /// In zh, this message translates to:
+  /// **'网络详情'**
+  String get remoteNetworkDetails;
+
+  /// No description provided for @remoteNetworkAutomatic.
+  ///
+  /// In zh, this message translates to:
+  /// **'自动依次尝试 LAN → P2P → TURN → Relay，连接全程端到端加密。'**
+  String get remoteNetworkAutomatic;
+
+  /// No description provided for @remoteNetworkCurrentPath.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前路径'**
+  String get remoteNetworkCurrentPath;
+
+  /// No description provided for @remoteNetworkConnectDuration.
+  ///
+  /// In zh, this message translates to:
+  /// **'连接耗时'**
+  String get remoteNetworkConnectDuration;
+
+  /// No description provided for @remoteNetworkRoundTripTime.
+  ///
+  /// In zh, this message translates to:
+  /// **'往返延迟（RTT）'**
+  String get remoteNetworkRoundTripTime;
+
+  /// No description provided for @remoteNetworkUnmeasured.
+  ///
+  /// In zh, this message translates to:
+  /// **'未测量'**
+  String get remoteNetworkUnmeasured;
+
+  /// No description provided for @remoteNetworkUnknownPath.
+  ///
+  /// In zh, this message translates to:
+  /// **'尚未确认'**
+  String get remoteNetworkUnknownPath;
+
+  /// No description provided for @remoteNetworkMilliseconds.
+  ///
+  /// In zh, this message translates to:
+  /// **'{value} 毫秒'**
+  String remoteNetworkMilliseconds(int value);
+
+  /// No description provided for @remoteNetworkMeasure.
+  ///
+  /// In zh, this message translates to:
+  /// **'刷新网络信息 / 测量延迟'**
+  String get remoteNetworkMeasure;
+
+  /// No description provided for @remoteNetworkMeasuring.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在测量…'**
+  String get remoteNetworkMeasuring;
+
+  /// No description provided for @remoteNetworkMeasureFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'暂时无法测量，可以稍后重试'**
+  String get remoteNetworkMeasureFailed;
+
+  /// No description provided for @remoteNetworkDisconnected.
+  ///
+  /// In zh, this message translates to:
+  /// **'连接已断开，重新连接后可测量'**
+  String get remoteNetworkDisconnected;
+
+  /// No description provided for @remoteNetworkFallback.
+  ///
+  /// In zh, this message translates to:
+  /// **'回落原因'**
+  String get remoteNetworkFallback;
+
+  /// No description provided for @remoteNetworkFallbackUnknown.
+  ///
+  /// In zh, this message translates to:
+  /// **'直连未能建立，已自动使用可用路径'**
+  String get remoteNetworkFallbackUnknown;
+
+  /// No description provided for @remoteNetworkFallbackWebrtcUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'设备暂不支持 WebRTC，已使用 Relay 中继'**
+  String get remoteNetworkFallbackWebrtcUnavailable;
+
+  /// No description provided for @remoteNetworkFallbackDirectFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'LAN / P2P 直连未成功，已自动尝试后续路径'**
+  String get remoteNetworkFallbackDirectFailed;
+
+  /// No description provided for @remoteNetworkFallbackDirectTimeout.
+  ///
+  /// In zh, this message translates to:
+  /// **'LAN / P2P 直连超时，已自动尝试后续路径'**
+  String get remoteNetworkFallbackDirectTimeout;
+
+  /// No description provided for @remoteNetworkFallbackDirectRecentlyFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'近期直连未成功，本次先使用可用中继'**
+  String get remoteNetworkFallbackDirectRecentlyFailed;
+
+  /// No description provided for @remoteNetworkFallbackTurnUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'TURN 服务暂不可用，已使用 Relay 中继'**
+  String get remoteNetworkFallbackTurnUnavailable;
+
+  /// No description provided for @remoteNetworkFallbackTurnFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'TURN 未能连接，已使用 Relay 中继'**
+  String get remoteNetworkFallbackTurnFailed;
+
+  /// No description provided for @remoteNetworkFallbackTurnTimeout.
+  ///
+  /// In zh, this message translates to:
+  /// **'TURN 连接超时，已使用 Relay 中继'**
+  String get remoteNetworkFallbackTurnTimeout;
+
+  /// No description provided for @remoteNetworkFallbackPathUnverified.
+  ///
+  /// In zh, this message translates to:
+  /// **'尚未确认 WebRTC 路径类型'**
+  String get remoteNetworkFallbackPathUnverified;
+
+  /// No description provided for @remoteNetworkSnapshotHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'显示最近一次确认的路径与延迟，刷新可重新检测。'**
+  String get remoteNetworkSnapshotHint;
+
+  /// No description provided for @remoteNetworkObservedAt.
+  ///
+  /// In zh, this message translates to:
+  /// **'最近观测'**
+  String get remoteNetworkObservedAt;
 
   /// No description provided for @riskDontShowAgain.
   ///
@@ -28052,6 +28646,18 @@ abstract class L10n {
   /// **'跳过这个版本'**
   String get updateSkipVersion;
 
+  /// No description provided for @updateInstallWithSystem.
+  ///
+  /// In zh, this message translates to:
+  /// **'用系统安装器安装'**
+  String get updateInstallWithSystem;
+
+  /// No description provided for @updateSystemInstallerFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'没能打开系统安装器'**
+  String get updateSystemInstallerFailed;
+
   /// No description provided for @updateStarProject.
   ///
   /// In zh, this message translates to:
@@ -28381,6 +28987,18 @@ abstract class L10n {
   /// In zh, this message translates to:
   /// **'不提醒'**
   String get viewBalanceNoAlert;
+
+  /// No description provided for @viewBalanceBannerHidden.
+  ///
+  /// In zh, this message translates to:
+  /// **'本次运行不再显示余额提醒'**
+  String get viewBalanceBannerHidden;
+
+  /// No description provided for @viewBalanceTurnOff.
+  ///
+  /// In zh, this message translates to:
+  /// **'不再提醒'**
+  String get viewBalanceTurnOff;
 
   /// No description provided for @viewBalanceBelow.
   ///

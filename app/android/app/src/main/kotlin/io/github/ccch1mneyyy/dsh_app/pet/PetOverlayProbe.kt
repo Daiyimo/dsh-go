@@ -17,6 +17,9 @@ import android.util.Log
  * adb shell am broadcast -a io.github.ccch1mneyyy.dsh_app.PET_PROBE --es cmd push \
  *     --es pet whale-girl --es state working --ei tier 1 --es session s1 \
  *     [--ez active true --es size medium --es bubble 做完了 --es title 修复登录 --es bubbleId b1 --el ttl 6000]
+ *     [--es detail '回复的头两行' | --es askText '运行：git push' --es askKind approval --ez approvable true
+ *      --es choices 'A|B|C' --es eventId e1] [--ez canStop true --es hosts '本机|电脑 · SSH']
+ * … --es cmd ask [--ez fresh true]   (问一句's bar, as the menu opens it)
  * adb shell am broadcast -a io.github.ccch1mneyyy.dsh_app.PET_PROBE --es cmd enable --ez on true
  * … --es cmd always --ez on true | --es cmd unsnooze | --es cmd permission | --es cmd state
  * … --es cmd notify [--ez attention true --es key k2]   (a chat notification, for ResultSilence)
@@ -48,10 +51,26 @@ internal object PetOverlayProbe {
                                     "sessionId" to intent.getStringExtra("session"),
                                     "host" to intent.getStringExtra("host"),
                                     "untilMs" to System.currentTimeMillis() + intent.getLongExtra("ttl", PetPush.DEFAULT_BUBBLE_MS),
+                                    "detail" to intent.getStringExtra("detail"),
+                                    "ask" to intent.getStringExtra("askText")?.let { askText ->
+                                        mapOf(
+                                            "eventId" to (intent.getStringExtra("eventId") ?: "probe-event"),
+                                            "token" to intent.getLongExtra("requestToken", -1L),
+                                            "kind" to (intent.getStringExtra("askKind") ?: "approval"),
+                                            "text" to askText,
+                                            "approvable" to intent.getBooleanExtra("approvable", false),
+                                            "choices" to intent.getStringExtra("choices")?.split('|'),
+                                        )
+                                    },
                                 )
+                            },
+                            "canStop" to intent.getBooleanExtra("canStop", false),
+                            "hosts" to intent.getStringExtra("hosts")?.split('|')?.mapIndexed { i, label ->
+                                mapOf("ref" to "probe-$i", "label" to label, "current" to (i == 0))
                             },
                         ),
                     )
+                    "ask" -> PetOverlay.probeAsk(intent.getBooleanExtra("fresh", false))
                     "enable" -> PetOverlay.setEnabled(intent.getBooleanExtra("on", true))
                     "always" -> PetOverlay.setAlwaysShow(intent.getBooleanExtra("on", true))
                     "unsnooze" -> PetOverlay.unsnooze()

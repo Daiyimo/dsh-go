@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../notify/chat_alerts.dart';
+import '../notify/answer_native_request.dart';
 import '../notify/notify_channel.dart';
 import '../phone/phone_channel.dart';
 import '../phone/phone_approval.dart';
@@ -350,6 +351,71 @@ class ChatAlertsController extends Notifier<ChatAlert?> {
     try {
       await attached.$1.client.respondApproval(request, action.decision);
       return NotifyActionResult.handled;
+    } catch (_) {
+      return NotifyActionResult.failed;
+    }
+  }
+
+  /// Answers a request from the floating pet's bubble, the way the
+  /// notification's buttons do: an approval only if the bubble showed all of
+  /// it ([HostAlertTracker.petApprovalFor]) and only allow once / reject; a
+  /// question only with one of its own choices ([petChoices]).
+  Future<NotifyActionResult> answerFromPet(
+    HostRef host,
+    String eventId, {
+    required String sessionId,
+    required int token,
+    ApprovalDecision? decision,
+    String? choice,
+  }) async {
+    final attached = _trackers[host];
+    if (attached == null || !attached.$2.source.connected) return NotifyActionResult.failed;
+    final generation = attached.$1.client.mux.generation;
+    final lifetime = _lifetime;
+    bool current() =>
+        ref.mounted &&
+        identical(_lifetime, lifetime) &&
+        identical(_trackers[host]?.$2, attached.$2) &&
+        attached.$2.petRequestMatches(eventId, sessionId, token);
+    if (!current()) return NotifyActionResult.gone;
+    if (generation == null) return NotifyActionResult.failed;
+    try {
+      if (decision != null) {
+        if (decision != ApprovalDecision.allowOnce && decision != ApprovalDecision.reject) {
+          return NotifyActionResult.failed;
+        }
+        final request = attached.$2.petApprovalFor(eventId);
+        if (request == null) {
+          return attached.$2.approvalFor(eventId) == null ? NotifyActionResult.gone : NotifyActionResult.failed;
+        }
+        final sent = await answerPhoneApproval(
+          client: attached.$1.client,
+          generation: generation,
+          request: request,
+          decision: decision,
+          current: current,
+        );
+        return sent ? NotifyActionResult.handled : NotifyActionResult.gone;
+      }
+      final request = attached.$2.questionFor(eventId);
+      if (request == null) return NotifyActionResult.gone;
+      final choices = petChoices(request);
+      if (choice == null || choices == null || !choices.contains(choice)) return NotifyActionResult.failed;
+      final sent = await answerNativeRequest(
+        client: attached.$1.client,
+        generation: generation,
+        eventId: request.eventId,
+        outcome: {
+          'kind': 'result',
+          'value': {
+            'answers': [
+              QuestionAnswer(request.questions.single.id, selected: [choice]).toJson(),
+            ],
+          },
+        },
+        current: current,
+      );
+      return sent ? NotifyActionResult.handled : NotifyActionResult.gone;
     } catch (_) {
       return NotifyActionResult.failed;
     }

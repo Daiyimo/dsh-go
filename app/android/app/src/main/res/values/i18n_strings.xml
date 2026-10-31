@@ -114,6 +114,25 @@
     <string name="pet_probe_title">Fix sign-in</string>
     <string name="pet_probe_done">Done</string>
     <string name="pet_probe_public">A turn finished</string>
+    <string name="pet_ask">Ask</string>
+    <string name="pet_new_chat">New chat</string>
+    <string name="pet_stop">Stop current task</string>
+    <string name="pet_switch_host">Switch host</string>
+    <string name="pet_ask_hint">Ask something</string>
+    <string name="pet_ask_send">Send</string>
+    <string name="pet_ask_hold_to_talk">Hold to talk</string>
+    <string name="pet_ask_sending">Sending</string>
+    <string name="pet_ask_failed">Not sent</string>
+    <string name="pet_ask_listening">Listening. Let go to finish</string>
+    <string name="pet_ask_transcribing">Transcribing</string>
+    <string name="pet_ask_not_heard">Didn’t catch that</string>
+    <string name="pet_ask_voice_missing">Download the voice model in the app first</string>
+    <string name="pet_ask_voice_off">Voice needs this phone’s engine running</string>
+    <string name="pet_ask_mic_permission">Allow the microphone in the app first</string>
+    <string name="pet_ask_mic_failed">Couldn’t open the microphone</string>
+    <string name="pet_go_answer">Answer</string>
+    <string name="pet_go_review">Review</string>
+    <string name="pet_answer_failed">Didn’t go through. Open the app</string>
     <!-- phone -->
     <string name="phone_running">DSH is controlling the phone</string>
     <string name="phone_a11y_connecting">Accessibility hasn’t connected. Wait a few seconds, or turn it off and on in Settings.</string>
@@ -255,4 +274,6 @@
     <string name="share_text">Text</string>
     <!-- tile -->
     <string name="tile_new_chat_label">New chat</string>
+    <string name="a11y_keeper_grant_failed">Authorization failed. You can use the computer command instead.</string>
+    <string name="a11y_keeper_needs_setup">Set up Shizuku or wireless debugging first.</string>
 </resources>

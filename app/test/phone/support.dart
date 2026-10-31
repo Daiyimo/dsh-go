@@ -201,6 +201,15 @@ class FakePhoneNative {
         return true;
       case 'adbStartPairing' || 'adbPair' || 'adbConnect':
         return results[call.method] ?? {'ok': true};
+      case 'grantSecureSettings':
+        final result = results[call.method] ?? {'ok': true};
+        if (result['ok'] == true) {
+          status = {
+            ...status,
+            'a11yKeeper': {...?(status['a11yKeeper'] as Map?), 'granted': true, 'path': 'granted'},
+          };
+        }
+        return result;
       case 'getPolicies':
         return policies;
       case 'setPolicies':

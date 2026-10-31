@@ -6,6 +6,8 @@
     <files-path name="rootfs" path="runtime/rootfs/" />
     <!-- Downloaded copies of remote hosts' files, and copies made to open anything else. -->
     <cache-path name="artifacts" path="artifacts/" />
+    <!-- 应用内更新: a downloaded package opened in the system installer (update/UpdatePlugin.kt). -->
+    <cache-path name="updates" path="updates/" />
     <!-- "访问手机文件": files the agent wrote to shared storage (e.g. Download/DSH-Go). -->
     <external-path name="storage" path="." />
 </paths>

@@ -70,6 +70,10 @@ class ChatAlert {
     this.canApprove = false,
     this.fullText,
     this.turnEndKind,
+    this.petText,
+    this.petToken,
+    this.choices,
+    this.reply,
   });
 
   final HostRef host;
@@ -96,6 +100,20 @@ class ChatAlert {
 
   /// Wire reason for turn-end alerts; keeps signal handling independent of UI text.
   final String? turnEndKind;
+
+  /// What the floating pet's bubble shows of a request, whole: an approval's
+  /// action when it may be answered there ([petApprovalText]), else a
+  /// question's text. Null: the bubble only leads to the chat.
+  final String? petText;
+
+  /// A fresh request delivery; old overlay buttons cannot answer after reconnect.
+  final int? petToken;
+
+  /// A question's one-tap answers for the pet's bubble ([petChoices]).
+  final List<String>? choices;
+
+  /// A finished turn's reply, masked, on one line: 问一句's answer.
+  final String? reply;
 
   @override
   String toString() => 'ChatAlert(${kind.name} $sessionId "$title" / "$text")';
@@ -249,6 +267,56 @@ String? phoneApprovalPreview(ApprovalRequest request, ToolCallPart? call) {
   return text.length <= 4096 ? text : null;
 }
 
+/// Longest action the pet's bubble shows (it has four lines).
+const petApprovalMax = 120;
+
+/// An approval as the floating pet's bubble shows it, whole, on one line:
+/// "运行：git push origin main". Null unless [call] is exactly the approved call,
+/// of a tool the chat's card names (command, file, page), and all of it shows:
+/// one line, nothing masked, no invisible direction marks, at most
+/// [petApprovalMax] characters. Only then may the bubble answer it.
+String? petApprovalText(ApprovalRequest request, ToolCallPart? call) {
+  if (call == null || request.callId != call.id || request.toolName != call.name) return null;
+  final args = call.decodedArguments;
+  if (args == null) return null;
+  // File contents, edit replacements, cwd and every other argument matter
+  // just as much as the command/path. Never approve an abbreviated action.
+  if (!const {'bash', 'pwsh', 'write', 'edit', 'str_replace_editor', 'web_fetch'}.contains(call.name)) return null;
+  final text = '${call.name} ${jsonEncode(args)}';
+  if (text.contains(RegExp('[\\u061c\\u200b-\\u200f\\u202a-\\u202e\\u2066-\\u2069]')) || _masked(text) != text) {
+    return null;
+  }
+  return text.runes.length <= petApprovalMax ? text : null;
+}
+
+/// A question the pet's bubble takes with one tap: exactly one, single choice,
+/// one to three short options, and nothing more to read first (no detail, no
+/// plan to review). Null: 「去回答」 in the chat.
+List<String>? petChoices(UserQuestionRequest request) {
+  if (request.questions.length != 1) return null;
+  final q = request.questions.single;
+  if (q.question.trim().isEmpty ||
+      q.question.runes.length > petApprovalMax ||
+      _masked(q.question) != q.question ||
+      q.question.contains(RegExp('[\\u061c\\u200b-\\u200f\\u202a-\\u202e\\u2066-\\u2069]'))) {
+    return null;
+  }
+  if (q.multiSelect || q.intent != null || (q.detail?.trim().isNotEmpty ?? false)) return null;
+  if (q.options.isEmpty || q.options.length > 3 || q.options.any((o) => o.description?.trim().isNotEmpty ?? false)) {
+    return null;
+  }
+  final labels = [for (final o in q.options) o.label];
+  final fits = labels.every(
+    (l) =>
+        l.isNotEmpty &&
+        l.trim() == l &&
+        !l.contains(RegExp('[\\r\\n\\t\\u061c\\u200b-\\u200f\\u202a-\\u202e\\u2066-\\u2069]')) &&
+        _masked(l) == l &&
+        l.runes.length <= 24,
+  );
+  return fits && labels.toSet().length == labels.length ? labels : null;
+}
+
 // ── Per-host tracking ────────────────────────────────────────────────────────
 
 /// What [HostAlertTracker] needs from a connected host.
@@ -343,6 +411,11 @@ TurnOutcome? outcomeFromEvents(List<SessionLogEvent> events, {String? title}) {
 /// Turns one host's `$events` into [ChatAlert]s: dedups redelivered requests
 /// and repeated turn ends, routes subagent requests to their conversation, and
 /// withdraws what was answered elsewhere.
+class _RequestScope {
+  static int _next = 0;
+  final int petToken = ++_next;
+}
+
 class HostAlertTracker {
   HostAlertTracker({
     required this.host,
@@ -398,13 +471,28 @@ class HostAlertTracker {
 
   /// Pending approvals alerted with buttons, by eventId.
   final Map<String, ApprovalRequest> _approvals = {};
-  final Map<String, Object> _requestScopes = {};
+  final Map<String, _RequestScope> _requestScopes = {};
   final Map<String, ({ApprovalRequest request, String text})> _phoneApprovals = {};
   final Map<String, ChatAlert> _requestAlerts = {};
+
+  /// Pending approvals the pet's bubble showed whole ([petApprovalText]), by eventId.
+  final Set<String> _petApprovals = {};
+
+  /// Pending questions, by eventId.
+  final Map<String, UserQuestionRequest> _questions = {};
   Set<String> _stale = const {};
 
   /// The pending approval [eventId] if its notification offered buttons.
   ApprovalRequest? approvalFor(String eventId) => requestScope(eventId) == null ? null : _approvals[eventId];
+
+  /// The pending approval [eventId] if the pet's bubble could show all of it.
+  ApprovalRequest? petApprovalFor(String eventId) => _petApprovals.contains(eventId) ? approvalFor(eventId) : null;
+
+  /// The pending question [eventId].
+  UserQuestionRequest? questionFor(String eventId) => requestScope(eventId) == null ? null : _questions[eventId];
+
+  bool petRequestMatches(String eventId, String sessionId, int token) =>
+      requestScope(eventId) != null && _requests[eventId] == sessionId && _requestScopes[eventId]?.petToken == token;
 
   Object? requestScope(String eventId) =>
       _disposed || !source.connected || _stale.contains(eventId) ? null : _requestScopes[eventId];
@@ -441,6 +529,8 @@ class HostAlertTracker {
         _requestScopes.clear();
         _phoneApprovals.clear();
         _approvals.clear();
+        _petApprovals.clear();
+        _questions.clear();
         _requestAlerts.clear();
         onRequestEpochChanged?.call(host);
         // Whatever is still pending comes again right after `ready`.
@@ -451,11 +541,13 @@ class HostAlertTracker {
       case ApprovalRequestedEvent(:final request):
         _onRequest(request.eventId, request.sessionId, AlertKind.approval, approvalText(request), approval: request);
       case UserQuestionRequestedEvent(:final request):
-        _onRequest(request.eventId, request.sessionId, AlertKind.question, questionText(request));
+        _onRequest(request.eventId, request.sessionId, AlertKind.question, questionText(request), question: request);
       case HostRequestCancelledEvent(:final eventId):
         _approvals.remove(eventId);
         _requestScopes.remove(eventId);
         _phoneApprovals.remove(eventId);
+        _petApprovals.remove(eventId);
+        _questions.remove(eventId);
         _requestAlerts.remove(eventId);
         final session = _requests.remove(eventId);
         if (session != null) onWithdraw(host, session, eventId);
@@ -479,6 +571,8 @@ class HostAlertTracker {
         _approvals.removeWhere((id, _) => !_requests.containsKey(id));
         _requestScopes.removeWhere((id, _) => !_requests.containsKey(id));
         _phoneApprovals.removeWhere((id, _) => !_requests.containsKey(id));
+        _petApprovals.removeWhere((id) => !_requests.containsKey(id));
+        _questions.removeWhere((id, _) => !_requests.containsKey(id));
         _requestAlerts.removeWhere((id, _) => !_requests.containsKey(id));
         onSessionGone(host, sessionId);
       default:
@@ -491,6 +585,8 @@ class HostAlertTracker {
       _approvals.remove(id);
       _requestScopes.remove(id);
       _phoneApprovals.remove(id);
+      _petApprovals.remove(id);
+      _questions.remove(id);
       _requestAlerts.remove(id);
       final session = _requests.remove(id);
       if (session != null) onWithdraw(host, session, id);
@@ -498,11 +594,18 @@ class HostAlertTracker {
     _stale = const {};
   }
 
-  void _onRequest(String eventId, String agentId, AlertKind kind, String text, {ApprovalRequest? approval}) {
+  void _onRequest(
+    String eventId,
+    String agentId,
+    AlertKind kind,
+    String text, {
+    ApprovalRequest? approval,
+    UserQuestionRequest? question,
+  }) {
     _stale = _stale.difference({eventId});
     if (_requestScopes.containsKey(eventId)) return;
     final reannounce = _requests.containsKey(eventId);
-    final scope = _requestScopes[eventId] = Object();
+    final scope = _requestScopes[eventId] = _RequestScope();
     bool current() => !_disposed && identical(_requestScopes[eventId], scope);
     _requests[eventId] = agentId;
     unawaited(() async {
@@ -513,11 +616,13 @@ class HostAlertTracker {
       _requests[eventId] = root;
       // Buttons only when the notification can say exactly what gets approved.
       ({String text, String fullText})? preview;
+      String? petText;
       if (approval != null) {
         try {
           final call = await source.approvalCall(approval).timeout(const Duration(seconds: 3));
           if (!current()) return;
           preview = approvalPreview(approval, call);
+          if (preview != null) petText = petApprovalText(approval, call);
           final phoneText = phoneApprovalPreview(approval, call);
           if (phoneText != null) _phoneApprovals[eventId] = (request: approval, text: phoneText);
         } catch (_) {
@@ -525,6 +630,15 @@ class HostAlertTracker {
         }
         if (!current()) return;
         if (preview != null) _approvals[eventId] = approval;
+        if (petText != null) _petApprovals.add(eventId);
+      }
+      List<String>? choices;
+      if (question != null) {
+        _questions[eventId] = question;
+        final first = question.questions.firstOrNull?.question;
+        petText = snippet(first, max: petApprovalMax);
+        // Choices only under a question that shows whole.
+        if (petText != null && petText == snippet(first, max: 1 << 20)) choices = petChoices(question);
       }
       final alert = ChatAlert(
         host: host,
@@ -536,6 +650,9 @@ class HostAlertTracker {
         fullText: preview?.fullText,
         canApprove: preview != null,
         eventId: eventId,
+        petText: petText,
+        petToken: scope.petToken,
+        choices: choices,
       );
       _requestAlerts[eventId] = alert;
       (reannounce ? onReannounce : onAlert)?.call(alert);
@@ -579,6 +696,7 @@ class HostAlertTracker {
         title: title,
         text: outcome.text,
         turnEndKind: outcome.reason.kind,
+        reply: outcome.kind == AlertKind.done ? snippet(outcome.reply, max: 200) : null,
       ),
     );
   }

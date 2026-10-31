@@ -1,6 +1,8 @@
 // Portions derived from ds-harness-remote (https://github.com/liguobao/ds-harness-remote), MIT, Copyright (c) 2026 DSH Remote contributors. See THIRD_PARTY_NOTICES.md.
-// Relay-only client transport: the Server Control WebSocket, plus the
-// assigned Relay node data WebSocket when the Server offers one.
+// Client Control transport: the Server Control WebSocket, plus the
+// assigned Relay node data WebSocket when the Server offers one. With
+// `offerDirect` it also negotiates WebRTC and carries its signaling
+// ([WebRtcTransport] then takes over the data plane).
 library;
 
 import 'dart:async';
@@ -37,11 +39,28 @@ typedef ControlTracer = void Function(String direction, JsonMap frame);
 /// caller opens a new one. Without an assignment (older Server or Host)
 /// everything stays on the Control socket.
 ///
+/// Direct paths (`offerDirect`): the client also offers `transport.lan`,
+/// `transport.p2p` and `transport.turn`. When the Server negotiates any of
+/// them (and does not send `webrtcEnabled: false`), `connect.request` lists
+/// them before `relay` and [connect] returns at `connect.accepted` with the
+/// data plane still open: [directTransports] is non-empty, nothing is
+/// attached and no `transport.selected` was sent. The caller then
+/// negotiates WebRTC over [sendSignal] / [onSignal] ([WebRtcTransport]).
+///
 /// One Control WebSocket per device: the Server closes an older socket of
 /// the same device (`CONNECTION_REPLACED`, close code 4003), and a new
 /// `connect.request` replaces the device's previous Host connection.
 class RelayTransport implements SecureHandshakeTransport {
-  RelayTransport._(this._socket, this._deviceId, this._hostDeviceId, this._tracer, this._connector, this._timeout);
+  RelayTransport._(
+    this._socket,
+    this._deviceId,
+    this._hostDeviceId,
+    this._tracer,
+    this._connector,
+    this._timeout,
+    this._offered,
+    this._preferredTransports,
+  );
 
   /// Connects and waits for `connect.accepted`.
   ///
@@ -59,6 +78,8 @@ class RelayTransport implements SecureHandshakeTransport {
     Duration timeout = const Duration(seconds: 10),
     ControlSocketConnector? connector,
     ControlTracer? tracer,
+    bool offerDirect = false,
+    List<RemoteTransportMode>? preferredTransports,
   }) async {
     final connect = connector ?? _defaultConnector;
     final WebSocket socket;
@@ -79,7 +100,16 @@ class RelayTransport implements SecureHandshakeTransport {
     } on HandshakeException catch (error) {
       throw RemoteTransportException('CONNECTION_FAILED', 'TLS handshake failed: ${error.message}');
     }
-    final transport = RelayTransport._(socket, deviceId, hostDeviceId, tracer, connect, timeout);
+    final transport = RelayTransport._(
+      socket,
+      deviceId,
+      hostDeviceId,
+      tracer,
+      connect,
+      timeout,
+      offerDirect ? _directOffered : _relayOffered,
+      preferredTransports,
+    );
     try {
       await transport._open(accessToken, clientVersion).timeout(timeout);
       return transport;
@@ -92,7 +122,14 @@ class RelayTransport implements SecureHandshakeTransport {
     }
   }
 
-  static const List<String> _offered = ['transport.relay', 'transport.relay.attach'];
+  static const List<String> _relayOffered = ['transport.relay', 'transport.relay.attach'];
+  static const List<String> _directOffered = [
+    'transport.lan',
+    'transport.p2p',
+    'transport.turn',
+    'transport.relay',
+    'transport.relay.attach',
+  ];
 
   final WebSocket _socket;
   final String _deviceId;
@@ -100,8 +137,12 @@ class RelayTransport implements SecureHandshakeTransport {
   final ControlTracer? _tracer;
   final ControlSocketConnector _connector;
   final Duration _timeout;
+  final List<String> _offered;
+  final List<RemoteTransportMode>? _preferredTransports;
   ControlFrameLimits _limits = const ControlFrameLimits();
   String? _connectionId;
+  List<String> _direct = const [];
+  int? _webrtcFallbackMs;
 
   /// Relay node data socket, once assigned.
   WebSocket? _data;
@@ -121,6 +162,17 @@ class RelayTransport implements SecureHandshakeTransport {
 
   /// Negotiated `hello.ack` heartbeat.
   Duration get heartbeatInterval => Duration(milliseconds: _heartbeatMs);
+
+  /// Direct paths both sides negotiated, in the configured preference order;
+  /// empty when this connection uses the Relay.
+  List<String> get directTransports => _direct;
+
+  /// `hello.ack.webrtcFallbackTimeoutMs`, when the Server sets one.
+  Duration? get webrtcFallbackTimeout => _webrtcFallbackMs == null ? null : Duration(milliseconds: _webrtcFallbackMs!);
+
+  /// Receives this connection's `signal.answer`, `signal.ice` and
+  /// `transport.selected` frames (WebRTC negotiation).
+  void Function(ControlFrame frame)? onSignal;
 
   @override
   RemoteTransportMode get mode => RemoteTransportMode.relay;
@@ -236,9 +288,17 @@ class RelayTransport implements SecureHandshakeTransport {
           maxRelayFrameBytes: asInt(p['maxRelayFrameBytes']),
         );
         _heartbeatMs = asInt(p['heartbeatIntervalMs']) ?? _heartbeatMs;
+        if (p['webrtcEnabled'] != false) {
+          _direct = [
+            for (final t in (_preferredTransports?.map((t) => t.name) ?? const ['lan', 'p2p', 'turn']))
+              if (t != 'relay')
+                if (negotiated.contains('transport.$t')) t,
+          ];
+          _webrtcFallbackMs = asInt(p['webrtcFallbackTimeoutMs']);
+        }
         _sendControl('connect.request', {
           'hostDeviceId': _hostDeviceId,
-          'preferredTransports': const ['relay'],
+          'preferredTransports': [..._direct, 'relay'],
         });
       case 'connect.accepted':
         final ready = _ready;
@@ -249,7 +309,9 @@ class RelayTransport implements SecureHandshakeTransport {
         _startWatchdog();
         final endpoint = asString(p['relayEndpoint']);
         final ticket = asString(p['relayTicket']);
-        if (endpoint == null || ticket == null) {
+        // A direct attempt picks its data plane next; a failed one falls back
+        // on a new connection, so this one never attaches.
+        if (endpoint == null || ticket == null || _direct.isNotEmpty) {
           ready.complete();
           return;
         }
@@ -284,10 +346,12 @@ class RelayTransport implements SecureHandshakeTransport {
         _receiveRelay(p);
       case 'secure.handshake':
         _receiveHandshake(p);
+      case 'signal.answer' || 'signal.ice' || 'transport.selected':
+        if (p['connectionId'] == _connectionId && p['targetDeviceId'] == _deviceId) onSignal?.call(frame);
       case 'ping':
         _sendControl('pong', {'nonce': p['nonce']});
       default:
-        // pong, signaling and Host-only frames are not for a relay client.
+        // pong, offers and Host-only frames are not for a client.
         break;
     }
   }
@@ -454,6 +518,12 @@ class RelayTransport implements SecureHandshakeTransport {
     });
   }
 
+  /// Sends a WebRTC signaling frame ([type] `signal.offer`, `signal.ice` or
+  /// `transport.selected`) for this connection to the Host.
+  void sendSignal(String type, JsonMap payload) {
+    _sendControl(type, {'connectionId': _requireConnection(), 'targetDeviceId': _hostDeviceId, ...payload});
+  }
+
   @override
   Future<void> send(Uint8List ciphertext, {required int counter}) async {
     final payload = {
@@ -499,6 +569,9 @@ class RelayTransport implements SecureHandshakeTransport {
         if (payload.containsKey('relayTicket')) 'relayTicket': '<redacted>',
         if (payload.containsKey('ticket')) 'ticket': '<redacted>',
         if (payload.containsKey('ciphertext')) 'ciphertext': '<${(payload['ciphertext']! as String).length} chars>',
+        // SDP and candidates carry the device's network addresses.
+        if (payload.containsKey('sdp')) 'sdp': '<${(payload['sdp']! as String).length} chars>',
+        if (payload.containsKey('candidate')) 'candidate': '<redacted>',
       },
     });
   }

@@ -9,6 +9,8 @@ import { fileURLToPath } from 'node:url'
 
 const [dir, endpoint] = process.argv.slice(2)
 if (!dir || !endpoint) throw new Error('usage: patch-relay-attach.mjs <server src dir> <relay endpoint>')
+const clientEndpoint = new URL(endpoint)
+if (process.env.RELAY_CLIENT_HOST) clientEndpoint.hostname = process.env.RELAY_CLIENT_HOST
 copyFileSync(join(dirname(fileURLToPath(import.meta.url)), 'relay-node.ts'), join(dir, 'relay-node.ts'))
 
 const file = join(dir, 'gateway.ts')
@@ -39,7 +41,7 @@ replace("      else link.stage = 'accepted'\n      this.send(other, frame)",
 replace('  close(): void { clearInterval(this.heartbeat);',
   `  private assign(link: Link, client: Peer, host: Peer): Record<string, unknown> {
     if (!client.capabilities.includes('transport.relay.attach') || !host.capabilities.includes('transport.relay.attach')) return {}
-    link.assignments = { [client.id]: this.relay.assign(link.id, client.id, host.id) }
+    link.assignments = { [client.id]: { ...this.relay.assign(link.id, client.id, host.id), relayEndpoint: ${JSON.stringify(clientEndpoint.href)} } }
     return this.relay.assign(link.id, host.id, client.id)
   }
   close(): void { this.relay.close(); clearInterval(this.heartbeat);`)

@@ -8,12 +8,14 @@ App 以 APK 分发、不上商店，更新靠 App 自己查 GitHub Releases、�
 
 每个版本一个 GitHub Release，仓库 `ccch1mneyyy/dsh-go`，必须公开（私有仓库匿名访问一律 404，App 只会显示「暂时检查不了」）。
 
+正式版统一提供 arm64 安装包。`update.json` 供更新清单回退读取，`SHA256SUMS` 供缺少 GitHub digest 时校验 APK，两者保留但不要求用户手动下载。GitHub 自动生成的 Source code 压缩包是源码快照，不是安装包。
+
 | 项 | 约定 | 例子 |
 |---|---|---|
 | 版本名 | `app/pubspec.yaml` 的 `version: X.Y.Z[-pre]`，即 versionName；后面的 `+1` 只是占位 | `1.2.0` |
 | 构建号 | Android versionCode，由 `tooling/build-apk.sh` 按构建时间生成，见「构建号」 | `10251234` |
 | tag | `v` + 版本名（不带 `+N`） | `v1.2.0`、`v1.3.0-beta.1` |
-| APK | `dsh-go-<版本名>-<flavor>.apk`，flavor 是 `arm64` / `x64`；文件名不带 `+N`（GitHub 会改写 `+`） | `dsh-go-1.2.0-arm64.apk` |
+| APK | `dsh-go-<版本名>-<flavor>.apk`，正式版 flavor 固定为 `arm64`；文件名不带 `+N`（GitHub 会改写 `+`） | `dsh-go-1.2.0-arm64.apk` |
 | 校验和 | `SHA256SUMS`，`sha256sum` 的标准输出 | `<hex>  dsh-go-1.2.0-arm64.apk` |
 | 清单 | `update.json`（schema 1），镜像和自托管源都读它 | 见下 |
 | 更新说明 | Release 正文（Markdown），App 弹窗里原样渲染 | |
@@ -30,8 +32,7 @@ App 以 APK 分发、不上商店，更新靠 App 自己查 GitHub Releases、�
   "notes": "## 新功能\n…",
   "page": "https://github.com/ccch1mneyyy/dsh-go/releases/tag/v1.2.0",
   "assets": {
-    "arm64": { "name": "dsh-go-1.2.0-arm64.apk", "size": 180107933, "sha256": "…" },
-    "x64":   { "name": "dsh-go-1.2.0-x64.apk",   "size": 187402211, "sha256": "…" }
+    "arm64": { "name": "dsh-go-1.2.0-arm64.apk", "size": 180107933, "sha256": "…" }
   }
 }
 ```
@@ -46,8 +47,8 @@ App 以 APK 分发、不上商店，更新靠 App 自己查 GitHub Releases、�
 
 ```sh
 tooling/build-apk.sh                 # release arm64（真机）
-tooling/build-apk.sh -f x64          # release x64（模拟器）
-tooling/build-apk.sh -f all          # 两个 flavor 共用一个构建号（发版用）
+tooling/build-apk.sh -f x64          # 本地模拟器验证，不公开发布
+tooling/build-apk.sh -f all          # 双架构本地验证；正式发版不用此选项
 tooling/build-apk.sh --dry-run -f all   # 只打印要执行的命令
 ```
 
@@ -69,10 +70,10 @@ versionCode = (年 - 2026) × 10^8 + MMDDhhmm      时钟固定按 UTC+8
 
 1. **改版本名**：`app/pubspec.yaml` 的 `version:`，版本名按 semver 升；`+1` 不动。之后打的开发包也带新版本名，不会被提示「更新」到这一版。
    - **同步使用说明**：按本版界面改动更新 `docs/guide/`，把 `docs/guide/README.md` 的 `> dsh-go X.Y.Z` 改成新版本名，`python3 app/tool/guide_sync.py` 重新生成 App 内置技能，`python3 app/tool/guide_sync.py --check` 通过再打包（它核对入口路径、界面文字、页面链接与版本号）。
-2. **打包两个 flavor**（运行时要先 `runtime/build-runtime.sh` 产出 `runtime/out/`），一次命令出两个，共用一个构建号：
+2. **只打包 arm64 正式版**（运行时要先 `runtime/build-runtime.sh` 产出 `runtime/out/`）。x64 仅供必要的本地模拟器验证，不上传、不放入正式更新清单：
 
    ```sh
-   tooling/build-apk.sh -f all
+   tooling/build-apk.sh
    ```
 
    脚本顺带传 `DSH_APP_VERSION=<版本名>+<构建号>`，它只影响诊断信息里的版本（`lib/state/app_info.dart` 是编译期常量）；更新检查读的是系统里真实的 versionName / versionCode，不依赖它。
@@ -80,12 +81,12 @@ versionCode = (年 - 2026) × 10^8 + MMDDhhmm      时钟固定按 UTC+8
    **公测起**（GitHub Release 和公开渠道的包）打开求 star 提示，内测包不加：
 
    ```sh
-   tooling/build-apk.sh -f all -- --dart-define=DSH_STAR_PROMPT=true
+   tooling/build-apk.sh -- --dart-define=DSH_STAR_PROMPT=true
    ```
 
    提示的触发条件见 `docs/design/star-prompt.md`；使用时长从装上这个包算起。
-3. **确认签名**：分别对 arm64、x64 的 APK 执行 `apksigner verify -v --min-sdk-version 21 --print-certs`。v1、v2、v3 三种签名都要是 `true`（v1 给仍读 JAR 签名的安装器和安全扫描；不加 `--min-sdk-version` 时 apksigner 按 minSdk 26 不查 v1），证书主题不得含 `CN=Android Debug`，两个 flavor 的证书 SHA-256 必须一致，并与上一版一致。验证失败时不要生成或上传 `dist/`、`update.json`。
-4. **生成资产**（改名、算校验和、写 `update.json`）。版本名取 pubspec，构建号用 `aapt2` 从 APK 里读；两个 flavor 的构建号或版本名对不上、或者还是占位的 `1`，脚本直接报错：
+3. **确认签名**：对要发布的 arm64 APK 执行 `apksigner verify -v --min-sdk-version 21 --print-certs`。v1、v2、v3 三种签名都要是 `true`（v1 给仍读 JAR 签名的安装器和安全扫描；不加 `--min-sdk-version` 时 apksigner 按 minSdk 26 不查 v1），证书主题不得含 `CN=Android Debug`，证书 SHA-256 必须与上一版一致。验证失败时不要生成或上传 `dist/`、`update.json`。
+4. **生成资产**（改名、算校验和、写 `update.json`）。默认只收录 arm64；版本名取 pubspec，构建号用 `aapt2` 从 APK 里读。版本名不匹配或构建号还是占位的 `1` 时脚本直接报错：
 
    ```sh
    python3 tooling/release_assets.py --notes notes.md      # 产物在 dist/
@@ -246,7 +247,7 @@ scripts/publish-release.sh ../../dist --github
 |---|---|
 | 1 R2 | APK、`SHA256SUMS` → `dshgo-share/beta/<版本>/`（rclone 分片续传，没有就 wrangler） |
 | 2 国内 | 同样两样 → 香港桶 `<版本>/`（`ossutil cp` / `coscli cp`，带 Content-Type 和 Cache-Control）。`CN_BASE_URL` 为空时跳过 |
-| 3 GitHub | `gh release create v<版本> … --draft`：arm64 APK、`SHA256SUMS`、`update.json`（不带 `url`，App 自己拼 GitHub 地址），正文是更新日志里这一版的「中文」「English」两节，末尾折叠的「其他版本下载」链到 `go.dshtui.com/download/<版本>/` 下的 x64 包（多数人用 arm64，两个包并排容易选错） |
+| 3 GitHub | `gh release create v<版本> … --draft`：arm64 APK、`SHA256SUMS`、`update.json`（不带 `url`，App 自己拼 GitHub 地址），正文先提供 arm64 直接下载链接，并说明清单与校验文件无需手动下载，再列更新日志的「中文」「English」两节；正式版没有 x64 下载入口 |
 | 4 核对 | 每条线路、每个文件下载回来比大小和 SHA-256：R2 用通道令牌，香港桶用公开地址，GitHub 草稿用 API |
 | 5 上线 | 全部一致才：发布 GitHub 草稿（并确认公开地址可下）→ 传 `beta/<版本>/update.json` → 最后换 `beta/update.json` |
 | 之后 | 确认线上页面（`/download` 或 `/beta`）给出这一版和每条线路的链接，再从页面的海外线路下载一次 |

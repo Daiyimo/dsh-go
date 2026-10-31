@@ -1,6 +1,6 @@
 # dsh_remote
 
-Pure-Dart client for [ds-harness-remote](https://github.com/liguobao/ds-harness-remote) (李国宝, MIT). It reaches a remote Host's DSH Harness API through the Server Relay, end-to-end encrypted with `Noise_IK_25519_ChaChaPoly_SHA256`. The result is an ordinary `DshClient` from `package:dsh_client`, so chat, watch, approvals, models and keys work exactly as they do with the local engine.
+Pure-Dart client for [ds-harness-remote](https://github.com/liguobao/ds-harness-remote) (李国宝, MIT). It reaches a remote Host's DSH Harness API through the Server Relay, or directly over a WebRTC DataChannel (LAN / P2P / TURN) when the app supplies a WebRTC stack, end-to-end encrypted with `Noise_IK_25519_ChaChaPoly_SHA256` either way. The result is an ordinary `DshClient` from `package:dsh_client`, so chat, watch, approvals, models and keys work exactly as they do with the local engine.
 
 Status (2026-10-30, upstream `7e387df`, Host plugin 0.6.0):
 
@@ -10,7 +10,7 @@ Status (2026-10-30, upstream `7e387df`, Host plugin 0.6.0):
 | Control frames / negotiation | Passes upstream `fixtures/protocol/v1` (84 client-relevant cases), including duplicate-key rejection, canonical Base64URL and the list limits |
 | Relay transport (Control socket, or a Relay node data socket via `transport.relay.attach`), DSHF framing, RPC, tunnel carrier | Unit-tested against an in-process fake Server, Relay node and Host |
 | Whole stack vs real upstream | **E2E passes** against self-hosted `apps/server` (upstream `7e387df`) + `dsh web` 0.2.1-rc.5 with the `ds-harness-remote` Host plugin 0.6.0 (packed from `7e387df`, not on npm yet), both on the Control socket and, with `RELAY_ATTACH=1`, through a Relay node data socket; also plugin 0.5.23 from npm (`tool/e2e/run_e2e.sh`; `PLUGIN_SPEC=<tarball>` for unreleased builds) |
-| WebRTC / LAN / TURN | Not implemented. Relay only, behind a transport seam |
+| WebRTC / LAN / TURN (`WebRtcTransport`, opt-in through `peerConnector`) | Unit-tested: signaling order, selection before Noise, `RTCH`, fresh-connection Relay fallback and TURN configuration/selection. **Real P2P and Relay-only probes pass on Android 35 x86_64**, each with a 120 KiB request, 38,328-byte response and 20 round trips. No live TURN or WAN/device validation. See [verification and APK size](VERIFICATION.md) |
 
 ## Quick start (Flutter app)
 
@@ -68,6 +68,7 @@ await client.close();                                // or account.logout()
 | Member | Notes |
 |---|---|
 | `RemoteAccount({required SecretStore secrets, Object? serverUrl, deviceName, platform, clientVersion, ...})` | `serverUrl` defaults to `https://dsh.r2049.cn`. It is normalized to an origin, and plain HTTP is accepted only for loopback or private hosts. Storage is partitioned by origin |
+| `RemotePeerConnector? peerConnector` (settable), `onDirectFallback`, `directTimeout = 8 s` | The WebRTC stack for the direct path; `null` (the default) keeps every connection on the Relay exactly as before. Read at each (re)connect. The package has no WebRTC of its own: the app implements `RemotePeerConnection` (flutter_webrtc). `onDirectFallback` reports why a direct attempt fell back |
 | `Future<RemoteUser?> currentUser()` | Restores stored credentials. Returns `null` when signed out or when the refresh token has expired. `RemoteUser.provider` is the provider the device signed in with (`github`, `zhihu`, `password`, ...), or `null` for credentials stored before it was recorded |
 | `Future<List<OAuthProvider>> loginProviders()` | Server-defined QR-capable providers (`github`, `google`, `zhihu`, ...). Empty on a self-hosted Server |
 | `Future<RemoteLogin> startLogin({String? providerId})` | QR / browser sign-in that needs **no app URL scheme**. Fields: `loginUrl` (open it), `expiresAt`, `providerId`, `result` (a `Future<RemoteUser>`) and `cancel()`. Keep `result` alive while the Custom Tab is open; polling resumes when the app returns to the foreground. The one-time web token is used once to register this device and is never stored |
@@ -87,17 +88,19 @@ await client.close();                                // or account.logout()
 It returns once the first `$events` generation is ready. It throws `RemoteConnectException(failure)` in three cases: immediately for terminal failures, immediately for `HOST_OFFLINE`, and otherwise after `timeout`. Opening a connection does this:
 
 1. Fetches the Host descriptor and checks the **pin**. The first connect pins the key, after `confirmNewHost` returns true when that callback is given; otherwise trust is on first use. A changed key always fails closed with `PEER_IDENTITY_MISMATCH`, before any socket is opened.
-2. Control WebSocket: `hello` → `connect.request` (relay) → `connect.accepted`. A refused token is refreshed and retried once. When `connect.accepted` carries a Relay assignment (Server and Host both on `transport.relay.attach`), the client opens the node's data WebSocket, sends `relay.attach` with the one-time ticket, waits for `relay.ready` and announces `transport.selected`. Ciphertext and the node's heartbeats then use that socket; the handshake stays on the Control socket. Without an assignment (self-hosted `apps/server`, Hosts before 0.6.0) everything stays on the Control socket.
+2. Control WebSocket: `hello` → `connect.request` → `connect.accepted`. A refused token is refreshed and retried once. When `connect.accepted` carries a Relay assignment (Server and Host both on `transport.relay.attach`), the client opens the node's data WebSocket, sends `relay.attach` with the one-time ticket, waits for `relay.ready` and announces `transport.selected`. Ciphertext and the node's heartbeats then use that socket; the handshake stays on the Control socket. Without an assignment (self-hosted `apps/server`, Hosts before 0.6.0) everything stays on the Control socket.
+
+   **Direct path** (only with `peerConnector`): the client also offers `transport.lan/p2p/turn`. If the Server negotiates any of them and does not send `webrtcEnabled: false`, `connect.request` lists them before `relay`, and after `connect.accepted` the client fetches the connection's ICE servers (`GET /api/v1/turn/credentials`, 5 s, TURN dropped unless `transport.turn` was negotiated), opens an ordered DataChannel `dsh`, sends `signal.offer`, trickles `signal.ice` (never before the offer) and applies `signal.answer` and the Host's candidates. Once the DataChannel opens, the selected candidate pair names the path (`lan` for a local pair, `turn` for a relay candidate, else `p2p`; `lan` goes out as `p2p` when only that was negotiated) and `transport.selected` goes out **before** the Noise handshake, which stays on the Control socket. Ciphertext then travels as binary DataChannel messages, `RTCH`-chunked above 8 KiB. No DataChannel within `max(directTimeout, webrtcFallbackTimeoutMs)` (including native peer creation and offer generation), ICE failure, or an unnegotiated path closes that connection and opens a **new** Relay-only one (new connection id, so a new Noise session and no stale WebRTC state on the Host), as upstream Android does. Without negotiated direct transports the same connection simply continues on the Relay.
 3. Noise IK as initiator. The Host's static key must equal the pin, and the prologue binds the connection and both device ids.
 4. `harness.transport.describe`. The Host must declare `harness.remote.v3` (DSH 0.2.x Session V3). Older or ApiProxy-only Hosts fail with `HARNESS_VERSION_INCOMPATIBLE`.
 
-The returned client **reconnects by itself** (DshMux backoff 0.5 to 10 s): a new connection, a new `$events` generation, streams reopened, and `watch()` resynced with a snapshot where `isResync` is true. Liveness comes from a `harness.transport.describe` health probe every 25 s (5 s deadline) plus the Server's Control heartbeat; three silent heartbeats count as dead. `relay.detach` (the Host left the node) or a dropped data socket also ends the connection, and the reconnect builds a new one with a new Noise session. The Server allows **one Host connection per client device**, so connecting another Host closes the previous client.
+The returned client **reconnects by itself** (DshMux backoff 0.5 to 10 s): a new connection, a new `$events` generation, streams reopened, and `watch()` resynced with a snapshot where `isResync` is true. Liveness comes from a `harness.transport.describe` health probe every 25 s (5 s deadline) plus the Server's Control heartbeat; three silent heartbeats count as dead. `relay.detach` (the Host left the node), a dropped data socket or a closed DataChannel also ends the connection, and the reconnect builds a new one (trying the direct path again) with a new Noise session. The Server allows **one Host connection per client device**, so connecting another Host closes the previous client.
 
 ### Connection state
 
 ```dart
 enum RemoteConnectionPhase { connecting, connected, reconnecting, failed, closed }
-class RemoteConnectionState { phase; hostId; RemoteFailure? failure; String? transport /* 'relay' */; DateTime? at; }
+class RemoteConnectionState { phase; hostId; RemoteFailure? failure; String? transport /* 'lan' | 'p2p' | 'turn' | 'relay' */; DateTime? at; }
 class RemoteFailure { code; message; retryable; }
 ```
 
@@ -147,28 +150,39 @@ RemoteRpcClient (rpc.request/response/error, events, 128 pending, deadlines)
       ▼
 SecureChannel (Noise IK initiator, DSHF fragments, ordered sends, fail closed)
       ▼
-SecureHandshakeTransport ◀── RelayTransport (Control WS: hello, connect, handshake, ping/pong;
+SecureHandshakeTransport ◀── RelayTransport (Control WS: hello, connect, handshake, ping/pong, signaling;
                          │    relay on the Control WS, or on the Relay node data WS when assigned)
-                         ◀── (future) LAN / P2P / TURN over a WebRTC DataChannel "dsh"
+                         ◀── WebRtcTransport (LAN / P2P / TURN: ciphertext on the DataChannel "dsh",
+                                              signaling and handshake on RelayTransport's Control WS)
+                                  ▼
+                              RemotePeerConnection (implemented by the app over flutter_webrtc)
 ```
 
-Adding WebRTC means implementing `SecureHandshakeTransport`: signal over the Control socket, send `transport.selected` before the handshake, put binary ciphertext on the DataChannel with RTCH chunking above 8 KiB, and fall back to Relay. Nothing above that interface changes.
+Nothing above `SecureHandshakeTransport` knows which path a connection took.
 
 Performance: crypto is pure Dart (`cryptography` 2.9 ChaCha20-Poly1305 and X25519, `crypto` SHA-256/HMAC) and runs synchronously on the calling isolate. A desktop JIT runs it at about 55 MB/s, so a 4 MiB message costs about 75 ms each way. Chat traffic is negligible. Large image transfers on low-end phones may be worth moving to an isolate later.
 
 ## Tests
 
 ```bash
-dart test                      # Noise vectors, protocol conformance, DSHF, fake Server+Host carrier tests (170)
+dart test                      # Noise vectors, protocol conformance, DSHF, RTCH, fake Server+Host(+WebRTC) carrier tests
 tool/e2e/run_e2e.sh            # real stack, isolated temp HOME/DSH_HOME, loopback only, no prompts
 ```
 
 `run_e2e.sh` bundles upstream `apps/server` from a checkout (`UPSTREAM`, default `../../.refs/ds-harness-remote-upstream`) with esbuild. It installs `ds-harness-remote@$PLUGIN_VERSION` (default 0.5.23) from npm, or `PLUGIN_SPEC`, into a fresh DSH profile and points that profile at the local Server with a profile `cordis.patch.yml`. Terminal, Codex and ACP are disabled there; the bundled patch hard-codes `https://dsh.r2049.cn`, so the override is required. It pre-provisions the Host credentials (`tool/e2e/provision-host.mjs`; the plugin CLI only does QR or code login), starts `dsh web` (`DSH_BIN` selects the version) and runs `test/live_remote_test.dart`. That test covers connect, list/create/rename/archive sessions, live follow events, model/permission/key, workspaces, host events, the transfer path, reconnect/resync and token rotation. The open-source Server has no Relay node, so `RELAY_ATTACH=1` mounts `tool/e2e/relay-node.ts` on it (`tool/e2e/patch-relay-attach.mjs`): the Server then negotiates `transport.relay.attach`, and the run fails unless both sides attached, answered the node's ping and sent frames through it. That mode needs a 0.6.0 Host plugin.
 
+Both the published 0.5.23 Host and the 0.6.0 source expose the WebRTC answering path: they lazily load native `@roamhq/wrtc`, falling back to bundled werift. STUN/TURN configuration comes from the authorized connection's `/api/v1/turn/credentials` response; it is not hard-coded in the app.
+
+The open-source Server is Relay-only too, so `WEBRTC=1` patches it to negotiate `transport.lan/p2p/turn`, send `webrtcEnabled: true` and forward `signal.*` / `transport.selected` like the hosted one (`tool/e2e/patch-webrtc.mjs`; no STUN or TURN servers). The Dart VM has no WebRTC stack, so the live test still connects through the Relay; `SERVE=1` keeps the stack up instead, and `tool/e2e/p2p_emulator.sh` runs the app's probe build (`lib/dev/remote_p2p_probe_main.dart`, real flutter_webrtc) on an emulator against it and fails unless the tunnel took a direct path and the Host bound its Noise channel to WebRTC. `PLUGIN_OPTIONAL=1` installs the plugin's optional `@roamhq/wrtc` (native libwebrtc on the Host); without it the Host uses its bundled werift.
+
+The Android 35 x86_64 probe completed both P2P and direct-disabled Relay modes. The oversized 120 KiB search request returned the Host's expected 500-character validation error after reassembly; this verifies transport delivery, not acceptance of an oversized search. Each mode also received a 38,328-byte settings response and completed 20 round trips. The dependency-only release APK comparison adds **16.467 MiB per ABI** (arm64 and x64); these are comparison artifacts, not the final full-runtime APK sizes. Exact observations, artifact hashes and remaining validation boundaries are in [VERIFICATION.md](VERIFICATION.md).
+
 `bin/remote_probe.dart` is an interactive CLI: `--server`, `--email` (password in `DSH_REMOTE_PASSWORD`) or QR sign-in, `--state` file, `--create-session --cwd`, `--watch-seconds`, `--reconnect-test`, `--trace`. It never sends prompts.
 
-Not covered live: approvals and questions over `$events` (they need a model prompt; the fake-Host test covers them), the hosted `dsh.r2049.cn` QR flow (needs a real account; it matches the upstream Android and plugin code and runs against the fake Server), and real WAN latency.
+Not covered live: TURN, WAN/NAT traversal, direct-failure Relay fallback, approvals and questions over `$events` (they need a model prompt; the fake-Host test covers them), the hosted `dsh.r2049.cn` QR flow (needs a real account; it matches the upstream Android and plugin code and runs against the fake Server), and physical-device behavior.
 
 ## License and attribution
 
 Protocol, framing, validation and connection logic are ported from ds-harness-remote, Copyright (c) 2026 DSH Remote contributors, MIT. The full text is in [LICENSE-ds-harness-remote](LICENSE-ds-harness-remote), and each ported file names its upstream source. The Noise state machine is our own implementation, with the author's agreement, and is verified against the upstream golden vectors. Fixtures under `test/fixtures` are copied from upstream.
+
+The optional Flutter app adapter bundles native dependencies even when the direct-path preference is off. Their verified attribution sources and the **unfinished final native-library license audit** are recorded in [THIRD_PARTY_NOTICES.md](../../THIRD_PARTY_NOTICES.md#webrtc-150787104-核对记录2026-10-30); the top-level WebRTC BSD license does not cover every linked third-party component.

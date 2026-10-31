@@ -145,12 +145,20 @@ class EdgeSnapTest {
         assertEquals(20, wide.pos.x)
     }
 
-    @Test fun tuckedSlidesFortyPercentPastTheEdge() {
-        val right = EdgeSnap.tucked(Dock(Side.RIGHT, 0.5f), 200, 150, portrait, m)
-        assertEquals(1080 - 200 + 80, right.x)
-        assertEquals(EdgeSnap.position(Dock(Side.RIGHT, 0.5f), 200, 150, portrait, m).y, right.y)
-        // Left: off the physical edge, even with a cutout inset there.
-        assertEquals(-80, EdgeSnap.tucked(Dock(Side.LEFT, 0.5f), 200, 150, landscape, m).x)
+    /**
+     * Left alone it dims where it docks, never past the edge; picked up there, the window follows
+     * the finger from the first pixel, both ways (a half-hidden pet used to stay clamped first).
+     */
+    @Test fun restingAtTheDockItIsWholeAndFollowsTheFingerAtOnce() {
+        for (area in listOf(portrait, landscape)) for (side in Side.values()) {
+            val rest = EdgeSnap.position(Dock(side, 0.5f), w, h, area, m)
+            assertTrue(rest.x >= area.left && rest.x + w <= area.screenW - area.right)
+            val inward = if (side == Side.LEFT) 1 else -1
+            // Out to the edge (the margin) or any way inwards.
+            for ((dx, dy) in listOf(1 to 0, -1 to 0, 0 to 1, 0 to -1, m to m, -m to -m, 300 * inward to -53)) {
+                assertEquals(WindowPos(rest.x + dx, rest.y + dy), EdgeSnap.carry(rest, dx, dy, FramePx(0, 0, w, h), area))
+            }
+        }
     }
 
     @Test fun dismissTargetSitsBottomCentreAndCatchesTheCentre() {

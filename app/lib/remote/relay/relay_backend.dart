@@ -155,9 +155,18 @@ abstract class RelayBackend {
   /// reconnects. True when it answered or [client] isn't a relay client.
   Future<bool> probe(DshClient client);
 
+  /// How [client]'s current tunnel travels; null when it has none.
+  RelayPath? pathOf(DshClient client);
+
   /// Opens an end-to-end encrypted tunnel to [host] and returns a ready
   /// client. [onState] reports progress and later drops/reconnects.
   Future<DshClient> connectHost(RelayHost host, {RelayStateCallback? onState});
+}
+
+/// Optional real network observations, without expanding the account/backend contract.
+abstract interface class RelayNetworkBackend {
+  RemoteNetworkStatus? networkOf(DshClient client);
+  Future<RemoteNetworkStatus?> inspectNetwork(DshClient client);
 }
 
 /// The relay turned off: nothing to sign in to or connect to.
@@ -203,11 +212,14 @@ class UnavailableRelayBackend implements RelayBackend {
   Future<bool> probe(DshClient client) async => true;
 
   @override
+  RelayPath? pathOf(DshClient client) => null;
+
+  @override
   Future<DshClient> connectHost(RelayHost host, {RelayStateCallback? onState}) => Future.error(_error);
 }
 
 /// [HostLink] over a [RelayBackend] connection.
-class RelayHostLink implements HostLink {
+class RelayHostLink implements HostLink, NetworkInspectableHostLink {
   RelayHostLink({
     required this.backend,
     required this.hostId,
@@ -233,6 +245,8 @@ class RelayHostLink implements HostLink {
   DshClient? _client;
   Future<DshClient>? _opening;
   bool _closed = false;
+  Future<RemoteNetworkStatus?>? _networkInspection;
+  int _networkEpoch = 0;
 
   /// The first client goes out through [open]; later ones through [clients].
   bool _published = false;
@@ -320,7 +334,7 @@ class RelayHostLink implements HostLink {
       throw StateError('link closed');
     }
     _client = client;
-    _emit(HostLinkStatus(HostLinkPhase.connected, completed: HostLinkStep.values.toSet()));
+    _emit(_connected(client));
     if (_published) _clients.add(client);
     _published = true;
     return client;
@@ -329,6 +343,7 @@ class RelayHostLink implements HostLink {
   /// States from the relay client. Before [open] resolves they only move the
   /// progress steps; afterwards the client's own reconnects drive the status.
   void _onRelayState(RelayConnectionState state, HostLinkError? error) {
+    _networkEpoch++;
     final opened = _client != null;
     switch (state) {
       case RelayConnectionState.connecting:
@@ -336,7 +351,7 @@ class RelayHostLink implements HostLink {
       case RelayConnectionState.handshaking:
         if (!opened) _emit(_status.withStep(HostLinkStep.login));
       case RelayConnectionState.connected:
-        if (opened) _emit(HostLinkStatus(HostLinkPhase.connected, completed: HostLinkStep.values.toSet()));
+        if (opened) _emit(_connected(_client!));
       case RelayConnectionState.reconnecting:
         if (opened) {
           _reconnects++;
@@ -359,6 +374,39 @@ class RelayHostLink implements HostLink {
   }
 
   int _reconnects = 0;
+
+  HostLinkStatus _connected(DshClient client) {
+    final network = backend is RelayNetworkBackend ? (backend as RelayNetworkBackend).networkOf(client) : null;
+    return HostLinkStatus(
+      HostLinkPhase.connected,
+      completed: HostLinkStep.values.toSet(),
+      path: backend.pathOf(client),
+      network: network,
+    );
+  }
+
+  @override
+  Future<RemoteNetworkStatus?> inspectNetwork() {
+    final client = currentClient;
+    final inspector = backend;
+    if (_closed || client == null || inspector is! RelayNetworkBackend) return Future.value(null);
+    return _networkInspection ??= _inspectNetwork(
+      client,
+      inspector as RelayNetworkBackend,
+    ).whenComplete(() => _networkInspection = null);
+  }
+
+  Future<RemoteNetworkStatus?> _inspectNetwork(DshClient client, RelayNetworkBackend inspector) async {
+    final epoch = _networkEpoch;
+    try {
+      final value = await inspector.inspectNetwork(client).timeout(const Duration(seconds: 3), onTimeout: () => null);
+      if (_closed || epoch != _networkEpoch || currentClient != client || value == null) return null;
+      _emit(_status.withNetwork(value));
+      return value;
+    } catch (_) {
+      return null;
+    }
+  }
 
   @override
   void kick() {

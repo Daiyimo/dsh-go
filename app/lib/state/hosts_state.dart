@@ -10,6 +10,7 @@ import '../remote/link_status.dart';
 import '../remote/relay/dsh_remote_backend.dart';
 import 'app_info.dart';
 import '../remote/relay/relay_backend.dart';
+import '../remote/relay/webrtc_peer.dart';
 import '../remote/secret_store.dart';
 import '../remote/ssh/ssh_host_config.dart';
 import '../remote/ssh/ssh_transport.dart';
@@ -379,6 +380,11 @@ final relayBackendProvider = Provider<RelayBackend>((ref) {
     secrets: ref.watch(secretStoreProvider),
     serverUrl: ref.watch(relayServerProvider),
     clientVersion: AppInfo.version.split('+').first,
+    peerConnector: flutterPeerConnector,
+  );
+  // The old default-off preference no longer controls automatic transport selection.
+  unawaited(
+    SharedPreferences.getInstance().then((prefs) => prefs.remove('remote_direct_p2p')).catchError((_) => false),
   );
   ref.onDispose(() => unawaited(backend.close()));
   return backend;

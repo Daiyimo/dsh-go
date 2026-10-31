@@ -1,7 +1,7 @@
 /// Pure-Dart client for ds-harness-remote (https://github.com/liguobao/ds-harness-remote,
-/// MIT): reach a remote Host's DSH Harness API through the Server Relay with
-/// end-to-end Noise IK encryption, using the same `DshClient` API as the
-/// local engine.
+/// MIT): reach a remote Host's DSH Harness API through the Server Relay, or
+/// directly over WebRTC, with end-to-end Noise IK encryption, using the same
+/// `DshClient` API as the local engine.
 ///
 /// Entry point: [RemoteAccount] (sign-in, Host list, [RemoteAccount.connectHost]).
 ///
@@ -9,7 +9,10 @@
 /// * [RemoteServerApi] — REST (`/api/v1/*`): providers, QR / password
 ///   login, device registration, token refresh, Host directory.
 /// * [RelayTransport] — Control WebSocket: hello, connect, relay frames,
-///   ping/pong ([SecureHandshakeTransport] is the seam for LAN / WebRTC).
+///   ping/pong, WebRTC signaling.
+/// * [WebRtcTransport] — LAN / P2P / TURN: Noise ciphertext over a
+///   DataChannel of a platform [RemotePeerConnection] (flutter_webrtc in the
+///   app), falling back to the Relay.
 /// * [NoiseIkSession] + [SecureChannel] — `Noise_IK_25519_ChaChaPoly_SHA256`,
 ///   DSHF fragmentation, replay protection.
 /// * [RemoteRpcClient] — Remote message RPC correlation and events.
@@ -39,5 +42,7 @@ export 'src/protocol/control.dart' show ControlFrame, ControlFrameLimits, Protoc
 export 'src/protocol/messages.dart' show RemoteMessage, SecureMessageCodec, maxSecureMessageBytes;
 export 'src/server/server_api.dart';
 export 'src/state.dart';
+export 'src/transport/peer_connection.dart';
 export 'src/transport/relay_transport.dart';
 export 'src/transport/transport.dart';
+export 'src/transport/webrtc_transport.dart';

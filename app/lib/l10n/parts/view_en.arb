@@ -38,6 +38,8 @@
   "viewBalanceChecking": "Checking balance…",
   "viewBalanceCheckFailed": "Can’t check balance right now",
   "viewBalanceNoAlert": "Off",
+  "viewBalanceBannerHidden": "Balance alert hidden until DSH Go restarts",
+  "viewBalanceTurnOff": "Turn off",
   "viewBalanceBelow": "Below {value}",
   "viewBalanceAlert": "Low balance alert",
   "viewBalanceThreshold": "Alert threshold",

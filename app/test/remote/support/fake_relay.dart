@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:dsh_app/remote/link_status.dart';
 import 'package:dsh_app/remote/relay/relay_backend.dart';
 import 'package:dsh_client/dsh_client.dart';
 
@@ -85,6 +86,12 @@ class FakeRelayBackend implements RelayBackend {
     probes++;
     return true;
   }
+
+  /// What [pathOf] reports for every client.
+  RelayPath? path;
+
+  @override
+  RelayPath? pathOf(DshClient client) => path;
 
   @override
   bool reconnect(DshClient client) {

@@ -2,10 +2,10 @@
 """Prepare GitHub release assets for an in-app update (see docs/release.md).
 
 Takes the version name from app/pubspec.yaml and the build number from the
-APKs themselves (aapt2), checks that both flavors agree, copies them to dist/
-under their release names, and writes SHA256SUMS and update.json next to them.
-Upload everything in dist/ to the release tagged v<version>. Build the APKs
-with `tooling/build-apk.sh -f all` first, so both share one build number.
+APKs themselves (aapt2), copies them to dist/ under their release names, and
+writes SHA256SUMS and update.json next to them. The default release contains
+arm64 only; explicit flavor inputs remain available for local testing. Build
+with `tooling/build-apk.sh` first. Explicit multiple inputs must share a build number.
 
     python3 tooling/release_assets.py --notes notes.md
     python3 tooling/release_assets.py --notes notes.md --base-url https://cdn.example.com/dsh/1.2.0/
@@ -116,7 +116,7 @@ def main() -> None:
         "apks",
         nargs="*",
         metavar="FLAVOR=PATH",
-        help="default: app/build/app/outputs/flutter-apk/app-<flavor>-release.apk",
+        help="default: arm64 only, app/build/app/outputs/flutter-apk/app-arm64-release.apk",
     )
     args = parser.parse_args()
 
@@ -135,11 +135,10 @@ def main() -> None:
             sys.exit(f"expected FLAVOR=PATH with FLAVOR in {FLAVORS}: {item}")
         sources[flavor] = pathlib.Path(path)
     if not sources:
-        for flavor in FLAVORS:
-            sources[flavor] = ROOT / "app" / "build" / "app" / "outputs" / "flutter-apk" / f"app-{flavor}-release.apk"
+        sources["arm64"] = ROOT / "app" / "build" / "app" / "outputs" / "flutter-apk" / "app-arm64-release.apk"
     for flavor, path in sources.items():
         if not path.is_file():
-            sys.exit(f"{flavor}: {path} not found (tooling/build-apk.sh -f all first)")
+            sys.exit(f"{flavor}: {path} not found (build that flavor with tooling/build-apk.sh first)")
 
     aapt2 = find_aapt2()
     if not aapt2:

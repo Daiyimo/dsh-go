@@ -31,6 +31,9 @@ class WavRecorder(
     @Volatile
     private var running = false
 
+    /** The capture's audio session (AudioManager's recording configurations name it); 0 when not recording. */
+    val sessionId: Int get() = record?.audioSessionId ?: 0
+
     /** Opens the microphone and starts capturing; false when it cannot be opened. */
     @SuppressLint("MissingPermission") // VoicePlugin checks RECORD_AUDIO first.
     fun start(): Boolean {

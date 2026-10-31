@@ -640,6 +640,13 @@ abstract final class Spots {
   );
 
   // 手机操控.
+  static final phoneA11yRestore = SettingSpot(
+    'phone-a11y-restore',
+    page: SettingsPageId.phone,
+    title: (l) => l.a11yRestoreTitle,
+    keywords: (l) => l.searchKwA11yRestore,
+    condition: SpotCondition.phoneControlOn,
+  );
   static final phoneConfirm = SettingSpot(
     'phone-confirm',
     page: SettingsPageId.phone,
@@ -1005,6 +1012,7 @@ final _rows = <SettingSpot>[
   Spots.phoneFiles,
   Spots.permissionPhoneConfirm,
   Spots.visualReplies,
+  Spots.phoneA11yRestore,
   Spots.phoneConfirm,
   Spots.phoneAutoCollapse,
   Spots.phoneReturn,

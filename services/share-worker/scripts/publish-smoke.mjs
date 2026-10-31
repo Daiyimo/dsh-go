@@ -37,7 +37,7 @@ function makeDist(version) {
   mkdirSync(dir, { recursive: true });
   const assets = {};
   const sums = [];
-  for (const [flavor, size] of [['arm64', 900_000], ['x64', 950_000]]) {
+  for (const [flavor, size] of [['arm64', 900_000]]) {
     const name = `dsh-go-${version}-${flavor}.apk`;
     const bytes = randomBytes(size);
     writeFileSync(join(dir, name), bytes);
@@ -202,15 +202,18 @@ async function realRun(mode, provider) {
     console.log(first.out.replace(/^/gm, '  | '));
     check(first.code === 0 && first.out.includes(`published ${VERSION}: global cn github`), `${mode}/${provider}: publishes to R2, China and GitHub`, first.out);
     check(first.out.includes({ public: `${origin}/download offers ${VERSION}`, redirect: `${origin}/download sends people to ${GH_LATEST}`, key: `${origin}/beta (access key) offers ${VERSION}` }[mode]), `${mode}: the live page offers it on every route`);
-    if (mode === 'redirect') check(first.out.includes(`ok - public link dsh-go-${VERSION}-x64.apk`), 'redirect: the x86_64 link in the GitHub notes works');
     check(noSecrets(first.out + readFileSync(log, 'utf8')), `${mode}: no secret in the output or on any command line`);
-    check(readdirSync(join(served, 'cn', VERSION)).sort().join(' ') === `SHA256SUMS dsh-go-${VERSION}-arm64.apk dsh-go-${VERSION}-x64.apk`, `${mode}: China has both APKs and SHA256SUMS`);
+    check(readdirSync(join(served, 'cn', VERSION)).sort().join(' ') === `SHA256SUMS dsh-go-${VERSION}-arm64.apk`, `${mode}: China has only the arm64 APK and SHA256SUMS`);
     const gh = JSON.parse(readFileSync(join(served, 'gh', tag, 'update.json'), 'utf8'));
     const release = JSON.parse(readFileSync(join(served, 'gh', tag, '.release.json'), 'utf8'));
-    check(!existsSync(join(served, 'gh', '_drafts', tag)) && release.title === `DSH Go ${VERSION}` && /^### 中文\n[\s\S]+\n### English\n/.test(release.notes), `${mode}: GitHub release published, notes from the changelog`);
+    check(!existsSync(join(served, 'gh', '_drafts', tag)) && release.title === `DSH Go ${VERSION}` && /### 中文\n[\s\S]+\n### English\n/.test(release.notes), `${mode}: GitHub release published, notes from the changelog`);
     check(!('url' in gh.assets.arm64) && !('routes' in gh) && gh.notesByLocale.en, `${mode}: GitHub's update.json lets the app use GitHub URLs`);
     check(!existsSync(join(served, 'gh', tag, `dsh-go-${VERSION}-x64.apk`)) && existsSync(join(served, 'gh', tag, `dsh-go-${VERSION}-arm64.apk`))
-      && release.notes.includes(`### 其他版本下载`) && release.notes.includes(`${origin}/download/${VERSION}/dsh-go-${VERSION}-x64.apk`), `${mode}: GitHub offers arm64; x86_64 is linked under "Other builds"`);
+      && Object.keys(gh.assets).join(' ') === 'arm64'
+      && !release.notes.includes('### 其他版本下载') && !release.notes.includes('-x64.apk')
+      && release.notes.includes(`${ghBase}/${tag}/dsh-go-${VERSION}-arm64.apk`)
+      && release.notes.includes('update.json') && release.notes.includes('SHA256SUMS')
+      && release.notes.includes('无需手动下载'), `${mode}: GitHub offers only arm64 with a clear install link and helper-file explanation`);
     const latest = await feed();
     check(JSON.stringify(latest.routes) === '["global","cn","github"]' && latest.assets.arm64.url === `${origin}/beta/${VERSION}/dsh-go-${VERSION}-arm64.apk`, `${mode}: beta/update.json lists the routes; the app's URLs are as before`);
     const calls = readFileSync(log, 'utf8');
@@ -237,7 +240,7 @@ async function realRun(mode, provider) {
 
     const again = publish(dist, ['--github'], env);
     const skipped = (again.out.match(/already there/g) ?? []).length;
-    check(again.code === 0 && skipped === 7, `${mode}: publishing again skips what's there (${skipped} files)`, again.out);
+    check(again.code === 0 && skipped === 5, `${mode}: publishing again skips what's there (${skipped} files)`, again.out);
 
     const apk = join(dist, `dsh-go-${VERSION}-arm64.apk`);
     appendFileSync(apk, 'changed');

@@ -109,6 +109,25 @@
     <string name="pet_probe_title">修复登录</string>
     <string name="pet_probe_done">做完了</string>
     <string name="pet_probe_public">有一轮完成了</string>
+    <string name="pet_ask">问一句</string>
+    <string name="pet_new_chat">新对话</string>
+    <string name="pet_stop">停止当前任务</string>
+    <string name="pet_switch_host">切换主机</string>
+    <string name="pet_ask_hint">问点什么</string>
+    <string name="pet_ask_send">发送</string>
+    <string name="pet_ask_hold_to_talk">按住说话</string>
+    <string name="pet_ask_sending">正在发送</string>
+    <string name="pet_ask_failed">没发出去</string>
+    <string name="pet_ask_listening">正在听，松开结束</string>
+    <string name="pet_ask_transcribing">正在识别</string>
+    <string name="pet_ask_not_heard">没听清</string>
+    <string name="pet_ask_voice_missing">先在 App 里下载语音模型</string>
+    <string name="pet_ask_voice_off">语音要本机引擎在运行</string>
+    <string name="pet_ask_mic_permission">先在 App 里允许使用麦克风</string>
+    <string name="pet_ask_mic_failed">麦克风打不开</string>
+    <string name="pet_go_answer">去回答</string>
+    <string name="pet_go_review">去看看</string>
+    <string name="pet_answer_failed">没成功，去 App 里处理</string>
     <!-- phone -->
     <string name="phone_running">DSH 正在操作手机</string>
     <string name="phone_a11y_connecting">无障碍服务还没连上，稍等几秒再试，或到系统设置里关掉再打开。</string>
@@ -248,4 +267,6 @@
     <string name="share_text">文本</string>
     <!-- tile -->
     <string name="tile_new_chat_label">新对话</string>
+    <string name="a11y_keeper_grant_failed">授权失败，可改用电脑命令授权。</string>
+    <string name="a11y_keeper_needs_setup">请先配置 Shizuku 或无线调试。</string>
 </resources>
