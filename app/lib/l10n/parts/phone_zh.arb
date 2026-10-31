@@ -645,5 +645,16 @@
   "phoneLaunchFullscreen": "全屏打开应用",
   "phoneLaunchFullscreenHint": "打开应用时请求全屏窗口，不在小窗或悬浮窗里跑。",
   "phoneModelVision": "模型能看截图",
-  "phoneModelVisionHint": "纯 GUI 的页面只有画面：模型读不了图片时关掉它，DSH 会直接交还给你，不再猜坐标。"
+  "phoneModelVisionHint": "纯 GUI 的页面只有画面：模型读不了图片时关掉它，DSH 会直接交还给你，不再猜坐标。",
+  "phoneImeTitle": "DSH 输入法",
+  "phoneImeHint": "画面页面没有输入框编号，文字只能从这里进。它不画键盘，只占一条。",
+  "phoneImeReady": "正在用：可以给画面页面输入文字",
+  "phoneImeOff": "没有启用：微信这类页面输不进文字",
+  "phoneImeNotChosen": "已启用，但不是当前键盘",
+  "phoneImeNoField": "已启用，等一个输入框",
+  "phoneImeEnable": "去系统里启用",
+  "phoneImeEnableHint": "在系统的键盘列表里打开 DSH 输入法",
+  "phoneImeChoose": "选为当前键盘",
+  "phoneImeChooseHint": "弹出系统的输入法选择器",
+  "phoneImeNote": "别的用法不需要它：能读到输入框编号的页面直接用 type。"
 }

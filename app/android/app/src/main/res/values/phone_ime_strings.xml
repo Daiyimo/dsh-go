@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Strings of the DSH input method the phone-control module types through (phone/input).
+     Own file so other modules' string edits never collide with it. English here, Chinese in values-zh/. -->
+<resources>
+    <string name="phone_ime_label">DSH Keyboard</string>
+    <string name="phone_ime_bar">DSH is typing</string>
+    <string name="phone_ime_back">Use my keyboard</string>
+    <string name="phone_ime_no_field">No text field is being edited right now. Point at it with tap_xy first, then type again.</string>
+    <string name="phone_ime_rejected">The app refused the text. Try tap_xy on the field first, then type again.</string>
+</resources>

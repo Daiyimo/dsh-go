@@ -237,6 +237,21 @@
                 android:value="Shows the user's floating assistant pet while their remote agent session runs" />
         </service>
 
+        <!-- 手机操控 的输入法 (phone/input/DshIme.kt): picture pages have no field ids, so text has
+             to come in through an input method. It never draws a keyboard by itself. -->
+        <service
+            android:name=".phone.input.DshImeService"
+            android:label="@string/phone_ime_label"
+            android:exported="true"
+            android:permission="android.permission.BIND_INPUT_METHOD">
+            <intent-filter>
+                <action android:name="android.view.InputMethod" />
+            </intent-filter>
+            <meta-data
+                android:name="android.view.im"
+                android:resource="@xml/phone_ime" />
+        </service>
+
         <!-- 手机操控: reads and drives the main screen, owns the status bar / confirm overlay (phone/a11y). -->
         <service
             android:name=".phone.a11y.PhoneA11yService"

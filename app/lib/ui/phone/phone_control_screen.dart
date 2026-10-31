@@ -58,6 +58,13 @@ extension PhoneConfirmModeText on PhoneConfirmMode {
   };
 }
 
+/// 设置 › 手机操控 › 进阶 › DSH 输入法: what state the input method is in, in one phrase.
+String imeSummary(L10n l10n, PhoneImeStatus ime) {
+  if (ime.ready) return l10n.phoneImeReady;
+  if (!ime.enabled) return l10n.phoneImeOff;
+  return ime.selected ? l10n.phoneImeNoField : l10n.phoneImeNotChosen;
+}
+
 /// Where a row of 确认方式's 「这些由你来操作」 goes.
 enum _ConfirmLink { appRules, unlocks }
 
@@ -372,6 +379,13 @@ class _PhoneControlScreenState extends ConsumerState<PhoneControlScreen> {
                   ),
                 ),
                 ListPageRow(
+                  icon: AppIcons.operate,
+                  title: l10n.phoneImeTitle,
+                  subtitle: l10n.phoneImeHint,
+                  value: imeSummary(l10n, status.ime),
+                  onTap: () => unawaited(_imeSheet()),
+                ),
+                ListPageRow(
                   icon: AppIcons.dndMode,
                   spot: SettingsIndex.entry(SettingsPageId.phoneDnd),
                   subtitle: dndSummary(status.background),
@@ -511,6 +525,46 @@ class _PhoneControlScreenState extends ConsumerState<PhoneControlScreen> {
   /// Shizuku/ADB link, so nothing keeps working on the hidden screen.
   Future<void> _setLaunchFullscreen(bool on) async {
     final ok = await ref.read(phoneProvider.notifier).setLaunchFullscreen(on);
+    if (!mounted || ok) return;
+    _toast(context.l10n.phoneActionFailedLater);
+  }
+
+  /// 设置 › 手机操控 › 进阶 › DSH 输入法: switching it on and choosing it are two system
+  /// screens, so the row asks which one instead of pretending to be a switch.
+  Future<void> _imeSheet() async {
+    final l10n = context.l10n;
+    final action = await showAppSheet<String>(
+      context,
+      builder: (sheet) => SafeArea(
+        top: false,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SheetHeader(l10n.phoneImeTitle),
+            SheetGroup(
+              children: [
+                ListPageRow(
+                  icon: AppIcons.askFirst,
+                  title: l10n.phoneImeEnable,
+                  subtitle: l10n.phoneImeEnableHint,
+                  onTap: () => Navigator.of(sheet).pop('enable'),
+                ),
+                ListPageRow(
+                  icon: AppIcons.appRules,
+                  title: l10n.phoneImeChoose,
+                  subtitle: l10n.phoneImeChooseHint,
+                  onTap: () => Navigator.of(sheet).pop('choose'),
+                ),
+              ],
+            ),
+            PageFootnote(l10n.phoneImeNote),
+          ],
+        ),
+      ),
+    );
+    if (!mounted || action == null) return;
+    final notifier = ref.read(phoneProvider.notifier);
+    final ok = action == 'enable' ? await notifier.openImeSettings() : await notifier.chooseIme();
     if (!mounted || ok) return;
     _toast(context.l10n.phoneActionFailedLater);
   }

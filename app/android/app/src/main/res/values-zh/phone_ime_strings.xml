@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The DSH input method (phone/input), Chinese. -->
+<resources>
+    <string name="phone_ime_label">DSH 输入法</string>
+    <string name="phone_ime_bar">DSH 正在输入</string>
+    <string name="phone_ime_back">切回我的键盘</string>
+    <string name="phone_ime_no_field">现在没有输入框在编辑。先用 tap_xy 点一下输入框，再 type。</string>
+    <string name="phone_ime_rejected">应用没有接受这段文字。先用 tap_xy 点一下输入框，再 type 一次。</string>
+</resources>

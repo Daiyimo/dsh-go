@@ -106,6 +106,13 @@ class PhonePlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCallHandle
             "setEnabled" -> async(result) { control.setEnabled(call.argument<Boolean>("enabled") == true) }
             "openAccessibilitySettings" -> result.success(startActivity(control.accessibilitySettingsIntent()))
             "openAppDetails" -> result.success(startActivity(control.appDetailsIntent()))
+            "openImeSettings" -> result.success(startActivity(Intent(android.provider.Settings.ACTION_INPUT_METHOD_SETTINGS)))
+            "chooseIme" -> {
+                val imm = appContext.getSystemService(Context.INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager
+                imm.showInputMethodPicker()
+                result.success(control.imeStatus())
+            }
+            "imeStatus" -> result.success(control.imeStatus())
             "testScreen" -> async(result) { control.testScreen() }
             "setBackgroundMode" -> async(result) { control.background.setBackgroundMode(call.argument<String>("mode") ?: "off") }
             "requestShizukuPermission" -> async(result) { control.background.requestShizukuPermission() }

@@ -9385,6 +9385,39 @@ class L10nZh extends L10n {
   String get phoneModelVisionHint => '纯 GUI 的页面只有画面：模型读不了图片时关掉它，DSH 会直接交还给你，不再猜坐标。';
 
   @override
+  String get phoneImeTitle => 'DSH 输入法';
+
+  @override
+  String get phoneImeHint => '画面页面没有输入框编号，文字只能从这里进。它不画键盘，只占一条。';
+
+  @override
+  String get phoneImeReady => '正在用：可以给画面页面输入文字';
+
+  @override
+  String get phoneImeOff => '没有启用：微信这类页面输不进文字';
+
+  @override
+  String get phoneImeNotChosen => '已启用，但不是当前键盘';
+
+  @override
+  String get phoneImeNoField => '已启用，等一个输入框';
+
+  @override
+  String get phoneImeEnable => '去系统里启用';
+
+  @override
+  String get phoneImeEnableHint => '在系统的键盘列表里打开 DSH 输入法';
+
+  @override
+  String get phoneImeChoose => '选为当前键盘';
+
+  @override
+  String get phoneImeChooseHint => '弹出系统的输入法选择器';
+
+  @override
+  String get phoneImeNote => '别的用法不需要它：能读到输入框编号的页面直接用 type。';
+
+  @override
   String get phoneTaskResultReady => '任务完成 · 查看结果';
 
   @override

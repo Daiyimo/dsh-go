@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 手机操控 的输入法 (phone/input/DshIme.kt): 画面页面没有输入框编号，文字只能从输入法进去。
+     它不画键盘，只有一条细条。 -->
+<input-method xmlns:android="http://schemas.android.com/apk/res/android"
+    android:settingsActivity="io.github.ccch1mneyyy.dsh_app.MainActivity"
+    android:supportsSwitchingToNextInputMethod="true">
+    <subtype
+        android:imeSubtypeMode="keyboard"
+        android:label="@string/phone_ime_label" />
+</input-method>

@@ -219,6 +219,27 @@ class A11yKeeperStatus {
 }
 
 /// Snapshot of the native phone-control module (`status` / status events).
+/// 设置 › 手机操控 › 进阶 › DSH 输入法: picture pages have no field ids, so typing goes
+/// through this app's own input method ([ready]: it is the chosen one and a field has the focus).
+class PhoneImeStatus {
+  const PhoneImeStatus({this.enabled = false, this.selected = false, this.ready = false});
+
+  factory PhoneImeStatus.fromMap(Map<Object?, Object?> m) => PhoneImeStatus(
+    enabled: _flag(m['enabled']),
+    selected: _flag(m['selected']),
+    ready: _flag(m['ready']),
+  );
+
+  /// The service is switched on in the system's keyboard list.
+  final bool enabled;
+
+  /// It is the keyboard the system is using.
+  final bool selected;
+
+  /// It is the keyboard in use *and* a field is being edited right now.
+  final bool ready;
+}
+
 class PhoneStatus {
   const PhoneStatus({
     this.ready = true,
@@ -232,6 +253,7 @@ class PhoneStatus {
     this.confirmationNotifications,
     this.guiScheme = const PhoneGuiScheme(),
     this.launchFullscreen = true,
+    this.ime = const PhoneImeStatus(),
     this.background = const PhoneBackgroundStatus(),
     this.task = const PhoneTaskStatus(),
     this.device = const PhoneDevice(),
@@ -249,6 +271,7 @@ class PhoneStatus {
       confirmationNotifications = null,
       guiScheme = const PhoneGuiScheme(),
       launchFullscreen = true,
+      ime = const PhoneImeStatus(),
       background = const PhoneBackgroundStatus(),
       task = const PhoneTaskStatus(),
       device = const PhoneDevice();
@@ -263,6 +286,7 @@ class PhoneStatus {
     confirmationNotifications: _maybeFlag(m['confirmationNotifications']),
     guiScheme: PhoneGuiScheme.fromMap(_map(m['guiScheme'])),
     launchFullscreen: _maybeFlag(_map(m['launch'])['fullscreen']) ?? true,
+    ime: PhoneImeStatus.fromMap(_map(m['ime'])),
     background: PhoneBackgroundStatus.fromMap(_map(m['background'])),
     task: PhoneTaskStatus.fromMap(_map(m['task'])),
     device: PhoneDevice.fromMap(_map(m['device'])),
@@ -294,11 +318,14 @@ class PhoneStatus {
   /// 全屏打开应用: `open` asks the accessibility service to start the app fullscreen.
   /// Off leaves the start to the system. Null on an older native module.
   final bool launchFullscreen;
+
+  /// 设置 › 手机操控 › 进阶 › DSH 输入法.
+  final PhoneImeStatus ime;
   final PhoneBackgroundStatus background;
   final PhoneTaskStatus task;
   final PhoneDevice device;
 
-  PhoneStatus copyWith({bool? enabled, PhoneGuiScheme? guiScheme, bool? launchFullscreen}) => PhoneStatus(
+  PhoneStatus copyWith({bool? enabled, PhoneGuiScheme? guiScheme, bool? launchFullscreen, PhoneImeStatus? ime}) => PhoneStatus(
     ready: ready,
     error: error,
     enabled: enabled ?? this.enabled,
@@ -310,6 +337,7 @@ class PhoneStatus {
     confirmationNotifications: confirmationNotifications,
     guiScheme: guiScheme ?? this.guiScheme,
     launchFullscreen: launchFullscreen ?? this.launchFullscreen,
+    ime: ime ?? this.ime,
     background: background,
     task: task,
     device: device,
@@ -916,6 +944,11 @@ class PhoneChannel {
   /// 全屏打开应用: `open` starts the app through the accessibility service, which
   /// can ask for the fullscreen windowing mode. Answers with what the phone kept.
   Future<bool> setLaunchFullscreen(bool on) => _bool('setLaunchFullscreen', {'fullscreen': on});
+  /// Opens the system's keyboard list, where 手机操控's own input method is switched on.
+  Future<bool> openImeSettings() => _bool('openImeSettings');
+
+  /// The system's keyboard picker, so DSH 输入法 can be made the current one.
+  Future<bool> chooseIme() => _bool('chooseIme');
 
   /// Tells the phone gate whether the model in use can read images. A model that
   /// refuses a picture at admission gets `false`, which makes the gate refuse point

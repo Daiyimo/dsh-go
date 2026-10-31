@@ -9874,6 +9874,40 @@ class L10nEn extends L10n {
       'A pure-GUI page is only a picture: when the model cannot read images, turn this off and DSH hands the phone back instead of guessing coordinates.';
 
   @override
+  String get phoneImeTitle => 'DSH Keyboard';
+
+  @override
+  String get phoneImeHint =>
+      'A picture page has no field ids, so text has to come in through this. It draws no keyboard, only a strip.';
+
+  @override
+  String get phoneImeReady => 'In use: text can go into a picture page';
+
+  @override
+  String get phoneImeOff => 'Off: typing into a picture page like WeChat does not work';
+
+  @override
+  String get phoneImeNotChosen => 'On, but not the keyboard in use';
+
+  @override
+  String get phoneImeNoField => 'On, waiting for a text field';
+
+  @override
+  String get phoneImeEnable => 'Switch it on in the system';
+
+  @override
+  String get phoneImeEnableHint => 'Opens the system\'s keyboard list';
+
+  @override
+  String get phoneImeChoose => 'Make it the keyboard in use';
+
+  @override
+  String get phoneImeChooseHint => 'Opens the system\'s keyboard picker';
+
+  @override
+  String get phoneImeNote => 'Nothing else needs it: a page whose fields can be read is typed into directly.';
+
+  @override
   String get phoneTaskResultReady => 'Task complete · View result';
 
   @override

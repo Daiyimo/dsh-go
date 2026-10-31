@@ -17294,6 +17294,72 @@ abstract class L10n {
   /// **'纯 GUI 的页面只有画面：模型读不了图片时关掉它，DSH 会直接交还给你，不再猜坐标。'**
   String get phoneModelVisionHint;
 
+  /// No description provided for @phoneImeTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'DSH 输入法'**
+  String get phoneImeTitle;
+
+  /// No description provided for @phoneImeHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'画面页面没有输入框编号，文字只能从这里进。它不画键盘，只占一条。'**
+  String get phoneImeHint;
+
+  /// No description provided for @phoneImeReady.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在用：可以给画面页面输入文字'**
+  String get phoneImeReady;
+
+  /// No description provided for @phoneImeOff.
+  ///
+  /// In zh, this message translates to:
+  /// **'没有启用：微信这类页面输不进文字'**
+  String get phoneImeOff;
+
+  /// No description provided for @phoneImeNotChosen.
+  ///
+  /// In zh, this message translates to:
+  /// **'已启用，但不是当前键盘'**
+  String get phoneImeNotChosen;
+
+  /// No description provided for @phoneImeNoField.
+  ///
+  /// In zh, this message translates to:
+  /// **'已启用，等一个输入框'**
+  String get phoneImeNoField;
+
+  /// No description provided for @phoneImeEnable.
+  ///
+  /// In zh, this message translates to:
+  /// **'去系统里启用'**
+  String get phoneImeEnable;
+
+  /// No description provided for @phoneImeEnableHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'在系统的键盘列表里打开 DSH 输入法'**
+  String get phoneImeEnableHint;
+
+  /// No description provided for @phoneImeChoose.
+  ///
+  /// In zh, this message translates to:
+  /// **'选为当前键盘'**
+  String get phoneImeChoose;
+
+  /// No description provided for @phoneImeChooseHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'弹出系统的输入法选择器'**
+  String get phoneImeChooseHint;
+
+  /// No description provided for @phoneImeNote.
+  ///
+  /// In zh, this message translates to:
+  /// **'别的用法不需要它：能读到输入框编号的页面直接用 type。'**
+  String get phoneImeNote;
+
   /// No description provided for @phoneTaskResultReady.
   ///
   /// In zh, this message translates to:

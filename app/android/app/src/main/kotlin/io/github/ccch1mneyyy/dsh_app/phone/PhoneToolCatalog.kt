@@ -219,17 +219,19 @@ object PhoneToolCatalog {
             // l10n:keep agent tool catalog
             "在输入框里输入文字（替换原内容），返回回读结果和新屏幕。submit:true 输入后按回车 / 发送，要用户确认。" +
                 // l10n:keep agent tool catalog
-                "密码、验证码、支付密码框默认拒绝（用户在设置里解除限制后才能填），被拒绝就改用 handoff。",
+                "密码、验证码、支付密码框默认拒绝（用户在设置里解除限制后才能填），被拒绝就改用 handoff。" +
+                // l10n:keep agent tool catalog
+                "画面页（微信、游戏）没有输入框编号：省略 id，先用 tap_xy 点中输入框，再用 type——文字由 DSH 输入法直接送进前台应用；没有启用输入法时会明确告诉你。",
             linkedMapOf(
                 "screen" to SCREEN_ID,
                 // l10n:keep agent tool catalog
-                "id" to int("输入框编号"),
+                "id" to int("输入框编号；画面页省略"),
                 // l10n:keep agent tool catalog
                 "text" to str("要输入的文字"),
                 // l10n:keep agent tool catalog
                 "submit" to bool("输入后提交 / 发送"),
             ),
-            listOf("screen", "id", "text"),
+            listOf("screen", "text"),
         ),
         Tool(
             SCROLL,

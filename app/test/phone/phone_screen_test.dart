@@ -386,6 +386,34 @@ void main() {
       expect(tester.widget<Switch>(toggle).value, isFalse);
     });
 
+    testWidgets('DSH 输入法 says when typing into a picture page works', (tester) async {
+      final h = await pumpPhone(tester, const PhoneControlScreen());
+      expect(inTile('DSH 输入法', find.text('正在用：可以给画面页面输入文字')), findsOneWidget);
+
+      // Off: the row says so instead of pretending there is a switch. Enabling and choosing
+      // are two system screens, so the row offers them as two actions.
+      h.native!.push(phoneStatus(imeEnabled: false, imeSelected: false, imeReady: false));
+      await settlePhone(tester);
+      expect(inTile('DSH 输入法', find.text('没有启用：微信这类页面输不进文字')), findsOneWidget);
+
+      await tester.tap(find.text('DSH 输入法'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('去系统里启用'));
+      await tester.pumpAndSettle();
+      expect(h.native!.callsOf('openImeSettings'), hasLength(1));
+
+      h.native!.push(phoneStatus(imeEnabled: true, imeSelected: false, imeReady: false));
+      await settlePhone(tester);
+      expect(inTile('DSH 输入法', find.text('已启用，但不是当前键盘')), findsOneWidget);
+
+      await tester.tap(find.text('DSH 输入法'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('选为当前键盘'));
+      await tester.pumpAndSettle();
+      expect(h.native!.callsOf('chooseIme'), hasLength(1));
+      expect(inTile('DSH 输入法', find.text('正在用：可以给画面页面输入文字')), findsOneWidget);
+    });
+
     testWidgets('不打扰模式 row shows its state and opens the page', (tester) async {
       await pumpPhone(
         tester,

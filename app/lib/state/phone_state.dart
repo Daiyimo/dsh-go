@@ -231,6 +231,16 @@ class PhoneController extends Notifier<PhoneState> {
     return true;
   }
 
+  /// 设置 › 手机操控 › 进阶 › DSH 输入法: the system's keyboard list, then its picker. Both
+  /// leave the app; the status is re-read when we come back.
+  Future<bool> openImeSettings() => _channel.openImeSettings();
+
+  Future<bool> chooseIme() async {
+    final ok = await _channel.chooseIme();
+    if (ok) unawaited(refreshStatus());
+    return ok;
+  }
+
   /// 模型能看截图: whether the model in use can read the pictures the phone sends.
   /// False when the native side refused (nothing changes). A picture-only page cannot
   /// be worked with this off, so DSH hands the phone back instead of guessing.

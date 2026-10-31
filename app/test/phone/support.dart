@@ -37,6 +37,9 @@ Map<String, Object?> phoneStatus({
   List<String> guiScheme = const ['com.tencent.mm'],
   Map<String, String> guiSchemeLabels = const {'com.tencent.mm': '微信'},
   bool launchFullscreen = true,
+  bool imeEnabled = true,
+  bool imeSelected = true,
+  bool imeReady = true,
   Map<String, Object?>? device = const {'manufacturer': 'vivo', 'sdkInt': 35, 'sideloaded': true},
 }) => {
   'enabled': enabled,
@@ -54,6 +57,7 @@ Map<String, Object?> phoneStatus({
   },
   'guiScheme': {'packages': guiScheme, 'labels': guiSchemeLabels, 'max': 40},
   'launch': {'fullscreen': launchFullscreen},
+  'ime': {'enabled': imeEnabled, 'selected': imeSelected, 'ready': imeReady},
   'task': {
     'id': ?taskId,
     'active': taskActive,
@@ -250,6 +254,15 @@ class FakePhoneNative {
           'launch': {'fullscreen': on},
         };
         return on;
+      case 'openImeSettings':
+        return accept;
+      case 'chooseIme':
+        if (!accept) return false;
+        status = {
+          ...status,
+          'ime': {'enabled': true, 'selected': true, 'ready': imeReady},
+        };
+        return true;
       case 'actionLog':
         return log;
       case 'overlayPrefs':
