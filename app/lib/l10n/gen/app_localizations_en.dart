@@ -8544,6 +8544,21 @@ class L10nEn extends L10n {
   String get phoneDndHiddenScreen => 'Works on a hidden screen';
 
   @override
+  String get phoneVirtualScreen => 'Virtual screen';
+
+  @override
+  String get phoneVirtualScreenHint => 'Read and tap on a trusted virtual screen instead of the one you are using';
+
+  @override
+  String get phoneVirtualScreenOff => 'Off';
+
+  @override
+  String get phoneVirtualScreenOn => 'On';
+
+  @override
+  String get phoneVirtualScreenNotReady => 'On · not ready yet';
+
+  @override
   String get phoneDndShizukuReady => 'Shizuku · Ready';
 
   @override

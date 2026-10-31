@@ -8126,6 +8126,21 @@ class L10nZh extends L10n {
   String get phoneDndHiddenScreen => '在看不见的屏幕上操作';
 
   @override
+  String get phoneVirtualScreen => '虚拟屏';
+
+  @override
+  String get phoneVirtualScreenHint => '在受信任的虚拟屏上读屏和点击，不占用你正在用的屏幕';
+
+  @override
+  String get phoneVirtualScreenOff => '已关闭';
+
+  @override
+  String get phoneVirtualScreenOn => '已开启';
+
+  @override
+  String get phoneVirtualScreenNotReady => '已开启 · 还没准备好';
+
+  @override
   String get phoneDndShizukuReady => 'Shizuku · 可以用了';
 
   @override

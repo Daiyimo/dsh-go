@@ -7,8 +7,10 @@ package io.github.ccch1mneyyy.dsh_app.phone.a11y
 
 import io.github.ccch1mneyyy.dsh_app.i18n.AppStrings
 import io.github.ccch1mneyyy.dsh_app.R
+import android.app.ActivityOptions
 import android.app.KeyguardManager
 import android.content.Intent
+import android.graphics.Rect
 import android.graphics.Point
 import android.hardware.display.DisplayManager
 import android.os.Looper
@@ -227,9 +229,26 @@ internal class MainScreenDriver(private val service: PhoneA11yService, private v
                 ?: return ActionResult(false, "没找到「$name」，或它没有可以打开的界面。可以先用 apps 查一下包名。")
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
             val gen = abortGen
-            try { service.startActivity(intent) } catch (e: Exception) {
-                // l10n:keep agent screen result
-                return ActionResult(false, "打开「$name」失败：${e.message ?: e.javaClass.simpleName}")
+            // This service owns no activity, so the system treats the start as a background one.
+            // StepX answers that by dropping the app into the multi-window container: a small
+            // floating window with two SystemUI decorations stacked above it. The app is then not
+            // the top-most window, the tree reads the decorations instead of the app, and the
+            // screenshot the GUI fallback needs never shows the page it was opened for. Asking
+            // for the fullscreen windowing mode (plus the whole display as the launch bounds) keeps
+            // the window filling the screen, which is where tap_xy is meant to run; a ROM that
+            // refuses the bundle still gets the plain start.
+            val full = Rect(0, 0, service.resources.displayMetrics.widthPixels, service.resources.displayMetrics.heightPixels)
+            try {
+                val options = ActivityOptions.makeBasic().setLaunchBounds(full).toBundle()
+                // WindowConfiguration.WINDOWING_MODE_FULLSCREEN: hidden from the SDK, but the
+                // framework still reads this key when it picks the windowing mode to launch into.
+                options.putInt(KEY_LAUNCH_WINDOWING_MODE, WINDOWING_MODE_FULLSCREEN)
+                service.startActivity(intent, options)
+            } catch (e: Exception) {
+                try { service.startActivity(intent) } catch (e2: Exception) {
+                    // l10n:keep agent screen result
+                    return ActionResult(false, "打开「$name」失败：${e2.message ?: e2.javaClass.simpleName}")
+                }
             }
             val deadline = SystemClock.uptimeMillis() + 6_000
             var front: String? = null
@@ -867,6 +886,10 @@ internal class MainScreenDriver(private val service: PhoneA11yService, private v
 
         /** Process-wide: a reconnected service must never hand out an id the model still holds. */
         private val counter = java.util.concurrent.atomic.AtomicInteger()
+        /** ActivityOptions key for the windowing mode a launch should use (hidden from the SDK). */
+        private const val KEY_LAUNCH_WINDOWING_MODE = "android.activity.windowingMode"
+        /** WindowConfiguration.WINDOWING_MODE_FULLSCREEN. */
+        private const val WINDOWING_MODE_FULLSCREEN = 1
         private const val OBSERVE_MS = 4_800L
         private const val CAPTURE_MS = 2_000L
         /**

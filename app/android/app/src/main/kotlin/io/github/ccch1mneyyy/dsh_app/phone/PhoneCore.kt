@@ -46,7 +46,22 @@ class PhoneCore(
 
     /** The overlay's status line; 免确认 stays visible the whole time nothing is asked. */
     private fun say(text: String) {
+        if (quietStatus()) return
         env.gate()?.status(if (safety.waived()) ui.get("phone_waived_status", "免确认 · %1\$s", text) else text) // l10n:keep test default
+    }
+
+    /**
+     * True while the app in front is one an outside GUI scheme drives on its own. That scheme aims
+     * at its own picture of the screen, and the status line sits on top of that picture: a line
+     * showing up mid-flow moves every target it looks for. Every other app keeps the line.
+     */
+    private fun quietStatus(): Boolean {
+        val pkg = try {
+            env.driver(PhoneScreen.MAIN)?.foregroundPackage()
+        } catch (_: Throwable) {
+            null
+        } ?: return false
+        return pkg in QUIET_STATUS_PACKAGES
     }
 
     /** The screen of the last screen-based call, for `handoff`. */
@@ -708,6 +723,12 @@ class PhoneCore(
         const val MAX_COLLECT_CHARS = 16_000
         const val WAIT_DEFAULT_MS = 2_000L
         const val WAIT_MAX_MS = 30_000L
+
+        /**
+         * Apps whose screens an outside GUI scheme reads and drives itself (微信 today): the
+         * overlay's status line would land inside that picture and shift the targets it looks for.
+         */
+        private val QUIET_STATUS_PACKAGES = setOf("com.tencent.mm")
 
         /** The call's own time, not counting waits for the person. */
         fun budgetMs(tool: String): Long = when (tool) {

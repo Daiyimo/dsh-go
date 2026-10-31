@@ -30,6 +30,14 @@ String dndSummary(PhoneBackgroundStatus bg) {
   };
 }
 
+/// 虚拟屏's row on the main page: what the switch is set to, and whether it
+/// actually got anywhere.
+String virtualScreenSummary(PhoneBackgroundStatus bg) {
+  if (bg.mode == PhoneBackgroundMode.off) return appL10n.phoneVirtualScreenOff;
+  if (!bg.ready) return appL10n.phoneVirtualScreenNotReady;
+  return appL10n.phoneVirtualScreenOn;
+}
+
 /// Group spacing: 24 between consecutive cards.
 const _groupMargin = EdgeInsets.fromLTRB(16, 12, 16, 12);
 

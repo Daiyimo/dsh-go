@@ -1,5 +1,9 @@
 package io.github.ccch1mneyyy.dsh_app.phone
 
+import io.github.ccch1mneyyy.dsh_app.phone.a11y.Box
+
+import java.time.ZoneId
+import org.junit.After
 import org.junit.Assert.*
 import org.junit.Test
 
@@ -89,5 +93,80 @@ class ActionLogChangeTest {
 
     @Test fun anEntryDefaultsToNoMeasurement() {
         assertNull(ActionLog.Entry(1L, "screen", null, "读屏", "ok").change)
+    }
+}
+
+/**
+ * The status line goes quiet where an outside GUI scheme aims at the screen itself.
+ *
+ * The line is drawn over the app in front. 微信 is driven by such a scheme, which reads its own
+ * picture of the screen: a line showing up mid-flow shifts every target that picture is matched
+ * against. Every other app keeps the line, and so does a screen nobody can name.
+ */
+class PhoneQuietStatusTest {
+    private val tasks = PhoneTasks()
+    private val statuses = mutableListOf<String>()
+    private var pkg: String? = "example.app"
+    private val driver = object : PhoneDriver {
+        override val screen = PhoneScreen.MAIN
+        override fun availability() = Availability(true)
+        override fun foregroundPackage() = pkg
+        override fun observe(detail: Boolean, image: Boolean, region: Box?) =
+            ScreenSnapshot("s1", "Example", "Example", pkg)
+        override fun collect(screenId: String, listElementId: Int, maxPages: Int, until: String?) =
+            error("unexpected collect")
+        override fun target(screenId: String, elementId: Int) = null
+        override fun perform(action: PhoneAction) = error("unexpected action")
+        override fun open(packageName: String) = error("unexpected open")
+    }
+    private val core = PhoneCore(object : PhoneEnv {
+        override fun enabled() = true
+        override fun policies() = PhonePolicies()
+        override fun isLocked() = false
+        override fun gate() = object : UserGate {
+            override fun confirm(request: ConfirmRequest) = Decision.ALLOW_ONCE
+            override fun handoff(reason: String, timeoutMs: Long) = HandoffResult.CONTINUE
+            override fun status(text: String?) { if (text != null) statuses += text }
+        }
+        override fun driver(screen: PhoneScreen) = driver
+        override fun a11yState() = A11yState.CONNECTED
+        override fun backgroundUnavailable() = "unavailable"
+        override fun zone() = ZoneId.of("UTC")
+        override fun notifyFix(kind: String) {}
+        override fun beforeHandoff(screen: PhoneScreen): String? = null
+        override fun sleep(ms: Long) {}
+        override fun system() = object : SystemApi {
+            override fun apps() = listOf(AppEntry("Example", "example.app"))
+            override fun isInstalled(pkg: String) = true
+            override fun launch(app: AppEntry) = error("unexpected launch")
+            override fun urlTarget(url: String) = error("unexpected URL")
+            override fun openUrl(url: String, target: UrlTarget) = error("unexpected URL open")
+            override fun intent(spec: IntentSpec, shareTo: AppEntry?) = error("unexpected intent")
+            override fun notify(title: String, text: String) = error("unexpected notification")
+            override fun clipboardSet(text: String) = error("unexpected clipboard")
+            override fun clipboardGet() = error("unexpected clipboard")
+        }
+    }, tasks, ActionLog())
+
+    @After fun close() = core.worker.shutdown()
+
+    private fun readScreen() = core.call(PhoneToolCatalog.SCREEN, mapOf("screen" to "s1"))
+
+    @Test fun theLineGoesQuietInWeChat() {
+        pkg = "com.tencent.mm"
+        readScreen()
+        assertTrue("the status line reached a screen a GUI scheme aims at", statuses.isEmpty())
+    }
+
+    @Test fun everyOtherAppStillGetsTheLine() {
+        pkg = "com.taobao.taobao"
+        readScreen()
+        assertEquals(listOf("DSH 正在看屏幕"), statuses)
+    }
+
+    @Test fun aScreenNobodyCanNameStaysLoud() {
+        pkg = null
+        readScreen()
+        assertEquals(listOf("DSH 正在看屏幕"), statuses)
     }
 }

@@ -210,6 +210,17 @@ void main() {
         'Shizuku · 还没准备好',
       );
     });
+    test('虚拟屏 summary line for the main page', () {
+      expect(virtualScreenSummary(const PhoneBackgroundStatus()), '已关闭');
+      expect(
+        virtualScreenSummary(const PhoneBackgroundStatus(mode: PhoneBackgroundMode.shizuku)),
+        '已开启 · 还没准备好',
+      );
+      expect(
+        virtualScreenSummary(const PhoneBackgroundStatus(mode: PhoneBackgroundMode.adb, ready: true)),
+        '已开启',
+      );
+    });
   });
 
   group('应用名单', () {

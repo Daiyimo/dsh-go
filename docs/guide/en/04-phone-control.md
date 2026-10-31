@@ -53,6 +53,7 @@ Adjust it under **Floating bar** on the phone control page (shown once phone con
 - **Back to DSH Go when done**: on by default. When the reply ends and the app is in the background, it tries to bring you back to that chat. If the system blocks background windows, use the notification; see Confirmations and return below.
 
 Whatever the settings, the bar closes when the reply ends.
+When the foreground app is WeChat, DSH does not put the bar on the screen at all: some external setups read the screen and pick their own tap positions, and a bar on top of it gets in their way. Stop the task from the **Controlling the phone** card in the app instead.
 
 ## Stop
 
@@ -120,6 +121,7 @@ Disclaimer:
 
 Under **Advanced**:
 
+- **Virtual screen**: the quick on/off for that mode, off by default. On it, the agent reads and taps on a trusted virtual screen; turning it off also ends the running task and drops the Shizuku / ADB link, so nothing keeps working behind your back.
 - **Non-disruptive mode**: works on a hidden screen while you use your phone. Needs Android 14 or later; choose **Use Shizuku** or **Direct ADB** and follow the setup. It needs Wi-Fi with Developer options and wireless debugging on, must be reactivated after restarting your phone, and the screen must still stay on and unlocked.
 - **Background running**: prevents Android from turning off accessibility; opens the phone settings guide.
 - **Confirmations and return**: see confirmations and task results in time; see Confirmations and return above.

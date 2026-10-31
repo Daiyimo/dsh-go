@@ -14924,6 +14924,36 @@ abstract class L10n {
   /// **'在看不见的屏幕上操作'**
   String get phoneDndHiddenScreen;
 
+  /// No description provided for @phoneVirtualScreen.
+  ///
+  /// In zh, this message translates to:
+  /// **'虚拟屏'**
+  String get phoneVirtualScreen;
+
+  /// No description provided for @phoneVirtualScreenHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'在受信任的虚拟屏上读屏和点击，不占用你正在用的屏幕'**
+  String get phoneVirtualScreenHint;
+
+  /// No description provided for @phoneVirtualScreenOff.
+  ///
+  /// In zh, this message translates to:
+  /// **'已关闭'**
+  String get phoneVirtualScreenOff;
+
+  /// No description provided for @phoneVirtualScreenOn.
+  ///
+  /// In zh, this message translates to:
+  /// **'已开启'**
+  String get phoneVirtualScreenOn;
+
+  /// No description provided for @phoneVirtualScreenNotReady.
+  ///
+  /// In zh, this message translates to:
+  /// **'已开启 · 还没准备好'**
+  String get phoneVirtualScreenNotReady;
+
   /// No description provided for @phoneDndShizukuReady.
   ///
   /// In zh, this message translates to:

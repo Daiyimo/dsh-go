@@ -329,6 +329,28 @@ void main() {
       expect(find.text('全部记录'), findsNothing);
     });
 
+    testWidgets('虚拟屏 switch is off by default and drives the mode', (tester) async {
+      final h = await pumpPhone(tester, const PhoneControlScreen());
+      final row = tileWith('虚拟屏');
+      expect(inTile('虚拟屏', find.text('已关闭')), findsOneWidget);
+      expect(masterSwitch(tester).value, isTrue); // the page's own master switch stays first
+      final toggle = find.descendant(of: row, matching: find.byType(Switch));
+      expect(tester.widget<Switch>(toggle).value, isFalse);
+
+      await tester.tap(toggle);
+      await tester.pumpAndSettle();
+      expect(h.native!.callsOf('setBackgroundMode').single.arguments, {'mode': 'shizuku'});
+
+      h.native!.push(phoneStatus(mode: 'shizuku', backgroundReady: true));
+      await settlePhone(tester);
+      expect(inTile('虚拟屏', find.text('已开启')), findsOneWidget);
+      expect(tester.widget<Switch>(toggle).value, isTrue);
+
+      await tester.tap(toggle);
+      await tester.pumpAndSettle();
+      expect(h.native!.callsOf('setBackgroundMode').last.arguments, {'mode': 'off'});
+    });
+
     testWidgets('不打扰模式 row shows its state and opens the page', (tester) async {
       await pumpPhone(
         tester,

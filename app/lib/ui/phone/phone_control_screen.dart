@@ -332,6 +332,19 @@ class _PhoneControlScreenState extends ConsumerState<PhoneControlScreen> {
             ListPageCard(
               title: l10n.phoneControlAdvanced,
               children: [
+                MergeSemantics(
+                  child: ListPageRow(
+                    icon: AppIcons.dndMode,
+                    title: l10n.phoneVirtualScreen,
+                    subtitle: l10n.phoneVirtualScreenHint,
+                    value: virtualScreenSummary(status.background),
+                    onTap: () => unawaited(_setVirtualScreen(status.background.mode == PhoneBackgroundMode.off)),
+                    trailing: Switch(
+                      value: status.background.mode != PhoneBackgroundMode.off,
+                      onChanged: (v) => unawaited(_setVirtualScreen(v)),
+                    ),
+                  ),
+                ),
                 ListPageRow(
                   icon: AppIcons.dndMode,
                   spot: SettingsIndex.entry(SettingsPageId.phoneDnd),
@@ -460,6 +473,16 @@ class _PhoneControlScreenState extends ConsumerState<PhoneControlScreen> {
   Future<void> _setReturn(bool on) => ref.read(phoneReturnPrefProvider.notifier).set(on);
 
   Future<void> _setAutoCollapse(bool on) => ref.read(phoneOverlayPrefsProvider.notifier).setAutoCollapse(on);
+
+  /// 虚拟屏: the quick on/off for 不打扰模式. Off also ends the running task and drops the
+  /// Shizuku/ADB link, so nothing keeps working on the hidden screen.
+  Future<void> _setVirtualScreen(bool on) async {
+    final result = await ref
+        .read(phoneProvider.notifier)
+        .setBackgroundMode(on ? PhoneBackgroundMode.shizuku : PhoneBackgroundMode.off);
+    if (!mounted) return;
+    if (!result.ok) _toast(result.reason ?? context.l10n.phoneActionFailedLater);
+  }
 
   /// 悬浮条: 闲置时不透明度, 闲置时自动收起, 完成后返回 dsh-go.
   Widget _floatingBar() {

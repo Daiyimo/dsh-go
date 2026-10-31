@@ -3,6 +3,7 @@ package io.github.ccch1mneyyy.dsh_app.phone.a11y
 import android.accessibilityservice.AccessibilityService
 import android.graphics.Rect
 import android.os.Build
+import io.github.ccch1mneyyy.dsh_app.phone.SafetyRules
 import android.os.SystemClock
 import android.view.accessibility.AccessibilityNodeInfo
 import android.view.accessibility.AccessibilityNodeInfo.AccessibilityAction
@@ -51,6 +52,21 @@ internal object TreeCapture {
     private const val MAX_DEPTH = 80
     private const val MAX_WINDOWS = 4
 
+    /**
+     * True for a window that is chrome, not content: the status bar, the navigation bar, a
+     * floating ball - and, on a ROM that answers a background activity start by putting the app
+     * in the multi-window container, the freeform window's own decorations. StepX reports those
+     * decorations (title bar, app switcher) as TYPE_APPLICATION windows rooted in SystemUI,
+     * stacked *above* the app they decorate, so the small-TYPE_SYSTEM filter alone lets them win
+     * the top-most slot: the app underneath then vanishes from the tree, [foregroundPackage]
+     * answers the SystemUI package instead of it, and the page the GUI fallback was opened for is
+     * never seen. A small window rooted in a system package is chrome whatever its type says.
+     */
+    fun isChrome(type: Int, share: Double, packageName: String?): Boolean {
+        if (type == AccessibilityWindowInfo.TYPE_SYSTEM && share < 0.5) return true
+        return share < 0.5 && SafetyRules.isSystemPackage(packageName)
+    }
+
     private val scrollIds by lazy {
         mapOf(
             AccessibilityAction.ACTION_SCROLL_FORWARD.id to Scroll.FORWARD,
@@ -91,8 +107,6 @@ internal object TreeCapture {
                 w.getBoundsInScreen(st.rect)
                 val bounds = Box(st.rect.left, st.rect.top, st.rect.right, st.rect.bottom)
                 val share = bounds.intersect(screen).area.toDouble() / screenArea
-                // Status bar, navigation bar, a floating ball: small system windows are chrome, not content.
-                if (w.type == AccessibilityWindowInfo.TYPE_SYSTEM && share < 0.5) continue
                 // Some windows answer getRoot() with null (seen on the API 35 emulator for a Settings
                 // sub-page); the active window's root is still reachable through the service.
                 val root = w.root ?: (if (w.isActive || w.isFocused) activeRoot(service, w.id) else null)
@@ -105,6 +119,10 @@ internal object TreeCapture {
                     continue
                 }
                 val pkg = root.packageName?.toString()
+                // Status bar, navigation bar, a floating ball: chrome, not content. So are the
+                // decorations a ROM stacks above an app it started in the background, which arrive
+                // as application-type windows rooted in SystemUI: see [isChrome].
+                if (isChrome(w.type, share, pkg)) { release(root); continue }
                 if (chosen.isEmpty()) {
                     topPackage = pkg
                     ownFront = pkg == ownPackage
@@ -144,8 +162,9 @@ internal object TreeCapture {
                 if (w.type != AccessibilityWindowInfo.TYPE_APPLICATION && w.type != AccessibilityWindowInfo.TYPE_SYSTEM) continue
                 w.getBoundsInScreen(rect)
                 val share = Box(rect.left, rect.top, rect.right, rect.bottom).intersect(screen).area.toDouble() / screen.area.coerceAtLeast(1)
-                if (w.type == AccessibilityWindowInfo.TYPE_SYSTEM && share < 0.5) continue
                 val root = w.root ?: (if (w.isActive || w.isFocused) activeRoot(service, w.id) else null) ?: continue
+                // The freeform decorations of a background-started app: see [isChrome].
+                if (isChrome(w.type, share, root.packageName?.toString())) { release(root); continue }
                 try { return root.packageName?.toString() } finally { release(root) }
             }
         } finally {
