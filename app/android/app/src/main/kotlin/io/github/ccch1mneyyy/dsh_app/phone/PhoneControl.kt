@@ -585,6 +585,9 @@ class PhoneControl private constructor(private val app: Context) : PhoneEnv, Con
         runCatching { background.endTask() }
     }
 
+    /** Asked on every tool call: never waits for 自动恢复无障碍 to hand the driver back. */
+    override fun peekPackage(): String? = runCatching { PhoneRegistry.mainDriver?.foregroundPackage() }.getOrNull()
+
     override fun a11yState(): A11yState = when {
         PhoneRegistry.mainDriver != null -> A11yState.CONNECTED
         a11yEnabledInSettings() -> A11yState.ENABLED_NOT_CONNECTED

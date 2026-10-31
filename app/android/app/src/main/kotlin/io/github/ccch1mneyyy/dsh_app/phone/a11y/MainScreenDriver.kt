@@ -508,7 +508,16 @@ internal class MainScreenDriver(private val service: PhoneA11yService, private v
             return ActionResult(false, "屏幕编号 ${a.screenId} 已过期，坐标对不上了。请重新 screen 看屏再点。", now)
         }
         // l10n:keep agent screen result
-        val geometry = snap.image ?: return ActionResult(false, "屏幕 ${a.screenId} 没有截图。坐标点击要先用 screen 看屏；canvas 页面 DSH 会自动附图。")
+        // A tree page needs no coordinates: every element has an id, and a point tap there would
+        // bypass the element checks (secret words, target re-verification) for no gain. Only a
+        // picture page — where `observe` attaches the screenshot — has a point to tap.
+        val geometry = snap.image ?: return ActionResult(false, if (snap.screen.kind == ScreenKind.TREE) {
+            // l10n:keep agent screen result
+            "屏幕 ${a.screenId} 能读到控件：用 tap / type / scroll 点元素编号，不要用 tap_xy。坐标点击只给 canvas 这类只有画面的页面用。"
+        } else {
+            // l10n:keep agent screen result
+            "屏幕 ${a.screenId} 没有截图。坐标点击要先用 screen 看屏；canvas 页面 DSH 会自动附图。"
+        })
         // 0-1000 归一化 → 截图像素 → 屏幕像素。截图和屏幕之间的比例由 ImageGeometry 管, 这里只负责
         // 模型说的那一套单位: 单位混用是坐标点击最贵的故障(像素当归一化点偏几百像素且不报错)。
         val point = geometry.toScreen(ScreenGeom.normToPx(a.x, geometry.width), ScreenGeom.normToPx(a.y, geometry.height))

@@ -257,7 +257,7 @@ object PhoneToolCatalog {
             // l10n:keep agent tool catalog
             "按坐标点击：x/y 是 0-1000 归一化坐标（0,0=截图左上角，1000,1000=截图右下角），不要用像素、不要用百分数。" +
                 // l10n:keep agent tool catalog
-                "元素里找不到目标时用它；canvas / 加密混淆页（没有控件编号）也用它，那种页面 DSH 会自动附图。" +
+                "只给没有控件编号的页面（canvas / 加密混淆页）用，这种页面 DSH 会自动附图；能读到编号就说明目标有编号，用 tap / scroll 点编号，别用坐标。" +
                 // l10n:keep agent tool catalog
                 "点了没变化时，结果里会说明原因（坐标单位、状态栏、目标不在这一屏）；同一位置连续两次没变化就停手，改 handoff 交给用户。" +
                 // l10n:keep agent tool catalog

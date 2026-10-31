@@ -32,6 +32,11 @@ interface PhoneEnv {
      * main screen) rather than leave a display up that this task will not use.
      */
     fun closeBackground() {}
+    /**
+     * The foreground package, without bringing anything up: the keeper may hold a call to
+     * [driver] for seconds waiting for 自动恢复无障碍, and every tool call asks this one.
+     */
+    fun peekPackage(): String? = driver(PhoneScreen.MAIN)?.foregroundPackage()
     fun sleep(ms: Long) = Thread.sleep(ms)
 }
 
@@ -65,6 +70,9 @@ class PhoneCore(
     /** Label of [pictureApp], for the sentences the model gets back. */
     @Volatile private var pictureLabel: String? = null
 
+    /** The task [pictureApp] belongs to: the next task starts from its own picture, not this one. */
+    @Volatile private var pictureTask = 0L
+
     /** The virtual screen has already been taken down for this task (once per pure-GUI run). */
     @Volatile private var pureGuiEntered = false
 
@@ -78,11 +86,26 @@ class PhoneCore(
     private fun pureGui(): Boolean {
         val pkg = mainPackage()
         if (pkg != null && pkg in GUI_SCHEME_PACKAGES) return true
-        return pictureApp != null && (pkg == null || pkg == pictureApp)
+        val latched = pictureApp ?: return false
+        // A latch is that task's picture. The next task may start while the old app is still in
+        // front (or while nobody can name the screen at all), and inheriting it would keep a task
+        // off the virtual screen that never asked for it.
+        if (tasks.snapshot().id != pictureTask) {
+            clearLatch()
+            return false
+        }
+        return pkg == null || pkg == latched
+    }
+
+    private fun clearLatch() {
+        pictureApp = null
+        pictureLabel = null
+        pictureTask = 0L
+        pureGuiEntered = false
     }
 
     private fun mainPackage(): String? = try {
-        env.driver(PhoneScreen.MAIN)?.foregroundPackage()
+        env.peekPackage()
     } catch (_: Throwable) {
         null
     }
@@ -91,11 +114,14 @@ class PhoneCore(
     private fun enterPureGui(pkg: String?, label: String? = null) {
         if (pkg != null) pictureApp = pkg
         if (label != null) pictureLabel = label
+        pictureTask = tasks.snapshot().id
         if (!pureGuiEntered) {
             pureGuiEntered = true
+            lastScreen = PhoneScreen.MAIN
             runCatching { env.closeBackground() }
+            // Nothing draws the line in a pure-GUI task any more, so one retraction is enough.
+            runCatching { env.gate()?.status(null) }
         }
-        runCatching { env.gate()?.status(null) }
     }
 
     /** Remembers a main-screen picture after the fact, so every later call in the task knows. */
@@ -106,9 +132,7 @@ class PhoneCore(
         if (snap.kind == ScreenKind.CANVAS || snap.kind == ScreenKind.BLANKED || scheme) {
             enterPureGui(pkg, snap.appLabel)
         } else if (pkg != null && pkg != pictureApp) {
-            pictureApp = null
-            pictureLabel = null
-            pureGuiEntered = false
+            clearLatch()
         }
     }
 

@@ -20,7 +20,7 @@ class PhonePureGuiTest {
     private var closeCount = 0
     private var backgroundRequests = 0
     private var pkg: String? = "example.app"
-    private var appLabel = "Example"
+    private var appLabel: String? = "Example"
     private var kind = ScreenKind.TREE
 
     private fun driver(screen: PhoneScreen, id: String) = object : PhoneDriver {
@@ -127,6 +127,22 @@ class PhonePureGuiTest {
     @Test fun anAppOutsideTheSchemeKeepsTheBackScreen() {
         val out = readBack()
         assertFalse(out.text, out.isError)
+        assertEquals(1, backgroundRequests)
+    }
+
+    @Test fun aNewTaskStartsFromItsOwnPicture() {
+        pkg = "com.game.example"
+        appLabel = "Game"
+        kind = ScreenKind.CANVAS
+        readMain()
+        assertEquals(1, closeCount)
+        // The person is done; the next task starts while the screen cannot even be named.
+        tasks.endTask()
+        pkg = null
+        kind = ScreenKind.TREE
+        backgroundRequests = 0
+        val out = readBack()
+        assertFalse("the new task inherited the last task's picture: ${out.text}", out.isError)
         assertEquals(1, backgroundRequests)
     }
 
