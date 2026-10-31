@@ -26,6 +26,7 @@ class PhonePureGuiTest {
     private var home: Set<String> = emptySet()
     private val launches = mutableListOf<String>()
     private val opens = mutableListOf<String>()
+    private val keys = mutableListOf<PhoneAction.GlobalKey>()
     private var fullscreen = true
     private var policies = PhonePolicies()
     private var secure = false
@@ -40,7 +41,12 @@ class PhonePureGuiTest {
         override fun collect(screenId: String, listElementId: Int, maxPages: Int, until: String?) =
             error("unexpected collect")
         override fun target(screenId: String, elementId: Int) = null
-        override fun perform(action: PhoneAction) = error("unexpected action")
+        override fun perform(action: PhoneAction): ActionResult = if (action is PhoneAction.Key) {
+            keys += action.key
+            ActionResult(true, "按了${action.key}")
+        } else {
+            error("unexpected action")
+        }
         override fun open(packageName: String): ActionResult {
             opens += packageName
             return ActionResult(true, "打开了 $appLabel", screen = ScreenSnapshot(id = id, text = "Example", appLabel = appLabel, packageName = pkg, kind = kind))
@@ -339,6 +345,59 @@ class PhonePureGuiTest {
         assertTrue(out.text, out.isError)
         assertTrue(out.text, out.text.contains("纯 GUI"))
         assertEquals("the display was asked for before the refusal", 0, backgroundRequests)
+    }
+
+    @Test fun theHomeKeyIsRefusedWhileTheTaskRunsInOneApp() {
+        // Going home is what cost the person the task: this ROM re-opens the running app in its
+        // small window, and a swipe on the home screen lands on 负一屏 — the game never came back
+        // to the same picture. A latched task therefore cannot press home at all.
+        pkg = "com.game.example"
+        appLabel = "Game"
+        kind = ScreenKind.CANVAS
+        readMain()
+        val out = core.call(PhoneToolCatalog.KEY, mapOf("key" to "home"))
+        assertTrue("home was pressed inside a latched task: ${out.text}", out.isError)
+        assertTrue(out.text, out.text.contains("不要按桌面"))
+        assertEquals("the key was delivered anyway", emptyList<PhoneAction.GlobalKey>(), keys)
+    }
+
+    @Test fun theHomeKeyStillWorksForAnOrdinaryApp() {
+        pkg = "example.app"
+        appLabel = "Example"
+        kind = ScreenKind.TREE
+        readMain()
+        val out = core.call(PhoneToolCatalog.KEY, mapOf("key" to "home"))
+        assertFalse("home was refused for a task that is not latched on one app: ${out.text}", out.isError)
+        assertEquals(listOf(PhoneAction.GlobalKey.HOME), keys)
+    }
+
+    @Test fun aTapOnTheHomeScreenIsRefusedWhileLatched() {
+        pkg = "com.game.example"
+        appLabel = "Game"
+        kind = ScreenKind.CANVAS
+        readMain()
+        // The person (or a stray key) put the launcher in front: the task is still the game's, and
+        // an icon tap would re-open it into the small window.
+        home = setOf("com.android.launcher3")
+        pkg = "com.android.launcher3"
+        appLabel = "桌面"
+        kind = ScreenKind.TREE
+        val out = core.call(PhoneToolCatalog.TAP_XY, mapOf("observation" to "s1", "x" to 500, "y" to 900))
+        assertTrue("a tap was delivered on the home screen: ${out.text}", out.isError)
+        assertTrue(out.text, out.text.contains("桌面上"))
+    }
+
+    @Test fun aLauncherSwipeIsRefusedWhileLatched() {
+        pkg = "com.game.example"
+        appLabel = "Game"
+        kind = ScreenKind.CANVAS
+        readMain()
+        home = setOf("com.stepos.ailauncher")
+        pkg = "com.stepos.ailauncher"
+        appLabel = "桌面"
+        val out = core.call(PhoneToolCatalog.SCROLL, mapOf("screen" to "s1", "direction" to "left"))
+        assertTrue("the swipe into 负一屏 was allowed: ${out.text}", out.isError)
+        assertTrue(out.text, out.text.contains("桌面上"))
     }
 
     @Test fun anEmptiedListLetsWeChatBackOntoTheVirtualScreen() {

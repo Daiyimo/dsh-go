@@ -687,6 +687,11 @@ class PhoneControl private constructor(private val app: Context) : PhoneEnv, Con
 
     override fun imePassword(): Boolean = DshIme.password()
 
+    override fun forceFullscreen(packageName: String): Boolean = runCatching {
+        val component = app.packageManager.getLaunchIntentForPackage(packageName)?.component ?: return false
+        background.fullscreen(component.flattenToString())
+    }.getOrDefault(false)
+
     override fun keyboardUp(): Boolean =
         runCatching { PhoneRegistry.mainDriver?.imeShown() == true }.getOrDefault(false)
     override fun typeIntoPage(text: String, submit: Boolean): String? {

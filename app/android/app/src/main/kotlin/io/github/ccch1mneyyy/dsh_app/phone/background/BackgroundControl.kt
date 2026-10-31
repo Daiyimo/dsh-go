@@ -143,6 +143,14 @@ class BackgroundControl private constructor(context: Context) {
     fun key(code: Int): Boolean = engineCall(Proto.OP_INPUT_KEY) { putInt(Proto.KEY, code) }
 
     /**
+     * Puts the app's running task back into fullscreen (`am start --windowingMode 1 -n <component>`):
+     * this ROM answers a launch made from an app with its mini window, whatever the launch options say.
+     */
+    fun fullscreen(component: String): Boolean = engineCall(Proto.OP_FULLSCREEN) {
+        putString(Proto.COMPONENT, component)
+    }
+
+    /**
      * Keeps this app out of the ROM's freezer (`cmd deviceidle whitelist +<pkg>`): without it every
      * tool call stalls 30-70 s and then reports a timeout the moment the process is thawed.
      */

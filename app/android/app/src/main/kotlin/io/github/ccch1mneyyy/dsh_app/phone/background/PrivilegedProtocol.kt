@@ -60,6 +60,12 @@ object Proto {
     /** [OP_FREEZE_GUARD]: the package to exempt — always this app's own. */
     const val APP_PKG = "appPkg"
 
+    /** Re-applies the fullscreen windowing mode to the app this ROM put in its mini window. */
+    const val OP_FULLSCREEN = "fullscreen"
+
+    /** [OP_FULLSCREEN]: `pkg/activity` of the app to bring back to fullscreen. */
+    const val COMPONENT = "component"
+
     /** 自动恢复无障碍: grants [APP_PACKAGE] WRITE_SECURE_SETTINGS in [USER]; nothing else is grantable. */
     const val OP_GRANT_SECURE_SETTINGS = "grantSecureSettings"
 

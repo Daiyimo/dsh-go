@@ -59,6 +59,12 @@ interface PhoneEnv {
      * again is what closes the keyboard and takes the focus away, so the model is told not to.
      */
     fun keyboardUp(): Boolean = false
+
+    /**
+     * Gives the app's task back the fullscreen windowing mode through the privileged channel.
+     * A start made from here is a background one, and this ROM answers those with a mini window.
+     */
+    fun forceFullscreen(packageName: String): Boolean = false
     /**
      * Text into a page that has no field ids at all (微信, games): `input text` over the shell-uid
      * engine for ASCII, else borrowing the person's own input method for one commit and putting it
@@ -479,6 +485,15 @@ class PhoneCore(
                     if (r.ok) {
                         tasks.setApp(app.label)
                         lastScreen = PhoneScreen.MAIN
+                        // A start made from here is a background one, and this ROM answers those
+                        // with a small floating window (measured: `WindowMode:mini … fullscreen ->
+                        // stepos-mini-window` two milliseconds after the start). The shell can put
+                        // the task back (`am start --windowingMode 1`), so ask for that as well — a
+                        // task the person has to open by hand is not what 全屏打开应用 promises.
+                        if (env.launchFullscreen()) {
+                            val full = runCatching { env.forceFullscreen(app.packageName) }.getOrDefault(false)
+                            env.log("fullscreen after open ${app.packageName}: ok=$full")
+                        }
                         // The start already settled on its own page: that page is the task's
                         // picture from here, exactly as if it had been read.
                         r.screen?.let { rememberPicture(PhoneScreen.MAIN, it) }
@@ -493,7 +508,12 @@ class PhoneCore(
                 }
             }
             env.log("open ${app.packageName} left to the system")
-            return afterSystem(env.system().launch(app), ui.get("phone_log_open_app", "打开 %1\$s", app.packageName), app.label) // l10n:keep test default
+            val launched = afterSystem(env.system().launch(app), ui.get("phone_log_open_app", "打开 %1\$s", app.packageName), app.label) // l10n:keep test default
+            if (env.launchFullscreen() && env.a11yState() == A11yState.CONNECTED) {
+                val full = runCatching { env.forceFullscreen(app.packageName) }.getOrDefault(false)
+                env.log("fullscreen after system launch ${app.packageName}: ok=$full")
+            }
+            return launched
         }
         if (schemeApp) {
             env.log("refused the back screen for ${app.packageName}: pure gui")
@@ -781,6 +801,14 @@ class PhoneCore(
     /** tap / type / scroll / tap_xy: route, resolve, gate, perform. */
     private fun act(name: String, a: Args, scope: SerialWorker.Scope): Out {
         val sid = (if (name == PhoneToolCatalog.TAP_XY) a.str("observation") else a.str("screen"))
+        if (onLauncher()) {
+            // l10n:keep agent tool result
+            return Out(
+                "现在在桌面上，不在任务的应用里：在桌面上点击、滑动会把任务带偏（还会滑到负一屏）。要看当前页用 screen，要回到应用用 open。",
+                error = true,
+                decision = "refused:launcher",
+            )
+        }
         val which = when (val r = routeScreenId(sid)) {
             is Either.Left -> return Out(r.value, error = true)
             is Either.Right -> r.value
@@ -952,6 +980,18 @@ class PhoneCore(
         )
     }
 
+    /**
+     * True when the page the model is working on belongs to a launcher while the task is latched on
+     * one app: an icon tap re-opens the running app (into a small window on this ROM), and a sideways
+     * swipe on the home screen lands on the ROM's 负一屏 assistant page — either way the task loses
+     * the app it was working in and there is no picture of it left to work from.
+     */
+    private fun onLauncher(): Boolean {
+        if (!pureGui()) return false
+        val pkg = runCatching { env.peekPackage() }.getOrNull() ?: return false
+        return pkg in env.homePackages()
+    }
+
     private fun key(a: Args): Out {
         val key = when (a.str("key")?.lowercase()) {
             "back" -> PhoneAction.GlobalKey.BACK
@@ -971,6 +1011,15 @@ class PhoneCore(
             }
         }
         val summary = ui.get("phone_log_key", "按键 %1\$s", key.name.lowercase()) // l10n:keep test default
+        if (key == PhoneAction.GlobalKey.HOME && pureGui()) {
+            // l10n:keep agent tool result
+            return Out(
+                "任务正在一个应用里跑，不要按桌面：看当前页用 screen，换应用用 open。这台机型从桌面重开会把全屏 App 挤成小窗，在桌面上滑动还会滑到负一屏，任务就回不去了。",
+                error = true,
+                summary = summary,
+                decision = "refused:leave-app",
+            )
+        }
         val driver = when (val d = driverFor(which)) {
             is Either.Left -> return Out(d.value, error = true, summary = summary, decision = "unavailable")
             is Either.Right -> d.value

@@ -177,6 +177,10 @@ class PrivilegedDisplayCore(private val context: Context) {
             freezeGuard(request, response)
             return
         }
+        if (op == Proto.OP_FULLSCREEN) {
+            fullscreen(request, response)
+            return
+        }
         if (owner != null && owner != ownerId) throw Fault("identityChanged")
         if (keyguard?.isKeyguardLocked == true) throw Fault("locked")
         val pkg = request.getString(Proto.PKG).orEmpty()
@@ -253,6 +257,25 @@ class PrivilegedDisplayCore(private val context: Context) {
         if (!PACKAGE.matches(me)) throw Fault("invalidArguments")
         val ok = runShell("/system/bin/cmd", "deviceidle", "whitelist", "+$me")
         PhoneLog.i("freeze guard: deviceidle whitelist +$me ok=$ok")
+        response.putBoolean(Proto.OK, ok)
+    }
+
+    /**
+     * Puts the running task of [Proto.COMPONENT] back into the fullscreen windowing mode.
+     *
+     * This ROM answers an app-initiated (background) launch with `stepos-mini-window` even when the
+     * launch options ask for fullscreen: measured, `open 炉石传说` at 02:26:20 — the log shows
+     * `WindowMode:mini … fullscreen -> stepos-mini-window` two milliseconds after the start, and the
+     * game then ran in a small floating window with the tree reading the decorations around it. The
+     * same task flipped back with `am start --windowingMode 1 -n <component>`, and mode 11 is their
+     * mini window (the identical command with 11 puts it back there), so the shell uid can always
+     * repair the launch the accessibility service had to make.
+     */
+    private fun fullscreen(request: Bundle, response: Bundle) {
+        val component = request.getString(Proto.COMPONENT).orEmpty()
+        if (!COMPONENT.matches(component)) throw Fault("invalidArguments")
+        val ok = runShell("/system/bin/am", "start", "--windowingMode", "1", "-n", component)
+        PhoneLog.i("fullscreen $component via am: ok=$ok")
         response.putBoolean(Proto.OK, ok)
     }
 
@@ -891,6 +914,8 @@ class PrivilegedDisplayCore(private val context: Context) {
 
     companion object {
         private val PACKAGE = Regex("[a-zA-Z][a-zA-Z0-9_]*(\\.[a-zA-Z0-9_]+)+")
+        /** `pkg/activity`: exactly the shape `am start -n` takes, nothing else is passed to it. */
+        private val COMPONENT = Regex("[a-zA-Z][a-zA-Z0-9_]*(\\.[a-zA-Z0-9_]+)+/[a-zA-Z0-9_.$]+")
         private val FLAG_NAMES = listOf(
             "PUBLIC", "OWN_CONTENT_ONLY", "SUPPORTS_TOUCH", "DESTROY_CONTENT_ON_REMOVAL",
             "TRUSTED", "OWN_FOCUS", "STEAL_TOP_FOCUS_DISABLED")
