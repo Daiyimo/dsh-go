@@ -104,7 +104,7 @@ void main() {
       expect(c.read(phoneProvider).disclosureAccepted, isFalse);
 
       await _tapText(tester, '手机操控');
-      await _tapText(tester, '同意并开启');
+      await _tapText(tester, '我了解并同意开启');
       // Then how it confirms (test/access/phone_mode_test.dart).
       await _tapText(tester, '关键步骤先问我');
       await _tapText(tester, '继续');

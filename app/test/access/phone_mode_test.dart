@@ -71,7 +71,7 @@ void main() {
     testWidgets('after the disclosure: two ways, neither chosen, the key waits for one', (tester) async {
       await pump(tester);
       await _tapText(tester, '手机操控');
-      await _tapText(tester, '同意并开启');
+      await _tapText(tester, '我了解并同意开启');
       expect(find.byType(PhoneModeSheet), findsOneWidget);
       expect(find.text('选择确认方式'), findsOneWidget);
       expect(find.text('随时可在设置里更改'), findsOneWidget);
@@ -91,7 +91,7 @@ void main() {
     testWidgets('全程自动 says what stays with you, and is confirmed by name', (tester) async {
       final c = await pump(tester);
       await _tapText(tester, '手机操控');
-      await _tapText(tester, '同意并开启');
+      await _tapText(tester, '我了解并同意开启');
       await _tapText(tester, '全程自动');
       expect(find.text('这些仍由你来操作'), findsOneWidget);
       expect(
@@ -119,7 +119,7 @@ void main() {
     testWidgets('关键步骤先问我 is written the same way', (tester) async {
       await pump(tester);
       await _tapText(tester, '手机操控');
-      await _tapText(tester, '同意并开启');
+      await _tapText(tester, '我了解并同意开启');
       await _tapText(tester, '关键步骤先问我');
       expect(find.text('这些仍由你来操作'), findsNothing);
       await _tapText(tester, '继续');
@@ -131,7 +131,7 @@ void main() {
     testWidgets('closed without a choice: not picked; picked again, asked again', (tester) async {
       await pump(tester);
       await _tapText(tester, '手机操控');
-      await _tapText(tester, '同意并开启');
+      await _tapText(tester, '我了解并同意开启');
       await tester.tapAt(const Offset(195, 60));
       await _frames(tester);
       expect(find.byType(PhoneModeSheet), findsNothing);
@@ -146,7 +146,7 @@ void main() {
     testWidgets('unpicked after choosing: nothing is written', (tester) async {
       await pump(tester);
       await _tapText(tester, '手机操控');
-      await _tapText(tester, '同意并开启');
+      await _tapText(tester, '我了解并同意开启');
       await _tapText(tester, '全程自动');
       await _tapText(tester, '开启全程自动');
       await _tapText(tester, '手机操控');

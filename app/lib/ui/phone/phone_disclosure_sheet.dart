@@ -14,7 +14,7 @@ import '../theme/theme.dart';
 enum PhoneDisclosureAnswer { agree, notNow, ask }
 
 /// The 显著披露 before 「手机操控」 is first turned on: what is read, when, who
-/// gets it, and what DSH never does. Resolves true on 「同意并开启」;
+/// gets it, and what DSH never does. Resolves true on 「我了解并同意开启」;
 /// 「不确定？问 AI」 resolves false and opens the question in a new chat.
 Future<bool> showPhoneDisclosure(BuildContext context) async {
   final answer = await showAppSheet<PhoneDisclosureAnswer>(

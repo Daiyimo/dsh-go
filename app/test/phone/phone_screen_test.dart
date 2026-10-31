@@ -89,7 +89,7 @@ void main() {
 
       await tester.tap(find.byType(Switch).first);
       await tester.pumpAndSettle();
-      await tester.tap(find.text('同意并开启'));
+      await tester.tap(find.text('我了解并同意开启'));
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('phone-background-guide')), findsOneWidget);
       await tester.tap(find.widgetWithText(TextButton, '知道了'));

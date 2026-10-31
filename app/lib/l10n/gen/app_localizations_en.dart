@@ -9145,7 +9145,8 @@ class L10nEn extends L10n {
   String get phoneControlTapType => 'Tap and type for you';
 
   @override
-  String get phoneControlSensitiveHint => 'Sending and purchases normally require approval; settings can relax these protections.';
+  String get phoneControlSensitiveHint =>
+      'Sending and purchases normally require approval; settings can relax these protections.';
 
   @override
   String get phoneDisclosureWhatTitle => 'What it reads';

@@ -16067,7 +16067,7 @@ abstract class L10n {
   /// No description provided for @phoneControlSensitiveHint.
   ///
   /// In zh, this message translates to:
-  /// **'发送、下单前先问你，付款由你来'**
+  /// **'默认对发送、下单等操作先确认；调整设置可放宽这些保护'**
   String get phoneControlSensitiveHint;
 
   /// No description provided for @phoneDisclosureWhatTitle.
