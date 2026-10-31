@@ -136,15 +136,25 @@ class PhoneCore(
         }
     }
 
-    /** The one line a pure-GUI task carries on every main-screen read, so the model does not drift. */
-    private fun pureGuiHint(appLabel: String?): String =
+    /**
+     * The one line a pure-GUI task carries on every main-screen read, so the model does not drift.
+     *
+     * The wording follows the page: 微信 reads as a tree and its writes belong on the element
+     * numbers, while only a page with no numbers is tapped by picture coordinates. Telling both to
+     * use `tap_xy` sent the model to coordinates on pages that refuse them.
+     */
+    private fun pureGuiHint(appLabel: String?, kind: ScreenKind): String =
         // l10n:keep agent tool result
-        "「${appLabel ?: pictureLabel ?: "这个 App"}」走纯 GUI：不要用 background，用 tap_xy 点截图上的位置。"
+        if (kind == ScreenKind.CANVAS || kind == ScreenKind.BLANKED)
+            "「${appLabel ?: pictureLabel ?: "这个 App"}」走纯 GUI：不要用 background，用 tap_xy 点截图上的位置。"
+        else
+            // l10n:keep agent tool result
+            "「${appLabel ?: pictureLabel ?: "这个 App"}」走纯 GUI：不要用 background，用 tap / scroll 点元素编号。"
 
     /** What the model is told when it asks for the virtual screen inside a pure-GUI task. */
     private fun pureGuiSentence(appLabel: String?): String =
         // l10n:keep agent tool result
-        "「${appLabel ?: "这个 App"}」走纯 GUI：只在全屏 App 里操作，不用后台屏（虚拟屏）。不带 background 打开应用，用 screen 看屏幕、tap_xy 点截图上的位置。"
+        "「${appLabel ?: "这个 App"}」走纯 GUI：只在全屏 App 里操作，不用后台屏（虚拟屏）。不带 background 打开应用，用 screen 看屏幕：能读到控件编号就点编号，只有画面的页面用 tap_xy。"
 
     /** The screen of the last screen-based call, for `handoff`. */
     @Volatile private var lastScreen: PhoneScreen = PhoneScreen.MAIN
@@ -491,7 +501,7 @@ class PhoneCore(
         return Out(
             // l10n:keep agent tool result
             if (refused) "没有读取这个屏幕的内容。"
-            else if (which == PhoneScreen.MAIN && pureGui()) " " + pureGuiHint(snap.appLabel)
+            else if (which == PhoneScreen.MAIN && pureGui()) " " + pureGuiHint(snap.appLabel, snap.kind)
             else "",
             error = refused,
             screen = shown,
@@ -538,7 +548,7 @@ class PhoneCore(
         return Out(
             // l10n:keep agent tool result
             if (refused) "没有读取这个屏幕的内容。"
-            else if (which == PhoneScreen.MAIN && pureGui()) "等了 ${ms} 毫秒。 " + pureGuiHint(snap.appLabel)
+            else if (which == PhoneScreen.MAIN && pureGui()) "等了 ${ms} 毫秒。 " + pureGuiHint(snap.appLabel, snap.kind)
             else "等了 ${ms} 毫秒。",
             error = refused,
             screen = shown,

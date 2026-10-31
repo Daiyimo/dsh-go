@@ -117,11 +117,21 @@ class PhonePureGuiTest {
     }
 
     @Test fun theHintKeepsTheModelOnThePicture() {
-        pkg = "com.tencent.mm"
-        appLabel = "微信"
+        pkg = "com.game.example"
+        appLabel = "Game"
+        kind = ScreenKind.CANVAS
         val out = readMain()
         assertTrue(out.text, out.text.contains("tap_xy"))
         assertTrue("the hint is per read, so a long task cannot drift back", out.text.contains("不要用 background"))
+    }
+
+    @Test fun aReadableAppIsNotSentToCoordinates() {
+        pkg = "com.tencent.mm"
+        appLabel = "微信"
+        kind = ScreenKind.TREE
+        val out = readMain()
+        assertFalse("微信 reads as a tree: its writes belong on the element numbers", out.text.contains("tap_xy 点截图上的位置"))
+        assertTrue(out.text, out.text.contains("点元素编号"))
     }
 
     @Test fun anAppOutsideTheSchemeKeepsTheBackScreen() {
