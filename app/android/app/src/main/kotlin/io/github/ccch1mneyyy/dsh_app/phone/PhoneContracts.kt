@@ -191,6 +191,9 @@ interface PhoneDriver {
     /** Package of the app in front on this screen, if known (for per-app approval and deny lists). */
     fun foregroundPackage(): String?
 
+    /** Whether a focused editable field exists to paste into (微信 hides its tree, so: no). */
+    fun fieldReady(): Boolean = false
+
     /**
      * Puts [text] on the system clipboard. An accessibility service is allowed to write it where
      * this app's own process is refused ("Denying clipboard access … not in focus"), which is what

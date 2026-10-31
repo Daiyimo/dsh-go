@@ -28,6 +28,9 @@ interface ImePort {
  * tree is hidden, and the only one that never takes the person's keyboard away.
  */
 interface PastePort {
+    /** Whether a field node with focus is there to paste into at all (微信 hides its own). */
+    fun fieldReady(): Boolean
+
     /** Puts [text] on the system clipboard; false when nothing could write it. */
     fun clipboard(text: String): Boolean
 
@@ -41,17 +44,21 @@ interface PastePort {
 /**
  * 0·A: text into a page the accessibility tree cannot describe (微信, games).
  *
- * Two ways, both with the shell uid the 不打扰模式 engine already is, and neither asks the person to
- * change their keyboard:
+ * In the order of what costs the person least:
  *
  * - `input text` for ASCII: it types into whatever field has focus, so nothing moves and nothing
  *   flashes. `input keyevent 66` presses the enter a search field wants.
+ * - the clipboard, when the page leaves a field node to paste into: a real `ACTION_PASTE` lands the
+ *   text in the cursor and no keyboard is involved at all.
  * - an input method for everything else: `input text` cannot carry a single Chinese character (it
- *   throws on this ROM), so the only route left is an `InputConnection`. The engine selects this
- *   app's input method for the length of one commit and puts the person's keyboard back right
- *   after — the person's own keyboard stays the one they use.
+ *   throws on this ROM), and a page like 微信 ignores the paste key — measured on the device, the
+ *   key was delivered with the text already on the clipboard and nothing appeared in the field. So
+ *   the engine selects this app's input method for the length of one commit and puts the person's
+ *   keyboard back right after; it is the route that ends with the text in the field.
+ * - the paste key, but only when the input method route is unavailable, and then the model is told
+ *   the text is merely on the clipboard instead of being told the field is filled.
  *
- * When neither way is available (no Shizuku / self-ADB), the model gets a sentence saying so rather
+ * When nothing is available (no Shizuku / self-ADB), the model gets a sentence saying so rather
  * than a silently empty field.
  */
 class TextInjector(
@@ -70,34 +77,20 @@ class TextInjector(
             if (submit) channel.key(TypingChannel.ENTER)
             return null
         }
-        val pasted = viaClipboard(text, submit)
-        if (pasted.done) return pasted.message
-        return handover(text, submit)
-    }
-
-    /** Whether the clipboard route already answered the model; [Paste.done] false = still untried. */
-    private data class Paste(val done: Boolean, val message: String?)
-
-    /**
-     * Clipboard first, because it costs the person nothing: no keyboard is switched, no field has to
-     * be focused through the tree. A page with nodes gets a real [PastePort.pasteField] and the
-     * answer is honest; a page without them (微信) gets the paste key, and the shell only reports
-     * that the key was delivered — so the model is told what to look at instead of being told the
-     * field is filled.
-     */
-    private fun viaClipboard(text: String, submit: Boolean): Paste {
-        val port = paste ?: return Paste(false, null)
-        if (!port.clipboard(text)) return Paste(false, null)
-        if (port.pasteField()) {
+        val port = paste
+        // Only touch the clipboard when a paste has somewhere to land, so the person's clipboard is
+        // left alone on the pages that end up going through the input method anyway.
+        if (port != null && port.fieldReady() && port.clipboard(text) && port.pasteField()) {
             if (submit) channel.key(TypingChannel.ENTER)
-            return Paste(true, null)
+            return null
         }
-        if (port.pasteKey()) {
+        val borrowed = handover(text, submit)
+        if (borrowed == null) return null
+        if (port != null && port.clipboard(text) && port.pasteKey()) {
             if (submit) channel.key(TypingChannel.ENTER)
-            // l10n:keep agent tool result
-            return Paste(true, "文字已放进剪贴板，也按了粘贴键：看一眼输入框里有没有它。没有就长按输入框，点「粘贴」。")
+            return PASTE_KEY_ONLY
         }
-        return Paste(false, null)
+        return borrowed
     }
 
     /**
@@ -145,6 +138,11 @@ class TextInjector(
 
         private const val NO_ENGINE =
             "这个页面没有输入框编号，文字要经特权通道送进去：先在 设置 › 手机操控 › 进阶 开通 不打扰模式 或 自连 ADB（也可以用 DSH 输入法 手动顶上）。现在两条都不通。"
+
+        /** The paste key was delivered with the text on the clipboard — nothing proves it landed. */
+        // l10n:keep agent tool result
+        const val PASTE_KEY_ONLY =
+            "文字已放进剪贴板，也按了粘贴键：看一眼输入框里有没有它。没有就长按输入框，点「粘贴」。"
 
         /**
          * `input text` types keys, so only printable ASCII arrives; `%s` reaches it as a space, and

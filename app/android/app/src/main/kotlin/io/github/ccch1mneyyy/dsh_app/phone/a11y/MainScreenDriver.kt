@@ -130,6 +130,9 @@ internal class MainScreenDriver(private val service: PhoneA11yService, private v
         true
     }.getOrDefault(false)
 
+    override fun fieldReady(): Boolean =
+        runCatching { focusedField(service.rootInActiveWindow ?: return false) != null }.getOrDefault(false)
+
     override fun pasteField(): Boolean = runCatching {
         val root = service.rootInActiveWindow ?: return false
         val field = focusedField(root) ?: return false

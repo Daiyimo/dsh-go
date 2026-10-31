@@ -51,6 +51,8 @@ class TextInjectorTest {
             if (clipboardOk) texts += text
             return clipboardOk
         }
+        override fun fieldReady(): Boolean = fieldOk
+
         override fun pasteField(): Boolean = fieldOk
         override fun pasteKey(): Boolean = keyOk
     }
@@ -135,15 +137,18 @@ class TextInjectorTest {
 
     @Test fun aHiddenFieldGetsThePasteKeyAndAnHonestAnswer() {
         paste.fieldOk = false
+        ime.readyNow = false
         val out = injector.type("银行卡", submit = false)
         assertNotNull(out)
         assertTrue(out!!, out.contains("剪贴板"))
         assertTrue(out, out.contains("长按输入框"))
-        assertTrue(channel.imeCalls.isEmpty())
+        // the keyboard was borrowed and given back before the paste key was tried
+        assertEquals(listOf("enable", "set", "set", "disable"), channel.imeCalls.map { it.first })
         assertTrue(ime.commits.isEmpty())
     }
 
     @Test fun thePasteKeyStillSubmitsWhenAsked() {
+        ime.readyNow = false
         assertNotNull(injector.type("银行卡", submit = true))
         assertEquals(listOf("银行卡"), paste.texts)
         assertEquals(listOf(TypingChannel.ENTER), channel.keys)
@@ -153,6 +158,14 @@ class TextInjectorTest {
         paste.clipboardOk = false
         assertNull(injector.type("银行卡", submit = false))
         assertEquals(listOf("银行卡" to false), ime.commits)
+    }
+
+    @Test fun aBorrowedKeyboardBeatsThePasteKeyOnAPicturePage() {
+        paste.fieldOk = false
+        assertNull(injector.type("银行卡", submit = false))
+        assertEquals(listOf("银行卡" to false), ime.commits)
+        assertTrue(channel.keys.isEmpty())
+        assertTrue(paste.texts.isEmpty())
     }
 
     @Test fun asciiOnlyIsPrintableAsciiAndNoPlaceholder() {

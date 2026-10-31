@@ -157,11 +157,19 @@ class PhoneControl private constructor(private val app: Context) : PhoneEnv, Con
                 // ("Denying clipboard access … not in focus"), the service is not.
                 override fun clipboard(text: String): Boolean =
                     runCatching { PhoneRegistry.mainDriver?.setClipboard(text) == true }.getOrDefault(false)
+                        .also { log("paste route: clipboard set ok=$it") }
+
+                override fun fieldReady(): Boolean =
+                    runCatching { PhoneRegistry.mainDriver?.fieldReady() == true }.getOrDefault(false)
+                        .also { if (!it) log("paste route: no field to paste into") }
 
                 override fun pasteField(): Boolean =
                     runCatching { PhoneRegistry.mainDriver?.pasteField() == true }.getOrDefault(false)
+                        .also { log("paste route: action paste ok=$it") }
 
-                override fun pasteKey(): Boolean = background.key(android.view.KeyEvent.KEYCODE_PASTE)
+                override fun pasteKey(): Boolean =
+                    background.key(android.view.KeyEvent.KEYCODE_PASTE)
+                        .also { log("paste route: paste key ok=$it") }
             },
         )
     }
