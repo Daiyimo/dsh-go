@@ -164,21 +164,26 @@ class PrivilegedDisplayCore(private val context: Context) {
     }.getOrDefault(false)
 
     private fun dispatch(op: String?, request: Bundle, response: Bundle) {
-        val ownerId = request.getString(Proto.OWNER).orEmpty()
-        if (op == null || ownerId.isEmpty()) throw Fault("invalidArguments")
-        if (op == Proto.OP_RELEASE) {
-            if (owner == ownerId) releaseAll()
-            response.putBoolean("released", true)
-            return
-        }
+        if (op == null) throw Fault("invalidArguments")
         // Independent of any display, owner or lock state: keeping the app out of the ROM's freezer
-        // is what makes a task usable at all (a frozen app answers every call 30-70 s late).
+        // is what makes a task usable at all (a frozen app answers every call 30-70 s late), and the
+        // fullscreen repair has to happen before a display exists. Both used to sit *below* the
+        // owner check, which they cannot satisfy — nothing sets OWNER for them, so the engine
+        // answered invalidArguments and the app dutifully logged ok=false while both silently did
+        // nothing: the freeze whitelist was never written and the game stayed in the mini window.
         if (op == Proto.OP_FREEZE_GUARD) {
             freezeGuard(request, response)
             return
         }
         if (op == Proto.OP_FULLSCREEN) {
             fullscreen(request, response)
+            return
+        }
+        val ownerId = request.getString(Proto.OWNER).orEmpty()
+        if (ownerId.isEmpty()) throw Fault("invalidArguments")
+        if (op == Proto.OP_RELEASE) {
+            if (owner == ownerId) releaseAll()
+            response.putBoolean("released", true)
             return
         }
         if (owner != null && owner != ownerId) throw Fault("identityChanged")

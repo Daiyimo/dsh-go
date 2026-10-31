@@ -25,6 +25,7 @@ import io.github.ccch1mneyyy.dsh_app.phone.Availability
 import io.github.ccch1mneyyy.dsh_app.phone.CollectResult
 import io.github.ccch1mneyyy.dsh_app.phone.PhoneAction
 import io.github.ccch1mneyyy.dsh_app.phone.PhoneDriver
+import io.github.ccch1mneyyy.dsh_app.phone.PhoneLog
 import io.github.ccch1mneyyy.dsh_app.phone.PhoneRegistry
 import io.github.ccch1mneyyy.dsh_app.phone.PhoneUnlocks
 import io.github.ccch1mneyyy.dsh_app.phone.PhoneScreen
@@ -611,6 +612,7 @@ internal class MainScreenDriver(private val service: PhoneA11yService, private v
         // l10n:keep agent screen result
         if (!same) return ActionResult(false, "截图之后界面已经换了，没有点击。请重新看屏幕。", observeQuiet())
         val before = clock.count
+        PhoneLog.i("tap_xy norm=(${a.x},${a.y}) -> (${point.first},${point.second}) picture=${geometry.width}x${geometry.height} screen=${snap.display.width}x${snap.display.height} at=${geometry.originX},${geometry.originY}")
         // l10n:keep agent screen result
         if (!actuator.tap(point.first, point.second)) return ActionResult(false, "系统没有接受这次点击。", observeQuiet())
         // l10n:keep agent screen result

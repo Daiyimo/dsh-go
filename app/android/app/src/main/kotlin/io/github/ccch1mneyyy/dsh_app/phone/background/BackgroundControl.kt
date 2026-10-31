@@ -172,10 +172,12 @@ class BackgroundControl private constructor(context: Context) {
     private fun engineCall(op: String, fill: Bundle.() -> Unit): Boolean {
         val shared = mode != "off"
         val ch = if (shared) activeChannel() else openAny()
+        var why: String? = null
         val ok = ch != null && runCatching {
-            ch.execute(Bundle().apply { putString(Proto.OP, op); fill() }).getBoolean(Proto.OK)
-        }.getOrDefault(false)
-        PhoneLog.i("privileged $op via ${if (shared) mode else "one-shot"}: ok=$ok channel=${ch != null}")
+            val answer = ch.execute(Bundle().apply { putString(Proto.OP, op); fill() })
+            answer.getBoolean(Proto.OK).also { if (!it) why = answer.getString(Proto.ERROR) ?: "no reason" }
+        }.onFailure { why = "${it.javaClass.simpleName}: ${it.message}" }.getOrDefault(false)
+        PhoneLog.i("privileged $op via ${if (shared) mode else "one-shot"}: ok=$ok channel=${ch != null}" + (why?.let { " why=$it" } ?: ""))
         if (!shared) disconnectAll()
         return ok
     }
