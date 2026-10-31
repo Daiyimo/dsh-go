@@ -13,7 +13,7 @@
     <string name="background_unknown_mode">未知模式</string>
     <string name="background_not_ready">特权通道未就绪</string>
     <string name="background_no_response">特权通道未响应</string>
-    <string name="background_injection_denied">注入被拒：请在系统里打开「USB 调试(安全设置)」后重试</string>
+    <string name="background_injection_denied">注入被拒：系统不让往虚拟屏注入点击。小米类机型要打开「USB 调试(安全设置)」；其他机型上虚拟屏点击基本不可用，请在「进阶」里关掉不打扰模式，让任务在全屏 App 里用纯 GUI 跑</string>
     <!-- notify -->
     <string name="notify_decline">拒绝</string>
     <string name="notify_allow_once">允许本次</string>

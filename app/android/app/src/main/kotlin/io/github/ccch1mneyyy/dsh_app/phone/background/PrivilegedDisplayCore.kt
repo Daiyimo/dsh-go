@@ -29,6 +29,7 @@ import android.os.Process
 import android.os.SystemClock
 import android.text.InputType
 import android.util.SparseArray
+import io.github.ccch1mneyyy.dsh_app.phone.PhoneLog
 import android.view.Display
 import android.view.InputDevice
 import android.view.InputEvent
@@ -225,7 +226,9 @@ class PrivilegedDisplayCore(private val context: Context) {
         try {
             owner = "__gate__"
             createDisplay(Bundle().apply { putInt(Proto.SHORT_SIDE, 360); putInt(Proto.ASPECT_W, 9); putInt(Proto.ASPECT_H, 20) })
-            val injectOk = runCatching { injectTap(1, 1, false); true }.getOrDefault(false)
+            val injectOk = runCatching { injectTap(1, 1, false); true }
+                .onFailure { PhoneLog.i("gate probe: injection refused (${it.javaClass.simpleName}: ${it.message})") }
+                .getOrDefault(false)
             response.putBoolean(Proto.INJECT_OK, injectOk)
             response.putInt(Proto.DISPLAY_ID, displayId())
         } finally {
@@ -678,6 +681,13 @@ class PrivilegedDisplayCore(private val context: Context) {
     // ---- injection shims (hidden APIs via reflection) ----------------------
 
     private fun injectTap(x: Int, y: Int, long: Boolean) {
+        // `input -d <display>` first: the shell injector behind `adb shell input`, which needs no
+        // INJECT_EVENTS reflection (some ROMs refuse that outright, and the refusal used to be
+        // reported as a missing USB-debugging switch).
+        val id = displayId()
+        if (long) {
+            if (shell(id, "swipe", "$x", "$y", "$x", "$y", "650")) return
+        } else if (shell(id, "tap", "$x", "$y")) return
         val down = SystemClock.uptimeMillis()
         sendMotion(MotionEvent.ACTION_DOWN, x, y, down)
         sleepChecked(if (long) 650 else 60)
@@ -685,6 +695,7 @@ class PrivilegedDisplayCore(private val context: Context) {
     }
 
     private fun injectSwipe(sx: Int, sy: Int, ex: Int, ey: Int, duration: Int) {
+        if (shell(displayId(), "swipe", "$sx", "$sy", "$ex", "$ey", "${duration.coerceAtLeast(1)}")) return
         val down = SystemClock.uptimeMillis()
         sendMotion(MotionEvent.ACTION_DOWN, sx, sy, down)
         val steps = (duration / 16).coerceAtLeast(1)
@@ -704,10 +715,23 @@ class PrivilegedDisplayCore(private val context: Context) {
     }
 
     private fun injectKey(src: KeyEvent) {
+        if (shell(displayId(), "keyevent", src.keyCode.toString())) return
         val event = KeyEvent(src.downTime, src.eventTime, src.action, src.keyCode, 0, src.metaState,
             KeyCharacterMap.VIRTUAL_KEYBOARD, src.scanCode, src.flags, InputDevice.SOURCE_KEYBOARD)
         inject(event)
     }
+
+    /** `input -d <displayId> …` in the shell uid: the injector `adb shell input` uses. */
+    private fun shell(displayId: Int, vararg args: String): Boolean = runCatching {
+        val command = mutableListOf("/system/bin/input", "-d", displayId.toString())
+        command.addAll(args)
+        val process = ProcessBuilder(command).redirectErrorStream(true).start()
+        val out = process.inputStream.readBytes().toString(Charsets.UTF_8).trim()
+        val finished = process.waitFor(SHELL_TIMEOUT_MS, java.util.concurrent.TimeUnit.MILLISECONDS)
+        val done = finished && process.exitValue() == 0
+        if (!done) PhoneLog.i("input ${command.joinToString(" ")} failed: $out")
+        done
+    }.getOrDefault(false)
 
     // Runs in the shell-uid privileged process (Shizuku UserService or app_process),
     // which the app hidden-API policy that lint models doesn't apply to.
@@ -723,7 +747,10 @@ class PrivilegedDisplayCore(private val context: Context) {
         // accept ASYNC (0). Either way the action is verified by re-observing the screen, never by
         // replaying it — so an async accept is safe here.
         val accepted = method.invoke(manager, event, 2) == true || method.invoke(manager, event, 0) == true
-        if (!accepted) throw Fault("inputRejected")
+        if (!accepted) {
+            PhoneLog.i("injectInputEvent refused display=$id")
+            throw Fault("inputRejected")
+        }
     }
 
     private fun setImePolicyHide(displayId: Int) {
