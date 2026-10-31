@@ -134,7 +134,7 @@ Disclaimer:
 - The software is provided as is. Liability limits apply only where permitted by law; mandatory rights remain.
 - Enable temporarily only on an owned or authorized device. Do not test with real payment details on your primary phone.
 
-Read the [full risk notice and disclaimer](https://github.com/ccch1mneyyy/dsh-Go/blob/main/DISCLAIMER.en.md) for more on authorization, data transmission, ADB/Shizuku and statutory rights.
+Read the [full risk notice and disclaimer](https://github.com/Daiyimo/dsh-go/blob/main/DISCLAIMER.en.md) for more on authorization, data transmission, ADB/Shizuku and statutory rights.
 
 ## Action log and advanced
 

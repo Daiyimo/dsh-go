@@ -134,7 +134,7 @@
 - 软件按现状提供；免责仅在适用法律允许范围内有效，不影响依法不得排除的责任。
 - 仅在自有或获授权的设备上临时开启，用后关闭；请勿在存有真实支付信息的主力机上测试。
 
-更多说明见[完整风险提示与责任说明](https://github.com/ccch1mneyyy/dsh-Go/blob/main/DISCLAIMER.md)。
+更多说明见[完整风险提示与责任说明](https://github.com/Daiyimo/dsh-go/blob/main/DISCLAIMER.md)。
 
 ## 操作记录与进阶
 
