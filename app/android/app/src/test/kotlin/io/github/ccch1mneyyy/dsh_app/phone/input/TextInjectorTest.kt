@@ -6,7 +6,8 @@ import org.junit.Test
 
 /**
  * 0·A: text into a page with no field ids. ASCII goes through `input text` (nothing on screen
- * moves); Chinese borrows the person's input method for one commit and hands it straight back.
+ * moves); everything else goes through the clipboard first, because that costs the person nothing;
+ * borrowing their input method for one commit is the fallback when the clipboard cannot be pasted.
  */
 class TextInjectorTest {
     private class Channel : TypingChannel {
@@ -40,10 +41,25 @@ class TextInjectorTest {
         }
     }
 
+    /** Stands in for the accessibility driver's clipboard plus the shell's paste key. */
+    private class Paste : PastePort {
+        val texts = mutableListOf<String>()
+        var clipboardOk = true
+        var fieldOk = false
+        var keyOk = true
+        override fun clipboard(text: String): Boolean {
+            if (clipboardOk) texts += text
+            return clipboardOk
+        }
+        override fun pasteField(): Boolean = fieldOk
+        override fun pasteKey(): Boolean = keyOk
+    }
+
     private val channel = Channel()
     private val ime = Ime()
+    private val paste = Paste()
     private var clock = 0L
-    private val injector = TextInjector(channel, ime, now = { clock }, sleep = { clock += it })
+    private val injector = TextInjector(channel, ime, paste, now = { clock }, sleep = { clock += it })
 
     @Test fun asciiGoesThroughTheShellWithoutTouchingTheKeyboard() {
         assertNull(injector.type("hello123", submit = false))
@@ -58,6 +74,7 @@ class TextInjectorTest {
     }
 
     @Test fun chineseBorrowsTheKeyboardThenGivesItBack() {
+        paste.clipboardOk = false
         assertNull(injector.type("银行卡", submit = false))
         assertEquals(listOf("银行卡" to false), ime.commits)
         val sogou = "com.sohu.inputmethod.sogou.oem/com.sohu.inputmethod.sogou.SogouIME"
@@ -75,6 +92,7 @@ class TextInjectorTest {
     }
 
     @Test fun aRefusedCommitStillGivesTheKeyboardBack() {
+        paste.clipboardOk = false
         ime.answer = "应用没有接受这段文字。"
         assertEquals("应用没有接受这段文字。", injector.type("银行卡", submit = false))
         assertEquals(Proto.IME_DISABLE to ime.component(), channel.imeCalls.last())
@@ -82,6 +100,7 @@ class TextInjectorTest {
 
     @Test fun noEngineSaysWhichSwitchToOpen() {
         channel.asciiOk = false
+        paste.clipboardOk = false
         channel.imeOk = false
         val out = injector.type("银行卡", submit = false)
         assertNotNull(out)
@@ -91,6 +110,7 @@ class TextInjectorTest {
 
     @Test fun aFieldThatNeverTakesTheTextSaysWhatToDo() {
         ime.readyNow = false
+        paste.clipboardOk = false
         val out = injector.type("银行卡", submit = false)
         assertNotNull(out)
         assertTrue(out!!, out.contains("tap_xy"))
@@ -98,8 +118,40 @@ class TextInjectorTest {
 
     @Test fun theInputMethodAlreadyInUseIsNotSwitchedAgain() {
         ime.currentId = ime.component()
+        paste.clipboardOk = false
         assertNull(injector.type("银行卡", submit = false))
         assertTrue(channel.imeCalls.isEmpty())
+        assertEquals(listOf("银行卡" to false), ime.commits)
+    }
+
+    @Test fun chineseGoesThroughTheClipboardWithoutTouchingTheKeyboard() {
+        paste.fieldOk = true
+        assertNull(injector.type("银行卡", submit = false))
+        assertEquals(listOf("银行卡"), paste.texts)
+        assertTrue(channel.typed.isEmpty())
+        assertTrue(channel.imeCalls.isEmpty())
+        assertTrue(ime.commits.isEmpty())
+    }
+
+    @Test fun aHiddenFieldGetsThePasteKeyAndAnHonestAnswer() {
+        paste.fieldOk = false
+        val out = injector.type("银行卡", submit = false)
+        assertNotNull(out)
+        assertTrue(out!!, out.contains("剪贴板"))
+        assertTrue(out, out.contains("长按输入框"))
+        assertTrue(channel.imeCalls.isEmpty())
+        assertTrue(ime.commits.isEmpty())
+    }
+
+    @Test fun thePasteKeyStillSubmitsWhenAsked() {
+        assertNotNull(injector.type("银行卡", submit = true))
+        assertEquals(listOf("银行卡"), paste.texts)
+        assertEquals(listOf(TypingChannel.ENTER), channel.keys)
+    }
+
+    @Test fun aClipboardNobodyAcceptsFallsBackToTheKeyboard() {
+        paste.clipboardOk = false
+        assertNull(injector.type("银行卡", submit = false))
         assertEquals(listOf("银行卡" to false), ime.commits)
     }
 

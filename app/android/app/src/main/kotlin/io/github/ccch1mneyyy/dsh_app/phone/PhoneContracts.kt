@@ -190,6 +190,19 @@ interface PhoneDriver {
 
     /** Package of the app in front on this screen, if known (for per-app approval and deny lists). */
     fun foregroundPackage(): String?
+
+    /**
+     * Puts [text] on the system clipboard. An accessibility service is allowed to write it where
+     * this app's own process is refused ("Denying clipboard access … not in focus"), which is what
+     * the paste route needs. False when nothing could be written.
+     */
+    fun setClipboard(text: String): Boolean = false
+
+    /**
+     * Pastes the clipboard into the field that has focus, when the page exposes one. False on a
+     * page whose tree is hidden (微信, games): there the paste has to go through the paste key.
+     */
+    fun pasteField(): Boolean = false
 }
 
 data class ConfirmRequest(

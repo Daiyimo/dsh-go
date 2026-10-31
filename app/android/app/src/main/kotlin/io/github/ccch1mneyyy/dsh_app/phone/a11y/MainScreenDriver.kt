@@ -117,6 +117,37 @@ internal class MainScreenDriver(private val service: PhoneA11yService, private v
     override fun foregroundPackage(): String? =
         hint.seen(TreeCapture.foregroundPackage(service, screenBox()), SystemClock.uptimeMillis())
 
+    /**
+     * 微信's window shows nothing to the accessibility tree, so [pasteField] has nothing to act on;
+     * the text still has to reach the field, and the clipboard is the one channel that survives a
+     * hidden tree. This app's own process is refused ("Denying clipboard access … not in focus"),
+     * an accessibility service is not.
+     */
+    override fun setClipboard(text: String): Boolean = runCatching {
+        val manager = service.getSystemService(android.content.ClipboardManager::class.java)
+            ?: return false
+        manager.setPrimaryClip(android.content.ClipData.newPlainText("dsh", text))
+        true
+    }.getOrDefault(false)
+
+    override fun pasteField(): Boolean = runCatching {
+        val root = service.rootInActiveWindow ?: return false
+        val field = focusedField(root) ?: return false
+        field.performAction(AccessibilityNodeInfo.ACTION_PASTE)
+    }.getOrDefault(false)
+
+    /** The editable node the cursor is in, else the only editable one on the page. */
+    private fun focusedField(root: AccessibilityNodeInfo): AccessibilityNodeInfo? {
+        val edits = ArrayList<AccessibilityNodeInfo>(4)
+        fun walk(node: AccessibilityNodeInfo?, depth: Int) {
+            if (node == null || depth > 40) return
+            if (node.isEditable) edits += node
+            for (i in 0 until node.childCount) walk(node.getChild(i), depth + 1)
+        }
+        walk(root, 0)
+        return edits.firstOrNull { it.isFocused } ?: edits.singleOrNull()
+    }
+
     override fun observe(detail: Boolean, image: Boolean, region: Box?): ScreenSnapshot = synchronized(lock) {
         val start = SystemClock.uptimeMillis()
         availability().let { if (!it.ok) return blank(it.reason!!) }

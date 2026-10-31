@@ -880,7 +880,7 @@ class PrivilegedDisplayCore(private val context: Context) {
         private const val MAX_TEXT = 2_000
         private const val SHELL_TIMEOUT_MS = 6_000L
         /** Enter, delete, back, home: the keys a typed answer ever needs to press. */
-        private val KEYS_ALLOWED = setOf(66, 67, 4, 3)
+        private val KEYS_ALLOWED = setOf(66, 67, 4, 3, 279)
 
         private val KEYS = mapOf(
             "back" to KeyEvent.KEYCODE_BACK, "home" to KeyEvent.KEYCODE_HOME,

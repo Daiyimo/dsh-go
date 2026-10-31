@@ -24,6 +24,21 @@ interface ImePort {
 }
 
 /**
+ * What it needs to reach a field through the clipboard: the one channel that survives a page whose
+ * tree is hidden, and the only one that never takes the person's keyboard away.
+ */
+interface PastePort {
+    /** Puts [text] on the system clipboard; false when nothing could write it. */
+    fun clipboard(text: String): Boolean
+
+    /** Pastes into the field node that has focus; false on a page that hides its tree (微信). */
+    fun pasteField(): Boolean
+
+    /** Presses the paste key through the shell uid; false when no privileged channel is open. */
+    fun pasteKey(): Boolean
+}
+
+/**
  * 0·A: text into a page the accessibility tree cannot describe (微信, games).
  *
  * Two ways, both with the shell uid the 不打扰模式 engine already is, and neither asks the person to
@@ -42,6 +57,7 @@ interface ImePort {
 class TextInjector(
     private val channel: TypingChannel,
     private val ime: ImePort,
+    private val paste: PastePort? = null,
     /** Uptime in ms; a seam so the wait below is testable without a device. */
     private val now: () -> Long = { System.nanoTime() / 1_000_000 },
     private val sleep: (Long) -> Unit = { Thread.sleep(it) },
@@ -54,7 +70,34 @@ class TextInjector(
             if (submit) channel.key(TypingChannel.ENTER)
             return null
         }
+        val pasted = viaClipboard(text, submit)
+        if (pasted.done) return pasted.message
         return handover(text, submit)
+    }
+
+    /** Whether the clipboard route already answered the model; [Paste.done] false = still untried. */
+    private data class Paste(val done: Boolean, val message: String?)
+
+    /**
+     * Clipboard first, because it costs the person nothing: no keyboard is switched, no field has to
+     * be focused through the tree. A page with nodes gets a real [PastePort.pasteField] and the
+     * answer is honest; a page without them (微信) gets the paste key, and the shell only reports
+     * that the key was delivered — so the model is told what to look at instead of being told the
+     * field is filled.
+     */
+    private fun viaClipboard(text: String, submit: Boolean): Paste {
+        val port = paste ?: return Paste(false, null)
+        if (!port.clipboard(text)) return Paste(false, null)
+        if (port.pasteField()) {
+            if (submit) channel.key(TypingChannel.ENTER)
+            return Paste(true, null)
+        }
+        if (port.pasteKey()) {
+            if (submit) channel.key(TypingChannel.ENTER)
+            // l10n:keep agent tool result
+            return Paste(true, "文字已放进剪贴板，也按了粘贴键：看一眼输入框里有没有它。没有就长按输入框，点「粘贴」。")
+        }
+        return Paste(false, null)
     }
 
     /**

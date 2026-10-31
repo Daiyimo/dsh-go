@@ -29,6 +29,7 @@ import io.github.ccch1mneyyy.dsh_app.phone.background.BackgroundControl
 import io.github.ccch1mneyyy.dsh_app.phone.background.SecureSettingsGrant
 import io.github.ccch1mneyyy.dsh_app.phone.input.DshIme
 import io.github.ccch1mneyyy.dsh_app.phone.input.DshImePort
+import io.github.ccch1mneyyy.dsh_app.phone.input.PastePort
 import io.github.ccch1mneyyy.dsh_app.phone.input.TextInjector
 import io.github.ccch1mneyyy.dsh_app.phone.input.TypingChannel
 import io.github.ccch1mneyyy.dsh_app.runtime.DshService
@@ -151,6 +152,17 @@ class PhoneControl private constructor(private val app: Context) : PhoneEnv, Con
                 override fun ime(action: String, component: String): Boolean = background.ime(action, component)
             },
             DshImePort(app),
+            object : PastePort {
+                // The accessibility service writes the clipboard: this process is refused
+                // ("Denying clipboard access … not in focus"), the service is not.
+                override fun clipboard(text: String): Boolean =
+                    runCatching { PhoneRegistry.mainDriver?.setClipboard(text) == true }.getOrDefault(false)
+
+                override fun pasteField(): Boolean =
+                    runCatching { PhoneRegistry.mainDriver?.pasteField() == true }.getOrDefault(false)
+
+                override fun pasteKey(): Boolean = background.key(android.view.KeyEvent.KEYCODE_PASTE)
+            },
         )
     }
 

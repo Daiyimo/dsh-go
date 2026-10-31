@@ -147,8 +147,19 @@ object DshIme {
     /** A field is being edited by this input method right now. */
     fun ready(): Boolean = live != null
 
-    /** The input method this app ships, for the status map and the settings page. */
-    fun component(context: Context): String = context.packageName + "/" + DshImeService::class.java.name
+    /**
+     * The input method this app ships, for the status map and the settings page.
+     *
+     * The system spells an input method with the short service name: `/system/bin/ime` answers
+     * "Unknown input method … cannot be enabled for user #0" (rc 255) to the fully qualified class
+     * name, while `io.github.ccch1mneyyy.dsh_app/.phone.input.DshImeService` is accepted — and
+     * [android.provider.Settings.Secure.DEFAULT_INPUT_METHOD] stores exactly that short form.
+     */
+    fun component(context: Context): String {
+        val full = DshImeService::class.java.name
+        val short = if (full.startsWith(context.packageName + ".")) full.removePrefix(context.packageName + ".") else full
+        return context.packageName + "/." + short
+    }
 
     fun enabled(context: Context): Boolean = runCatching {
         val imm = context.getSystemService(Context.INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager
