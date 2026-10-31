@@ -428,10 +428,17 @@
     }
   },
   "phonePureGuiTitle": "Pure GUI apps",
-  "phonePureGuiSubtitle": "A task runs in one fullscreen app: no virtual screen, nothing drawn over it.",
+  "phonePureGuiSubtitle": "A task runs in one fullscreen app: no virtual screen, and no status bar over it.",
   "phonePureGuiEmpty": "The list is empty: apps like WeChat are handled like any other app.",
   "phonePureGuiNone": "None added",
   "phonePureGuiAdd": "Add an app",
+  "phonePureGuiFull": "The list is full: remove one first ({count} at most)",
+  "@phonePureGuiFull": {
+    "description": "Subtitle of the add row when the pure-GUI list is at its cap.",
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
   "phonePureGuiAddHint": "Add by package name",
   "phonePureGuiRemoveTitle": "Remove “{app}” from the list?",
   "@phonePureGuiRemoveTitle": {

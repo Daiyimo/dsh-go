@@ -23,6 +23,7 @@ class PhonePureGuiTest {
     private var appLabel: String? = "Example"
     private var kind = ScreenKind.TREE
     private var scheme = PhoneCore.DEFAULT_GUI_SCHEME
+    private val launches = mutableListOf<String>()
 
     private fun driver(screen: PhoneScreen, id: String) = object : PhoneDriver {
         override val screen = screen
@@ -66,7 +67,7 @@ class PhonePureGuiTest {
         override fun system() = object : SystemApi {
             override fun apps() = listOf(AppEntry("Example", "example.app"), AppEntry("微信", "com.tencent.mm"))
             override fun isInstalled(pkg: String) = true
-            override fun launch(app: AppEntry) = error("unexpected launch")
+            override fun launch(app: AppEntry): SysResult { launches += app.packageName; return SysResult(true, "打开了 ${app.label}") }
             override fun urlTarget(url: String) = error("unexpected URL")
             override fun openUrl(url: String, target: UrlTarget) = error("unexpected URL open")
             override fun intent(spec: IntentSpec, shareTo: AppEntry?) = error("unexpected intent")
@@ -134,6 +135,38 @@ class PhonePureGuiTest {
         val out = readMain()
         assertFalse("微信 reads as a tree: its writes belong on the element numbers", out.text.contains("tap_xy 点截图上的位置"))
         assertTrue(out.text, out.text.contains("点元素编号"))
+    }
+
+    @Test fun aBackScreenIdIsRefusedToo() {
+        // The virtual screen can be named by its id (`b3`), not only by background:true.
+        pkg = "com.tencent.mm"
+        appLabel = "微信"
+        val out = core.call(PhoneToolCatalog.TAP, mapOf("screen" to "b1", "id" to 3))
+        assertTrue(out.text, out.isError)
+        assertTrue(out.text, out.text.contains("纯 GUI"))
+        assertEquals("the display was asked for before the refusal", 0, backgroundRequests)
+    }
+
+    @Test fun theDisplayIsHandedBackOncePerTask() {
+        pkg = "com.game.example"
+        appLabel = "Game"
+        kind = ScreenKind.CANVAS
+        readMain()
+        readMain()
+        readMain()
+        assertEquals("every read tore the display down again", 1, closeCount)
+    }
+
+    @Test fun anotherAppStillOpensInFrontWhileLatched() {
+        // Pure GUI is about the virtual screen, not about the task: opening a normal app on the
+        // person's own screen is exactly what is left.
+        pkg = "com.game.example"
+        appLabel = "Game"
+        kind = ScreenKind.CANVAS
+        readMain()
+        val out = core.call(PhoneToolCatalog.OPEN, mapOf("app" to "example.app"))
+        assertFalse("a front-screen launch was refused inside a pure-GUI task: ${out.text}", out.isError)
+        assertEquals(listOf("example.app"), launches)
     }
 
     @Test fun anAppOutsideTheSchemeKeepsTheBackScreen() {

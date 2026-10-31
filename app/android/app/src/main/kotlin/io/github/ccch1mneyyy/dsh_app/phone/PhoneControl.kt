@@ -230,7 +230,7 @@ class PhoneControl private constructor(private val app: Context) : PhoneEnv, Con
         val packages = guiScheme().sorted()
         val labels = LinkedHashMap<String, String>()
         for (pkg in packages) label(pkg)?.let { labels[pkg] = it }
-        return linkedMapOf("packages" to packages, "labels" to labels)
+        return linkedMapOf("packages" to packages, "labels" to labels, "max" to MAX_GUI_SCHEME)
     }
 
     private fun label(pkg: String): String? = try {

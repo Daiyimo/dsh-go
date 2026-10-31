@@ -117,9 +117,12 @@ class PhonePlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCallHandle
             "adbConnect" -> async(result) { control.background.adbConnect() }
             "getPolicies" -> async(result) { control.policiesMap() }
             "setPolicies" -> async(result) { control.setPolicies(call.arguments as? Map<*, *>) }
+            // The list that was actually stored: the native side trims blanks, repeats and the cap,
+            // and the page shows what came back rather than what it sent.
             "setGuiScheme" -> async(result) {
                 val raw = call.argument<List<*>>("packages") ?: emptyList<Any?>()
                 control.setGuiScheme(raw.mapNotNull { it as? String })
+                control.guiSchemeMap()
             }
             "actionLog" -> result.success(control.log.toMaps(call.argument<Int>("limit") ?: 100))
             // l10n:keep agent stop reason

@@ -112,9 +112,15 @@ class PhoneCore(
         null
     }
 
-    /** A pure-GUI task starts here: the virtual screen goes, and so does a line already drawn. */
+    /**
+     * A pure-GUI task starts here: the virtual screen goes, and so does a line already drawn.
+     *
+     * [pkg] is null when the page hides which app it belongs to. The latch is written anyway: the
+     * display has just been taken down, and without a latch the next call would be allowed to bring
+     * it straight back up.
+     */
     private fun enterPureGui(pkg: String?, label: String? = null) {
-        if (pkg != null) pictureApp = pkg
+        pictureApp = pkg ?: UNKNOWN_PACKAGE
         if (label != null) pictureLabel = label
         pictureTask = tasks.snapshot().id
         if (!pureGuiEntered) {
@@ -503,7 +509,7 @@ class PhoneCore(
         return Out(
             // l10n:keep agent tool result
             if (refused) "没有读取这个屏幕的内容。"
-            else if (which == PhoneScreen.MAIN && pureGui()) " " + pureGuiHint(snap.appLabel, snap.kind)
+            else if (which == PhoneScreen.MAIN && pureGui()) pureGuiHint(snap.appLabel, snap.kind)
             else "",
             error = refused,
             screen = shown,
@@ -684,7 +690,7 @@ class PhoneCore(
         // canvas 类页面没有元素可点, 坐标是唯一操作方式; 告诉门, 它在任务模式里可以不再逐次问。
         val kind0 = driver.screenKind()
         // Acting on a page nobody can read from the tree: from here on the task is pure GUI.
-        if (which == PhoneScreen.MAIN && (kind0 == ScreenKind.CANVAS || kind0 == ScreenKind.BLANKED)) enterPureGui(driver.foregroundPackage())
+        if (which == PhoneScreen.MAIN && (kind0 == ScreenKind.CANVAS || kind0 == ScreenKind.BLANKED)) enterPureGui(pkg)
         val needsVision = kind == WriteKind.TAP_XY && (kind0 == ScreenKind.CANVAS || kind0 == ScreenKind.BLANKED)
         val verdict = safety.checkWrite(kind, target, pkg, appLabel, typed, submit, point, needsVision)
         val decision = when (val r = safety.resolve(verdict, scope)) {
@@ -843,6 +849,9 @@ class PhoneCore(
          * they haven't, this is it (微信 is read and driven by an outside GUI scheme of its own).
          */
         val DEFAULT_GUI_SCHEME = setOf("com.tencent.mm")
+
+        /** No package is ever empty: the latch of a page that hides the app it belongs to. */
+        private const val UNKNOWN_PACKAGE = ""
 
         /** The call's own time, not counting waits for the person. */
         fun budgetMs(tool: String): Long = when (tool) {

@@ -310,7 +310,7 @@ class PhoneStatus {
 
 /// The list behind 设置 › 手机操控 › 纯 GUI 应用: packages plus a label each.
 class PhoneGuiScheme {
-  const PhoneGuiScheme({this.packages = const [], this.labels = const {}});
+  const PhoneGuiScheme({this.packages = const [], this.labels = const {}, this.max});
 
   factory PhoneGuiScheme.fromMap(Map<Object?, Object?> m) => PhoneGuiScheme(
     packages: _strings(m['packages']),
@@ -318,12 +318,19 @@ class PhoneGuiScheme {
       for (final e in _map(m['labels']).entries)
         if (e.key is String && e.value is String) e.key as String: e.value as String,
     },
+    max: _int(m['max']),
   );
 
   final List<String> packages;
 
   /// Package → app label, from the native side (only for listed packages).
   final Map<String, String> labels;
+
+  /// How many packages the phone keeps; it drops the rest. Null on an older native module.
+  final int? max;
+
+  /// The list has no room left for another package.
+  bool get full => max != null && packages.length >= max!;
 
   bool contains(String package) => packages.contains(package);
 
@@ -853,9 +860,20 @@ class PhoneChannel {
 
   Future<bool> setPolicies(PhonePolicies policies) => _bool('setPolicies', policies.toWire());
 
-  /// 纯 GUI 应用: replaces the list. An empty list means no app is pure GUI by
-  /// name (games and canvas pages still are, page by page).
-  Future<bool> setGuiScheme(List<String> packages) => _bool('setGuiScheme', {'packages': packages});
+  /// 纯 GUI 应用: replaces the list, and answers with the list that was stored —
+  /// the phone drops blanks, repeats and anything past its cap. An empty list
+  /// means no app is pure GUI by name (games and canvas pages still are, page by
+  /// page). Null when the phone did not take it.
+  Future<PhoneGuiScheme?> setGuiScheme(List<String> packages) async {
+    try {
+      final map = await _methods.invokeMapMethod<Object?, Object?>('setGuiScheme', {'packages': packages});
+      return map == null ? null : PhoneGuiScheme.fromMap(map);
+    } on MissingPluginException {
+      return null;
+    } on PlatformException {
+      return null;
+    }
+  }
 
   /// Tells the phone gate whether the model in use can read images. A model that
   /// refuses a picture at admission gets `false`, which makes the gate refuse point

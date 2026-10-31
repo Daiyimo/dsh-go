@@ -51,7 +51,7 @@ Map<String, Object?> phoneStatus({
     'shizuku': {'installed': shizukuInstalled, 'running': shizukuRunning, 'granted': shizukuGranted},
     'adb': {'wirelessDebugging': wirelessDebugging, 'paired': paired, 'connected': adbConnected},
   },
-  'guiScheme': {'packages': guiScheme, 'labels': guiSchemeLabels},
+  'guiScheme': {'packages': guiScheme, 'labels': guiSchemeLabels, 'max': 40},
   'task': {
     'id': ?taskId,
     'active': taskActive,
@@ -227,18 +227,18 @@ class FakePhoneNative {
         }
         return accept;
       case 'setGuiScheme':
-        if (accept) {
-          final packages = [for (final p in (args['packages'] as List? ?? const [])) p as String];
-          final labels = (status['guiScheme'] as Map?)?['labels'] as Map? ?? const {};
-          status = {
-            ...status,
-            'guiScheme': {
-              'packages': packages,
-              'labels': {for (final p in packages) if (labels[p] != null) p: labels[p]},
-            },
-          };
-        }
-        return accept;
+        // As natively: the answer is the list that was stored, not a bare success.
+        if (!accept) return null;
+        final previous = status['guiScheme'] as Map? ?? const {};
+        final packages = [for (final p in (args['packages'] as List? ?? const [])) p as String];
+        final labels = previous['labels'] as Map? ?? const {};
+        final scheme = {
+          'packages': packages,
+          'labels': {for (final p in packages) if (labels[p] != null) p: labels[p]},
+          'max': previous['max'] ?? 40,
+        };
+        status = {...status, 'guiScheme': scheme};
+        return scheme;
       case 'actionLog':
         return log;
       case 'overlayPrefs':

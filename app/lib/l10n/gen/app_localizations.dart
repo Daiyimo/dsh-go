@@ -17213,7 +17213,7 @@ abstract class L10n {
   /// No description provided for @phonePureGuiSubtitle.
   ///
   /// In zh, this message translates to:
-  /// **'任务只在一张全屏 App 上做：不开虚拟屏，屏幕上不投任何提示。'**
+  /// **'任务只在一张全屏 App 上做：不开虚拟屏，不投悬浮条。'**
   String get phonePureGuiSubtitle;
 
   /// No description provided for @phonePureGuiEmpty.
@@ -17233,6 +17233,12 @@ abstract class L10n {
   /// In zh, this message translates to:
   /// **'添加应用'**
   String get phonePureGuiAdd;
+
+  /// Subtitle of the add row when the pure-GUI list is at its cap.
+  ///
+  /// In zh, this message translates to:
+  /// **'名单满了，先移出一个（最多 {count} 个）'**
+  String phonePureGuiFull(int count);
 
   /// No description provided for @phonePureGuiAddHint.
   ///

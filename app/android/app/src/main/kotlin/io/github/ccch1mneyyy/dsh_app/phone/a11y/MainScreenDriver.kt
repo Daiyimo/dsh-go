@@ -237,7 +237,10 @@ internal class MainScreenDriver(private val service: PhoneA11yService, private v
             // for the fullscreen windowing mode (plus the whole display as the launch bounds) keeps
             // the window filling the screen, which is where tap_xy is meant to run; a ROM that
             // refuses the bundle still gets the plain start.
-            val full = Rect(0, 0, service.resources.displayMetrics.widthPixels, service.resources.displayMetrics.heightPixels)
+            // The same box taps and screenshots use: it follows rotation, where the service's
+            // own metrics can still describe the display the service was configured on.
+            val box = screenBox()
+            val full = Rect(box.left, box.top, box.right, box.bottom)
             try {
                 val options = ActivityOptions.makeBasic().setLaunchBounds(full).toBundle()
                 // WindowConfiguration.WINDOWING_MODE_FULLSCREEN: hidden from the SDK, but the

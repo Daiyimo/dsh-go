@@ -54,10 +54,12 @@ class PhonePureGuiPage extends ConsumerWidget {
           children: [
             ListPageRow(
               icon: AppIcons.add,
-              iconColor: Theme.of(context).colorScheme.primary,
+              iconColor: scheme.full ? DshColors.of(context).textTertiary : Theme.of(context).colorScheme.primary,
               title: l10n.phonePureGuiAdd,
-              subtitle: l10n.phonePureGuiAddHint,
-              onTap: () => _add(context, ref, scheme),
+              // The phone keeps 40 and drops the rest, so the row says so instead of
+              // taking a package name it would have to throw away.
+              subtitle: scheme.full ? l10n.phonePureGuiFull(scheme.max!) : l10n.phonePureGuiAddHint,
+              onTap: scheme.full ? null : () => _add(context, ref, scheme),
             ),
           ],
         ),

@@ -5804,10 +5804,19 @@
     }
   },
   "phonePureGuiTitle": "纯 GUI 应用",
-  "phonePureGuiSubtitle": "任务只在一张全屏 App 上做：不开虚拟屏，屏幕上不投任何提示。",
+  "phonePureGuiSubtitle": "任务只在一张全屏 App 上做：不开虚拟屏，不投悬浮条。",
   "phonePureGuiEmpty": "名单是空的：微信这类应用也照常处理。",
   "phonePureGuiNone": "没有添加",
   "phonePureGuiAdd": "添加应用",
+  "phonePureGuiFull": "名单满了，先移出一个（最多 {count} 个）",
+  "@phonePureGuiFull": {
+    "description": "Subtitle of the add row when the pure-GUI list is at its cap.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "phonePureGuiAddHint": "按包名添加",
   "phonePureGuiRemoveTitle": "把「{app}」移出名单？",
   "@phonePureGuiRemoveTitle": {

@@ -9339,7 +9339,7 @@ class L10nZh extends L10n {
   String get phonePureGuiTitle => '纯 GUI 应用';
 
   @override
-  String get phonePureGuiSubtitle => '任务只在一张全屏 App 上做：不开虚拟屏，屏幕上不投任何提示。';
+  String get phonePureGuiSubtitle => '任务只在一张全屏 App 上做：不开虚拟屏，不投悬浮条。';
 
   @override
   String get phonePureGuiEmpty => '名单是空的：微信这类应用也照常处理。';
@@ -9349,6 +9349,11 @@ class L10nZh extends L10n {
 
   @override
   String get phonePureGuiAdd => '添加应用';
+
+  @override
+  String phonePureGuiFull(int count) {
+    return '名单满了，先移出一个（最多 $count 个）';
+  }
 
   @override
   String get phonePureGuiAddHint => '按包名添加';
