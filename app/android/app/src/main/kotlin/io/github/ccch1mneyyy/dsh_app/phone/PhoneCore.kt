@@ -40,6 +40,13 @@ interface PhoneEnv {
     /** The apps the person listed as pure GUI (设置 › 手机操控); shipped default: 微信. */
     fun guiScheme(): Set<String> = PhoneCore.DEFAULT_GUI_SCHEME
     /**
+     * The launcher, i.e. the home screen. Going home in the middle of a task is not the task
+     * moving on to another app: the app under the icons is still the one being driven.
+     */
+    fun homePackages(): Set<String> = emptySet()
+    /** One line in the device log for the decisions a support report cannot otherwise see. */
+    fun log(message: String) {}
+    /**
      * 全屏打开应用 (设置 › 手机操控 › 进阶, on by default): open an app through the accessibility
      * service, which can ask for the fullscreen windowing mode, instead of a plain start from this
      * process that a ROM may put in a small window. Off leaves the way the system chooses.
@@ -64,8 +71,28 @@ class PhoneCore(
 
     /** The overlay's status line; 免确认 stays visible the whole time nothing is asked. */
     private fun say(text: String) {
-        if (pureGui()) return
+        if (pureGui()) {
+            retractLine(text)
+            return
+        }
+        lineUp = true
+        env.log("status line: $text (waived=${safety.waived()})")
         env.gate()?.status(if (safety.waived()) ui.get("phone_waived_status", "免确认 · %1\$s", text) else text) // l10n:keep test default
+    }
+
+    /** Whether the overlay is showing a line right now (only ever drawn by [say]). */
+    @Volatile private var lineUp = false
+
+    /**
+     * A line drawn before the task turned pure GUI must go — the person sees it once the app the
+     * task drives comes to the front, and it sits in the picture the GUI is matching against.
+     * Once per line: a pure-GUI task draws nothing, so a second retraction has nothing to do.
+     */
+    private fun retractLine(why: String) {
+        if (!lineUp) return
+        lineUp = false
+        env.log("status line retracted ($why)")
+        runCatching { env.gate()?.status(null) }
     }
 
     /**
@@ -101,25 +128,53 @@ class PhoneCore(
      */
     private fun pureGui(): Boolean {
         val pkg = mainPackage()
+        val task = tasks.snapshot().id
         if (pkg != null && pkg in env.guiScheme()) {
             schemeApp = pkg
-            schemeTask = tasks.snapshot().id
+            schemeTask = task
             return true
         }
         val scheme = schemeApp
-        if (scheme != null && tasks.snapshot().id == schemeTask && (pkg == null || SafetyRules.isSystemPackage(pkg))) return true
-        val latched = pictureApp ?: return false
-        // A latch is that task's picture. The next task may start while the old app is still in
-        // front (or while nobody can name the screen at all), and inheriting it would keep a task
-        // off the virtual screen that never asked for it.
-        if (tasks.snapshot().id != pictureTask) {
-            clearLatch()
-            return false
+        if (scheme != null) {
+            if (task == schemeTask) {
+                if (neutral(pkg)) return true
+            } else if (pkg == scheme) {
+                // The task boundary was only the idle clock, or the engine's turn end: the listed
+                // app is still in front, so the task is still the listed app's task.
+                schemeTask = task
+                env.log("pure gui: $scheme is still in front, keeping the quiet task")
+                return true
+            } else {
+                schemeApp = null
+                schemeTask = 0L
+            }
         }
-        return pkg == null || pkg == latched || SafetyRules.isSystemPackage(pkg)
+        val latched = pictureApp ?: return false
+        // A latch is that task's picture. A new task that opened another app must not inherit it —
+        // but a task boundary while the same app is still in front is only the idle clock expiring
+        // between two calls, and dropping the latch there re-opens the virtual screen mid-run.
+        if (task != pictureTask) {
+            if (pkg != null && pkg != UNKNOWN_PACKAGE && pkg == latched) {
+                pictureTask = task
+                env.log("pure gui: $latched is still in front, keeping the picture latch")
+            } else {
+                clearLatch()
+                return false
+            }
+        }
+        return neutral(pkg) || pkg == latched
     }
 
+    /**
+     * A surface that is not the task moving on to another app: nobody can name the screen at all,
+     * a system page (a permission sheet, the shade, our own card), or the home screen the model
+     * just pressed home to open the app from.
+     */
+    private fun neutral(pkg: String?): Boolean =
+        pkg == null || SafetyRules.isSystemPackage(pkg) || pkg in env.homePackages()
+
     private fun clearLatch() {
+        if (pictureApp != null || schemeApp != null) env.log("pure gui off: another app took the front")
         pictureApp = null
         pictureLabel = null
         pictureTask = 0L
@@ -149,13 +204,15 @@ class PhoneCore(
         }
         if (label != null) pictureLabel = label
         pictureTask = tasks.snapshot().id
+        env.log("pure gui on: ${pkg ?: "unknown page"} (task $pictureTask)")
         if (!pureGuiEntered) {
             pureGuiEntered = true
             lastScreen = PhoneScreen.MAIN
             runCatching { env.closeBackground() }
-            // Nothing draws the line in a pure-GUI task any more, so one retraction is enough.
-            runCatching { env.gate()?.status(null) }
         }
+        // Every call, not just the first: a line can be drawn again while the task walks there
+        // (home screen, the launcher, another app's icon) and would then sit over the app.
+        retractLine("pure gui: ${pkg ?: "unknown page"}")
     }
 
     /** Remembers a main-screen picture after the fact, so every later call in the task knows. */
@@ -165,9 +222,10 @@ class PhoneCore(
         val scheme = pkg != null && pkg in env.guiScheme()
         if (snap.kind == ScreenKind.CANVAS || snap.kind == ScreenKind.BLANKED || scheme) {
             enterPureGui(pkg, snap.appLabel)
-        } else if (pkg != null && pkg != pictureApp && !SafetyRules.isSystemPackage(pkg)) {
-            // Another app in front ends the picture; a system page on top of it does not — it is
-            // the permission sheet or the shade, and the app is still the one being worked on.
+        } else if (pkg != null && pkg != pictureApp && !neutral(pkg)) {
+            // Another app in front ends the picture; a system page or the home screen on top of it
+            // does not — it is the permission sheet, the shade, or the launcher the model just
+            // pressed home to, and the app under it is still the one being worked on.
             clearLatch()
         }
     }
@@ -368,6 +426,10 @@ class PhoneCore(
             return Out(it.message, error = true, app = app.label, summary = ui.get("phone_log_open_app", "打开 %1\$s", app.packageName), decision = "refused:${it.rule}") // l10n:keep test default
         }
         val schemeApp = app.packageName in env.guiScheme() || pureGui()
+        env.log(
+            "open ${app.packageName} background=$background scheme=$schemeApp " +
+                "listed=${env.guiScheme().joinToString(",")} fullscreen=${env.launchFullscreen()} a11y=${env.a11yState()}",
+        )
         if (app.packageName in env.guiScheme()) {
             // A virtual screen from an earlier task may still show this app. Take it down before
             // the first launch: the task runs in one fullscreen app, and leaving the display up
@@ -390,6 +452,7 @@ class PhoneCore(
                 val driver = runCatching { env.driver(PhoneScreen.MAIN) }.getOrNull()
                 if (driver != null && driver.availability().ok) {
                     val r = driver.open(app.packageName)
+                    env.log("open ${app.packageName} through the service: ok=${r.ok} kind=${r.screen?.kind}")
                     if (r.ok) {
                         tasks.setApp(app.label)
                         lastScreen = PhoneScreen.MAIN
@@ -406,9 +469,11 @@ class PhoneCore(
                     }
                 }
             }
+            env.log("open ${app.packageName} left to the system")
             return afterSystem(env.system().launch(app), ui.get("phone_log_open_app", "打开 %1\$s", app.packageName), app.label) // l10n:keep test default
         }
         if (schemeApp) {
+            env.log("refused the back screen for ${app.packageName}: pure gui")
             return Out(pureGuiSentence(app.label), error = true, app = app.label,
                 summary = ui.get("phone_log_open_background", "后台屏打开 %1\$s", app.packageName), decision = "refused:pure-gui") // l10n:keep test default
         }
@@ -527,7 +592,10 @@ class PhoneCore(
     private fun driverFor(screen: PhoneScreen): Either<String, PhoneDriver> {
         // Pure GUI: one fullscreen app, no second screen. Checked before env.driver so a refused
         // call never brings the virtual display up (phone_control) or waits on it.
-        if (screen == PhoneScreen.BACKGROUND && pureGui()) return Either.Left(pureGuiSentence(pictureLabel))
+        if (screen == PhoneScreen.BACKGROUND && pureGui()) {
+            env.log("refused the back screen: pure gui")
+            return Either.Left(pureGuiSentence(pictureLabel))
+        }
         val d = env.driver(screen) ?: return Either.Left(unavailable(screen))
         val av = try {
             d.availability()
@@ -567,6 +635,10 @@ class PhoneCore(
         if (env.isLocked()) return locked(summary)
         lastScreen = which
         val snap = driver.observe(detail = a.bool("detail") == true, image = a.bool("image") == true, region = region)
+        env.log(
+            "read ${snap.id} ${snap.packageName} kind=${snap.kind} secure=${snap.secure} poorTree=${snap.poorTree} " +
+                "image=${snap.image != null} task=${tasks.snapshot().id}",
+        )
         tasks.setApp(snap.appLabel)
         // After the page is known, not before: a picture page (a game, 微信 under an outside GUI
         // scheme) must never have the line on it, not even for the second the read takes — the

@@ -71,7 +71,11 @@ class PhonePureGuiPage extends ConsumerWidget {
   Future<void> _add(BuildContext context, WidgetRef ref, PhoneGuiScheme scheme) async {
     final package = await showDialog<String>(context: context, builder: (_) => _PackageDialog(scheme: scheme));
     if (package == null || !context.mounted) return;
-    await _save(context, ref, [...scheme.packages, package]);
+    // The list saved is the phone's list, not the one this frame was built with: a
+    // status push (or a page opened before the first push) would otherwise drop an
+    // app the person never removed.
+    final current = ref.read(phoneProvider).status.guiScheme.packages;
+    await _save(context, ref, [...current, package]);
   }
 
   Future<void> _remove(BuildContext context, WidgetRef ref, PhoneGuiScheme scheme, String package) async {
@@ -91,7 +95,8 @@ class PhonePureGuiPage extends ConsumerWidget {
         ) ??
         false;
     if (!ok || !context.mounted) return;
-    await _save(context, ref, [for (final p in scheme.packages) if (p != package) p]);
+    final current = ref.read(phoneProvider).status.guiScheme.packages;
+    await _save(context, ref, [for (final p in current) if (p != package) p]);
   }
 
   Future<void> _save(BuildContext context, WidgetRef ref, List<String> packages) async {

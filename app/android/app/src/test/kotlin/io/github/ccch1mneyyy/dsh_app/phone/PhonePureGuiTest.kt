@@ -23,6 +23,7 @@ class PhonePureGuiTest {
     private var appLabel: String? = "Example"
     private var kind = ScreenKind.TREE
     private var scheme = PhoneCore.DEFAULT_GUI_SCHEME
+    private var home: Set<String> = emptySet()
     private val launches = mutableListOf<String>()
     private val opens = mutableListOf<String>()
     private var fullscreen = true
@@ -67,6 +68,7 @@ class PhonePureGuiTest {
         override fun backgroundUnavailable() = "后台屏用不了。"
         override fun closeBackground() { closeCount++ }
         override fun guiScheme() = scheme
+        override fun homePackages() = home
         override fun launchFullscreen() = fullscreen
         override fun zone() = ZoneId.of("UTC")
         override fun notifyFix(kind: String) {}
@@ -92,6 +94,53 @@ class PhonePureGuiTest {
     private fun readMain() = core.call(PhoneToolCatalog.SCREEN, mapOf("screen" to "s1"))
 
     private fun readBack() = core.call(PhoneToolCatalog.SCREEN, mapOf("screen" to "s1", "background" to true))
+
+    @Test fun aLineDrawnOnTheWayToWeChatIsTakenDown() {
+        // The task walks to 微信 through the launcher: the line goes up there, and it has to go
+        // before the app is on screen — a line inside the picture costs the GUI its targets.
+        pkg = "com.android.launcher3"
+        appLabel = "桌面"
+        kind = ScreenKind.TREE
+        readMain()
+        assertEquals(listOf<String?>("DSH 正在看屏幕"), statuses)
+        pkg = "com.tencent.mm"
+        appLabel = "微信"
+        readMain()
+        assertNull("the line stayed over 微信: $statuses", statuses.lastOrNull())
+    }
+
+    @Test fun theHomeScreenDoesNotEndTheTask() {
+        // 第二次 was "去桌面打开的微信": pressing home and tapping the icon is not the task moving
+        // on to another app, so the line must not come back and the display must stay refused.
+        home = setOf("com.android.launcher3")
+        pkg = "com.tencent.mm"
+        appLabel = "微信"
+        readMain()
+        statuses.clear()
+        pkg = "com.android.launcher3"
+        appLabel = "桌面"
+        readMain()
+        assertTrue("the line came back on the home screen: $statuses", statuses.none { it != null })
+        backgroundRequests = 0
+        assertTrue(readBack().isError)
+        assertEquals(0, backgroundRequests)
+    }
+
+    @Test fun anIdleBoundaryKeepsAPictureTask() {
+        // The task id moves on when the phone sits idle between two calls. The game is still in
+        // front, so the task is still the game's: dropping the latch there re-opened the display.
+        pkg = "com.game.example"
+        appLabel = "Game"
+        kind = ScreenKind.CANVAS
+        readMain()
+        statuses.clear()
+        tasks.endTask()
+        readMain()
+        assertTrue("the line came back after the idle clock expired: $statuses", statuses.none { it != null })
+        backgroundRequests = 0
+        assertTrue(readBack().isError)
+        assertEquals(0, backgroundRequests)
+    }
 
     @Test fun theBackScreenIsRefusedInWeChat() {
         pkg = "com.tencent.mm"

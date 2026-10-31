@@ -18,6 +18,7 @@ import android.os.Handler
 import android.os.Looper
 import android.os.PowerManager
 import android.os.SystemClock
+import android.util.Log
 import android.provider.Settings
 import io.github.ccch1mneyyy.dsh_app.MainActivity
 import io.github.ccch1mneyyy.dsh_app.R
@@ -207,6 +208,7 @@ class PhoneControl private constructor(private val app: Context) : PhoneEnv, Con
         val stored = prefs.getStringSet(K_GUI_SCHEME, null)?.toSet()
         val s = stored ?: PhoneCore.DEFAULT_GUI_SCHEME
         guiCache = s
+        log("pure gui list (${if (stored == null) "shipped default" else "saved"}): ${s.joinToString(",")}")
         s
     }
 
@@ -221,6 +223,7 @@ class PhoneControl private constructor(private val app: Context) : PhoneEnv, Con
         }
         prefs.edit().putStringSet(K_GUI_SCHEME, set).apply()
         guiCache = set
+        log("pure gui list saved: ${set.joinToString(",")}")
         emitStatus()
         return true
     }
@@ -636,6 +639,27 @@ class PhoneControl private constructor(private val app: Context) : PhoneEnv, Con
 
     /** Asked on every tool call: never waits for 自动恢复无障碍 to hand the driver back. */
     override fun peekPackage(): String? = runCatching { PhoneRegistry.mainDriver?.foregroundPackage() }.getOrNull()
+
+    /**
+     * The home screen: a task that presses home to open an app from the launcher has not moved on
+     * to another app, so the line must not come back and the virtual screen must not be allowed.
+     */
+    override fun homePackages(): Set<String> = homeCache ?: run {
+        val found = LinkedHashSet<String>()
+        runCatching {
+            val home = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)
+            app.packageManager.queryIntentActivities(home, 0).forEach { found += it.activityInfo.packageName }
+        }
+        val answer = found.toSet()
+        homeCache = answer
+        answer
+    }
+
+    private var homeCache: Set<String>? = null
+
+    override fun log(message: String) {
+        Log.i("DshPhone", message)
+    }
 
     override fun a11yState(): A11yState = when {
         PhoneRegistry.mainDriver != null -> A11yState.CONNECTED
