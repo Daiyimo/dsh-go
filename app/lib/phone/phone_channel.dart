@@ -231,6 +231,7 @@ class PhoneStatus {
     this.notifications = false,
     this.confirmationNotifications,
     this.guiScheme = const PhoneGuiScheme(),
+    this.launchFullscreen = true,
     this.background = const PhoneBackgroundStatus(),
     this.task = const PhoneTaskStatus(),
     this.device = const PhoneDevice(),
@@ -247,6 +248,7 @@ class PhoneStatus {
       notifications = false,
       confirmationNotifications = null,
       guiScheme = const PhoneGuiScheme(),
+      launchFullscreen = true,
       background = const PhoneBackgroundStatus(),
       task = const PhoneTaskStatus(),
       device = const PhoneDevice();
@@ -260,6 +262,7 @@ class PhoneStatus {
     notifications: _flag(m['notifications']),
     confirmationNotifications: _maybeFlag(m['confirmationNotifications']),
     guiScheme: PhoneGuiScheme.fromMap(_map(m['guiScheme'])),
+    launchFullscreen: _maybeFlag(_map(m['launch'])['fullscreen']) ?? true,
     background: PhoneBackgroundStatus.fromMap(_map(m['background'])),
     task: PhoneTaskStatus.fromMap(_map(m['task'])),
     device: PhoneDevice.fromMap(_map(m['device'])),
@@ -287,11 +290,15 @@ class PhoneStatus {
 
   /// 纯 GUI 应用: a task on one of these runs one fullscreen app, no virtual screen.
   final PhoneGuiScheme guiScheme;
+
+  /// 全屏打开应用: `open` asks the accessibility service to start the app fullscreen.
+  /// Off leaves the start to the system. Null on an older native module.
+  final bool launchFullscreen;
   final PhoneBackgroundStatus background;
   final PhoneTaskStatus task;
   final PhoneDevice device;
 
-  PhoneStatus copyWith({bool? enabled, PhoneGuiScheme? guiScheme}) => PhoneStatus(
+  PhoneStatus copyWith({bool? enabled, PhoneGuiScheme? guiScheme, bool? launchFullscreen}) => PhoneStatus(
     ready: ready,
     error: error,
     enabled: enabled ?? this.enabled,
@@ -302,6 +309,7 @@ class PhoneStatus {
     notifications: notifications,
     confirmationNotifications: confirmationNotifications,
     guiScheme: guiScheme ?? this.guiScheme,
+    launchFullscreen: launchFullscreen ?? this.launchFullscreen,
     background: background,
     task: task,
     device: device,
@@ -874,6 +882,10 @@ class PhoneChannel {
       return null;
     }
   }
+
+  /// 全屏打开应用: `open` starts the app through the accessibility service, which
+  /// can ask for the fullscreen windowing mode. Answers with what the phone kept.
+  Future<bool> setLaunchFullscreen(bool on) => _bool('setLaunchFullscreen', {'fullscreen': on});
 
   /// Tells the phone gate whether the model in use can read images. A model that
   /// refuses a picture at admission gets `false`, which makes the gate refuse point

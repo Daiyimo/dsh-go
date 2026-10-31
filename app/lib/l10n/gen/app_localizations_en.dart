@@ -9860,6 +9860,13 @@ class L10nEn extends L10n {
       'Games and pages with only a picture switch to pure GUI on their own when the screen is read; they don\'t need to be listed.';
 
   @override
+  String get phoneLaunchFullscreen => 'Open apps fullscreen';
+
+  @override
+  String get phoneLaunchFullscreenHint =>
+      'Asks for a fullscreen window when opening an app, instead of a small or floating one.';
+
+  @override
   String get phoneTaskResultReady => 'Task complete · View result';
 
   @override

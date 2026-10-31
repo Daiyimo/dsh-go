@@ -39,6 +39,12 @@ interface PhoneEnv {
     fun peekPackage(): String? = driver(PhoneScreen.MAIN)?.foregroundPackage()
     /** The apps the person listed as pure GUI (设置 › 手机操控); shipped default: 微信. */
     fun guiScheme(): Set<String> = PhoneCore.DEFAULT_GUI_SCHEME
+    /**
+     * 全屏打开应用 (设置 › 手机操控 › 进阶, on by default): open an app through the accessibility
+     * service, which can ask for the fullscreen windowing mode, instead of a plain start from this
+     * process that a ROM may put in a small window. Off leaves the way the system chooses.
+     */
+    fun launchFullscreen(): Boolean = true
     fun sleep(ms: Long) = Thread.sleep(ms)
 }
 
@@ -340,6 +346,33 @@ class PhoneCore(
             return Out(it.message, error = true, app = app.label, summary = ui.get("phone_log_open_app", "打开 %1\$s", app.packageName), decision = "refused:${it.rule}") // l10n:keep test default
         }
         if (!background) {
+            // 全屏打开应用: the accessibility service may ask for the fullscreen windowing mode,
+            // this process may not (a background start from an app lands wherever the ROM puts it —
+            // on some it is a small floating window with the app under SystemUI decorations, which
+            // is not where taps and screenshots are meant to run). A driver that is not there, or
+            // a start that fails, falls through to the plain way: the person still gets the app.
+            // Only when the service is bound: asking for the driver otherwise waits for
+            // 自动恢复无障碍 to bring it back, which is seconds spent on a start the system can do.
+            if (env.launchFullscreen() && env.a11yState() == A11yState.CONNECTED) {
+                val driver = runCatching { env.driver(PhoneScreen.MAIN) }.getOrNull()
+                if (driver != null && driver.availability().ok) {
+                    val r = driver.open(app.packageName)
+                    if (r.ok) {
+                        tasks.setApp(app.label)
+                        lastScreen = PhoneScreen.MAIN
+                        // The start already settled on its own page: that page is the task's
+                        // picture from here, exactly as if it had been read.
+                        r.screen?.let { rememberPicture(PhoneScreen.MAIN, it) }
+                        return Out(
+                            r.message,
+                            app = r.screen?.appLabel ?: app.label,
+                            screen = r.screen?.let { safety.filterScreen(it) },
+                            summary = ui.get("phone_log_open_app", "打开 %1\$s", app.packageName), // l10n:keep test default
+                            decision = "ok",
+                        )
+                    }
+                }
+            }
             return afterSystem(env.system().launch(app), ui.get("phone_log_open_app", "打开 %1\$s", app.packageName), app.label) // l10n:keep test default
         }
         if (app.packageName in env.guiScheme() || pureGui()) {

@@ -124,6 +124,9 @@ class PhonePlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCallHandle
                 control.setGuiScheme(raw.mapNotNull { it as? String })
                 control.guiSchemeMap()
             }
+            // 全屏打开应用: the setting decides how `open` starts an app, so the answer is the
+            // value that was stored, not the one that was asked for.
+            "setLaunchFullscreen" -> async(result) { control.setLaunchFullscreen(call.argument<Boolean>("fullscreen") == true) }
             "actionLog" -> result.success(control.log.toMaps(call.argument<Int>("limit") ?: 100))
             // l10n:keep agent stop reason
             "stopTask" -> result.success(control.stopTask("用户在 App 里停止"))

@@ -24,6 +24,8 @@ class PhonePureGuiTest {
     private var kind = ScreenKind.TREE
     private var scheme = PhoneCore.DEFAULT_GUI_SCHEME
     private val launches = mutableListOf<String>()
+    private val opens = mutableListOf<String>()
+    private var fullscreen = true
 
     private fun driver(screen: PhoneScreen, id: String) = object : PhoneDriver {
         override val screen = screen
@@ -36,7 +38,10 @@ class PhonePureGuiTest {
             error("unexpected collect")
         override fun target(screenId: String, elementId: Int) = null
         override fun perform(action: PhoneAction) = error("unexpected action")
-        override fun open(packageName: String) = error("unexpected open")
+        override fun open(packageName: String): ActionResult {
+            opens += packageName
+            return ActionResult(true, "打开了 $appLabel", screen = ScreenSnapshot(id = id, text = "Example", appLabel = appLabel, packageName = pkg, kind = kind))
+        }
     }
 
     private val main = driver(PhoneScreen.MAIN, "s1")
@@ -60,6 +65,7 @@ class PhonePureGuiTest {
         override fun backgroundUnavailable() = "后台屏用不了。"
         override fun closeBackground() { closeCount++ }
         override fun guiScheme() = scheme
+        override fun launchFullscreen() = fullscreen
         override fun zone() = ZoneId.of("UTC")
         override fun notifyFix(kind: String) {}
         override fun beforeHandoff(screen: PhoneScreen): String? = null
@@ -166,7 +172,8 @@ class PhonePureGuiTest {
         readMain()
         val out = core.call(PhoneToolCatalog.OPEN, mapOf("app" to "example.app"))
         assertFalse("a front-screen launch was refused inside a pure-GUI task: ${out.text}", out.isError)
-        assertEquals(listOf("example.app"), launches)
+        assertEquals(listOf("example.app"), opens)
+        assertEquals("the system was asked to start it as well", emptyList<String>(), launches)
     }
 
     @Test fun anAppOutsideTheSchemeKeepsTheBackScreen() {

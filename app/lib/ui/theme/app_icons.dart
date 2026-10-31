@@ -399,6 +399,10 @@ abstract final class AppIcons {
   static const overlayOpacity = DshGlyphs.slidersHorizontal;
   static const overlayBall = DshGlyphs.radioButton;
 
+  /// 全屏打开应用: the switch is about the window an app gets, so the glyph is the one
+  /// that reads as "spread out" (there is no fullscreen corner glyph in the set).
+  static const launchFullscreen = DshGlyphs.arrowsLeftRight;
+
   /// 解除限制, its 「已解除限制」 tag, and its three rules.
   static const unlocks = DshGlyphs.lockSimpleOpen;
   static const unlockSystem = DshGlyphs.gearSix;

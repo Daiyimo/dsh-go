@@ -2863,6 +2863,8 @@
   "phonePureGuiRemoveBody": "It will be treated like any other app: the virtual screen may come back, and hints may be drawn over it.",
   "phonePureGuiRemove": "Remove",
   "phonePureGuiNote": "Games and pages with only a picture switch to pure GUI on their own when the screen is read; they don't need to be listed.",
+  "phoneLaunchFullscreen": "Open apps fullscreen",
+  "phoneLaunchFullscreenHint": "Asks for a fullscreen window when opening an app, instead of a small or floating one.",
   "phoneTaskResultReady": "Task complete · View result",
   "phoneTaskEndedResult": "Task ended · View result",
   "phoneBackgroundGuideTitle": "Confirmations and return",

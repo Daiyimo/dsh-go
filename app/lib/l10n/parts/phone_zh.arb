@@ -641,5 +641,7 @@
   },
   "phonePureGuiRemoveBody": "移出后它按普通应用处理：可能又开虚拟屏，也可能在屏幕上投提示。",
   "phonePureGuiRemove": "移出名单",
-  "phonePureGuiNote": "游戏和只有画面的页面看屏时会自动进纯 GUI，不用加进名单。"
+  "phonePureGuiNote": "游戏和只有画面的页面看屏时会自动进纯 GUI，不用加进名单。",
+  "phoneLaunchFullscreen": "全屏打开应用",
+  "phoneLaunchFullscreenHint": "打开应用时请求全屏窗口，不在小窗或悬浮窗里跑。"
 }

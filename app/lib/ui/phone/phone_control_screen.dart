@@ -347,6 +347,18 @@ class _PhoneControlScreenState extends ConsumerState<PhoneControlScreen> {
                     ),
                   ),
                 ),
+                MergeSemantics(
+                  child: ListPageRow(
+                    icon: AppIcons.launchFullscreen,
+                    title: l10n.phoneLaunchFullscreen,
+                    subtitle: l10n.phoneLaunchFullscreenHint,
+                    onTap: () => unawaited(_setLaunchFullscreen(!status.launchFullscreen)),
+                    trailing: Switch(
+                      value: status.launchFullscreen,
+                      onChanged: (v) => unawaited(_setLaunchFullscreen(v)),
+                    ),
+                  ),
+                ),
                 ListPageRow(
                   icon: AppIcons.dndMode,
                   spot: SettingsIndex.entry(SettingsPageId.phoneDnd),
@@ -485,6 +497,12 @@ class _PhoneControlScreenState extends ConsumerState<PhoneControlScreen> {
 
   /// 虚拟屏: the quick on/off for 不打扰模式. Off also ends the running task and drops the
   /// Shizuku/ADB link, so nothing keeps working on the hidden screen.
+  Future<void> _setLaunchFullscreen(bool on) async {
+    final ok = await ref.read(phoneProvider.notifier).setLaunchFullscreen(on);
+    if (!mounted || ok) return;
+    _toast(context.l10n.phoneActionFailedLater);
+  }
+
   Future<void> _setVirtualScreen(bool on) async {
     final result = await ref
         .read(phoneProvider.notifier)

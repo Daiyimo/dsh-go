@@ -17270,6 +17270,18 @@ abstract class L10n {
   /// **'游戏和只有画面的页面看屏时会自动进纯 GUI，不用加进名单。'**
   String get phonePureGuiNote;
 
+  /// No description provided for @phoneLaunchFullscreen.
+  ///
+  /// In zh, this message translates to:
+  /// **'全屏打开应用'**
+  String get phoneLaunchFullscreen;
+
+  /// No description provided for @phoneLaunchFullscreenHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'打开应用时请求全屏窗口，不在小窗或悬浮窗里跑。'**
+  String get phoneLaunchFullscreenHint;
+
   /// No description provided for @phoneTaskResultReady.
   ///
   /// In zh, this message translates to:

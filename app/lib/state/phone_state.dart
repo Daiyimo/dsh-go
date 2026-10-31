@@ -222,6 +222,15 @@ class PhoneController extends Notifier<PhoneState> {
     return true;
   }
 
+  /// 全屏打开应用: the switch that decides how `open` starts an app. False when the
+  /// native side did not take it (the row keeps its old value).
+  Future<bool> setLaunchFullscreen(bool on) async {
+    final ok = await _channel.setLaunchFullscreen(on);
+    if (!ok || !ref.mounted) return false;
+    state = state.copyWith(status: state.status.copyWith(launchFullscreen: on));
+    return true;
+  }
+
   /// Changes one app's rule; false when the native side refused (nothing changes).
   Future<bool> setRule(String package, AppRule rule) async {
     final current = state.policies;

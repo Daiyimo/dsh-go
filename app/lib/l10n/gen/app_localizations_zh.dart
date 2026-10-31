@@ -9373,6 +9373,12 @@ class L10nZh extends L10n {
   String get phonePureGuiNote => '游戏和只有画面的页面看屏时会自动进纯 GUI，不用加进名单。';
 
   @override
+  String get phoneLaunchFullscreen => '全屏打开应用';
+
+  @override
+  String get phoneLaunchFullscreenHint => '打开应用时请求全屏窗口，不在小窗或悬浮窗里跑。';
+
+  @override
   String get phoneTaskResultReady => '任务完成 · 查看结果';
 
   @override

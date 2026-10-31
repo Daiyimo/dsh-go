@@ -225,6 +225,18 @@ class PhoneControl private constructor(private val app: Context) : PhoneEnv, Con
         return true
     }
 
+    /**
+     * 全屏打开应用: open an app through the accessibility service, which can ask for the fullscreen
+     * windowing mode, instead of a plain start that the ROM may put in a small window.
+     */
+    override fun launchFullscreen(): Boolean = prefs.getBoolean(K_LAUNCH_FULLSCREEN, true)
+
+    fun setLaunchFullscreen(on: Boolean): Boolean {
+        prefs.edit().putBoolean(K_LAUNCH_FULLSCREEN, on).apply()
+        emitStatus()
+        return on
+    }
+
     /** `guiScheme` in the status map: the list plus a label for each, for the settings page. */
     fun guiSchemeMap(): Map<String, Any?> {
         val packages = guiScheme().sorted()
@@ -466,6 +478,7 @@ class PhoneControl private constructor(private val app: Context) : PhoneEnv, Con
         "background" to backgroundStatus(),
         "a11yKeeper" to keeperStatus(),
         "guiScheme" to guiSchemeMap(),
+        "launch" to linkedMapOf("fullscreen" to launchFullscreen()),
         "task" to tasks.snapshot().toMap(),
         "device" to linkedMapOf(
             "manufacturer" to Build.MANUFACTURER,
@@ -663,6 +676,7 @@ class PhoneControl private constructor(private val app: Context) : PhoneEnv, Con
         private const val K_POLICIES = "policies"
         private const val K_TCP_FALLBACK = "tcpFallback"
         private const val K_GUI_SCHEME = "guiScheme"
+        private const val K_LAUNCH_FULLSCREEN = "launchFullscreen"
 
         /** Enough for the hand-written list, small enough that a typo storm can't grow it forever. */
         private const val MAX_GUI_SCHEME = 40

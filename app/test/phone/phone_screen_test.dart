@@ -351,6 +351,24 @@ void main() {
       expect(h.native!.callsOf('setBackgroundMode').last.arguments, {'mode': 'off'});
     });
 
+    testWidgets('全屏打开应用 is on by default and writes the switch', (tester) async {
+      final h = await pumpPhone(tester, const PhoneControlScreen());
+      final row = tileWith('全屏打开应用');
+      final toggle = find.descendant(of: row, matching: find.byType(Switch));
+      expect(tester.widget<Switch>(toggle).value, isTrue);
+
+      await tester.tap(toggle);
+      await tester.pumpAndSettle();
+      expect(h.native!.callsOf('setLaunchFullscreen').single.arguments, {'fullscreen': false});
+      expect(tester.widget<Switch>(toggle).value, isFalse);
+
+      // Turning it back on through the row's own body, not just the switch.
+      await tester.tap(find.text('全屏打开应用'));
+      await tester.pumpAndSettle();
+      expect(h.native!.callsOf('setLaunchFullscreen').last.arguments, {'fullscreen': true});
+      expect(tester.widget<Switch>(toggle).value, isTrue);
+    });
+
     testWidgets('不打扰模式 row shows its state and opens the page', (tester) async {
       await pumpPhone(
         tester,

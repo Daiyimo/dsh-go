@@ -36,6 +36,7 @@ Map<String, Object?> phoneStatus({
   bool taskWaived = false,
   List<String> guiScheme = const ['com.tencent.mm'],
   Map<String, String> guiSchemeLabels = const {'com.tencent.mm': '微信'},
+  bool launchFullscreen = true,
   Map<String, Object?>? device = const {'manufacturer': 'vivo', 'sdkInt': 35, 'sideloaded': true},
 }) => {
   'enabled': enabled,
@@ -52,6 +53,7 @@ Map<String, Object?> phoneStatus({
     'adb': {'wirelessDebugging': wirelessDebugging, 'paired': paired, 'connected': adbConnected},
   },
   'guiScheme': {'packages': guiScheme, 'labels': guiSchemeLabels, 'max': 40},
+  'launch': {'fullscreen': launchFullscreen},
   'task': {
     'id': ?taskId,
     'active': taskActive,
@@ -239,6 +241,15 @@ class FakePhoneNative {
         };
         status = {...status, 'guiScheme': scheme};
         return scheme;
+      case 'setLaunchFullscreen':
+        // As natively: the answer is the value that was stored.
+        if (!accept) return false;
+        final on = args['fullscreen'] == true;
+        status = {
+          ...status,
+          'launch': {'fullscreen': on},
+        };
+        return on;
       case 'actionLog':
         return log;
       case 'overlayPrefs':
