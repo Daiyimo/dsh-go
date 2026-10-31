@@ -12,7 +12,7 @@ Let DSH read the screen, tap and type to get things done on your phone. Pause or
 3. Tap **Turn on** next to **Notifications** and allow notifications in App info. Approvals and the stop button need them.
 4. Tap **Read current screen** to see what DSH can read. This reading isn't sent to the model.
 
-During a task, text on the screen is sent to the model you chose; with a vision model, a screenshot may be included. Bank card and ID numbers are masked first.
+During a task, text on the screen is sent to the model you chose; with a vision model you can ask for a screenshot. Games, self-drawn canvas pages and encrypted or obfuscated pages have no usable controls, so DSH attaches a screenshot automatically — see "Games and self-drawn pages" below. Bank card and ID numbers are masked first.
 
 ## Restore accessibility automatically
 
@@ -35,6 +35,25 @@ Go back to a chat and say what you want done. While a task runs:
 
 Alarms, events, maps and sharing don't need the accessibility service.
 
+## Games and self-drawn pages
+
+Games, self-drawn canvas pages and encrypted or obfuscated pages have no readable controls, so DSH can't find elements to tap. On these pages DSH:
+
+- Attaches a screenshot automatically: the current picture is sent straight to a vision model, with a 10x10 grid drawn on it, each cell standing for 100, so positions can be described.
+- Taps by grid: the model reports 0-1000 grid coordinates, (0,0) is the top-left of the screenshot and (1000,1000) the bottom-right; DSH converts them to screen coordinates, whatever the phone's resolution.
+- Checks the tap: after tapping, DSH compares the picture before and after. When nothing changed it sends the model a checklist — coordinates measured in screenshot pixels instead of grid units, the status bar in the way, the keyboard covering the target — and after two misses in a row it suggests stopping and handing the screen back to you instead of tapping the same spot again.
+- Approvals: coordinate taps on these pages still ask first by default; with **This task**, and once this app has been approved in the current task, they stop asking. **Always ask** keeps asking every time.
+
+A model that can't see pictures can't help on these pages: there is no tree to read and the screenshot means nothing to it, so DSH refuses coordinate taps and makes the model hand the phone back to you instead of guessing coordinates until the budget runs out.
+
+When the whole-screen picture is too small to read the fine print, the model can ask for a region on screen (for example 200,300,800,900, 0-1000) and DSH zooms into just that part; coordinates on the zoomed picture still count from its own top-left as 0,0. While a page is still loading or an animation is still running, the model can also wait a moment before reading the screen again.
+
+These pages and WeChat are worked pure GUI, one fullscreen app for the whole task:
+
+- The virtual screen is taken down: such a task has no use for a second screen. When the page is recognised, DSH closes it and the app works on your screen.
+- One fullscreen app only: asking for the back screen later in the task is refused, and the reply says the task works from the picture.
+- No floating bar: anything drawn on the picture moves every position measured against it, and on WeChat an outside setup reading the screen gets pushed around. To stop the task, use the stop on the **Operating your phone** card in the app.
+
 ## Floating bar
 
 When a task starts, a floating bar appears at the top of the screen showing what DSH is doing, with **Pause**, **Stop** and **Collapse**:
@@ -51,6 +70,7 @@ Adjust it under **Floating bar** on the phone control page (shown once phone con
 - **Back to DSH Go when done**: on by default. When the reply ends and the app is in the background, it tries to bring you back to that chat. If the system blocks background windows, use the notification; see Confirmations and return below.
 
 Whatever the settings, the bar closes when the reply ends.
+When the foreground app is WeChat, or while a game or another picture-only page is being worked, DSH does not put the bar on the screen at all: some external setups read the screen and pick their own tap positions, and a bar on top of it gets in their way — on a game it also shifts every position measured against the screenshot. Stop the task from the **Operating your phone** card in the app instead.
 
 ## Stop
 
@@ -114,10 +134,11 @@ Disclaimer:
 
 ## Action log and advanced
 
-**Recent actions** logs every step, without screen contents. Tap **All actions** to see them. The log lasts until the app closes.
+**Recent actions** logs every step, without screen contents. Tap **All actions** to see them. Each entry also records how much the screen changed afterwards (0 to 1: the element distance on a tree page, the pixel difference on a screenshot page), so it is visible afterwards which steps actually did something. The log lasts until the app closes.
 
 Under **Advanced**:
 
+- **Virtual screen**: the quick on/off for that mode, off by default. On it, the agent reads and taps on a trusted virtual screen; turning it off also ends the running task and drops the Shizuku / ADB link, so nothing keeps working behind your back. Pure-GUI tasks (WeChat, games) never use it: they do not open the virtual screen, and one left on is closed for them.
 - **Non-disruptive mode**: works on a hidden screen while you use your phone. Needs Android 14 or later; choose **Use Shizuku** or **Direct ADB** and follow the setup. It needs Wi-Fi with Developer options and wireless debugging on, must be reactivated after restarting your phone, and the screen must still stay on and unlocked.
 - **Background running**: prevents Android from turning off accessibility; opens the phone settings guide.
 - **Confirmations and return**: see confirmations and task results in time; see Confirmations and return above.

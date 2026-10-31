@@ -575,6 +575,16 @@ class PhoneControl private constructor(private val app: Context) : PhoneEnv, Con
         return "后台屏已释放，App 回到了主屏，用户在主屏上操作。之后请用主屏（s 开头的屏幕号）。"
     }
 
+    /**
+     * A pure-GUI task (微信, games) never looks at the virtual screen. Release it so the app it was
+     * holding comes back to the one screen the task works on, and the display is not left up
+     * behind the person's back for the rest of the task.
+     */
+    override fun closeBackground() {
+        if (PhoneRegistry.backgroundDriver == null) return
+        runCatching { background.endTask() }
+    }
+
     override fun a11yState(): A11yState = when {
         PhoneRegistry.mainDriver != null -> A11yState.CONNECTED
         a11yEnabledInSettings() -> A11yState.ENABLED_NOT_CONNECTED

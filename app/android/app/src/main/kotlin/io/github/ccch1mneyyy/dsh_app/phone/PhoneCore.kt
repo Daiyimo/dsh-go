@@ -27,6 +27,11 @@ interface PhoneEnv {
      * without destroying its content so the app comes to the main screen. A sentence for the model, or null.
      */
     fun beforeHandoff(screen: PhoneScreen): String? = null
+    /**
+     * A pure-GUI task never looks at the virtual screen: release it (its app comes back to the
+     * main screen) rather than leave a display up that this task will not use.
+     */
+    fun closeBackground() {}
     fun sleep(ms: Long) = Thread.sleep(ms)
 }
 
@@ -46,23 +51,76 @@ class PhoneCore(
 
     /** The overlay's status line; 免确认 stays visible the whole time nothing is asked. */
     private fun say(text: String) {
-        if (quietStatus()) return
+        if (pureGui()) return
         env.gate()?.status(if (safety.waived()) ui.get("phone_waived_status", "免确认 · %1\$s", text) else text) // l10n:keep test default
     }
 
     /**
-     * True while the app in front is one an outside GUI scheme drives on its own. That scheme aims
-     * at its own picture of the screen, and the status line sits on top of that picture: a line
-     * showing up mid-flow moves every target it looks for. Every other app keeps the line.
+     * The app this task has to be driven by picture instead of by tree: a game ([ScreenKind.CANVAS])
+     * or a page that hides its tree ([ScreenKind.BLANKED]). Cleared when another app comes to the
+     * front, so one game does not turn every later task into a pure-GUI one.
      */
-    private fun quietStatus(): Boolean {
-        val pkg = try {
-            env.driver(PhoneScreen.MAIN)?.foregroundPackage()
-        } catch (_: Throwable) {
-            null
-        } ?: return false
-        return pkg in QUIET_STATUS_PACKAGES
+    @Volatile private var pictureApp: String? = null
+
+    /** Label of [pictureApp], for the sentences the model gets back. */
+    @Volatile private var pictureLabel: String? = null
+
+    /** The virtual screen has already been taken down for this task (once per pure-GUI run). */
+    @Volatile private var pureGuiEntered = false
+
+    /**
+     * True while the task belongs to an app that is driven pure GUI: 微信 (an outside GUI scheme
+     * reads and drives it on its own) and anything that draws its own picture. Those tasks stay on
+     * the one fullscreen app — the virtual screen is refused — and nothing is drawn over it: the
+     * line lands inside the picture the GUI is matching its targets against, and a line showing up
+     * mid-flow moves every target it looks for.
+     */
+    private fun pureGui(): Boolean {
+        val pkg = mainPackage()
+        if (pkg != null && pkg in GUI_SCHEME_PACKAGES) return true
+        return pictureApp != null && (pkg == null || pkg == pictureApp)
     }
+
+    private fun mainPackage(): String? = try {
+        env.driver(PhoneScreen.MAIN)?.foregroundPackage()
+    } catch (_: Throwable) {
+        null
+    }
+
+    /** A pure-GUI task starts here: the virtual screen goes, and so does a line already drawn. */
+    private fun enterPureGui(pkg: String?, label: String? = null) {
+        if (pkg != null) pictureApp = pkg
+        if (label != null) pictureLabel = label
+        if (!pureGuiEntered) {
+            pureGuiEntered = true
+            runCatching { env.closeBackground() }
+        }
+        runCatching { env.gate()?.status(null) }
+    }
+
+    /** Remembers a main-screen picture after the fact, so every later call in the task knows. */
+    private fun rememberPicture(screen: PhoneScreen, snap: ScreenSnapshot) {
+        if (screen != PhoneScreen.MAIN) return
+        val pkg = snap.packageName
+        val scheme = pkg != null && pkg in GUI_SCHEME_PACKAGES
+        if (snap.kind == ScreenKind.CANVAS || snap.kind == ScreenKind.BLANKED || scheme) {
+            enterPureGui(pkg, snap.appLabel)
+        } else if (pkg != null && pkg != pictureApp) {
+            pictureApp = null
+            pictureLabel = null
+            pureGuiEntered = false
+        }
+    }
+
+    /** The one line a pure-GUI task carries on every main-screen read, so the model does not drift. */
+    private fun pureGuiHint(appLabel: String?): String =
+        // l10n:keep agent tool result
+        "「${appLabel ?: pictureLabel ?: "这个 App"}」走纯 GUI：不要用 background，用 tap_xy 点截图上的位置。"
+
+    /** What the model is told when it asks for the virtual screen inside a pure-GUI task. */
+    private fun pureGuiSentence(appLabel: String?): String =
+        // l10n:keep agent tool result
+        "「${appLabel ?: "这个 App"}」走纯 GUI：只在全屏 App 里操作，不用后台屏（虚拟屏）。不带 background 打开应用，用 screen 看屏幕、tap_xy 点截图上的位置。"
 
     /** The screen of the last screen-based call, for `handoff`. */
     @Volatile private var lastScreen: PhoneScreen = PhoneScreen.MAIN
@@ -242,6 +300,10 @@ class PhoneCore(
         if (!background) {
             return afterSystem(env.system().launch(app), ui.get("phone_log_open_app", "打开 %1\$s", app.packageName), app.label) // l10n:keep test default
         }
+        if (app.packageName in GUI_SCHEME_PACKAGES || pureGui()) {
+            return Out(pureGuiSentence(app.label), error = true, app = app.label,
+                summary = ui.get("phone_log_open_background", "后台屏打开 %1\$s", app.packageName), decision = "refused:pure-gui") // l10n:keep test default
+        }
         val driver = env.driver(PhoneScreen.BACKGROUND)
             ?: return Out(env.backgroundUnavailable(), error = true, app = app.label, summary = ui.get("phone_log_open_background", "后台屏打开 %1\$s", app.packageName), decision = "unavailable") // l10n:keep test default
         driver.availability().let { if (!it.ok) return Out(it.reason ?: "后台屏现在不可用。", error = true, summary = ui.get("phone_log_open_background", "后台屏打开 %1\$s", app.packageName), decision = "unavailable") } // l10n:keep test default
@@ -275,7 +337,7 @@ class PhoneCore(
         if (!d.availability().ok) return null
         return try {
             env.sleep(settleMs)
-            safety.filterScreen(d.observe(detail = false, image = false))
+            safety.filterScreen(d.observe(detail = false, image = false)).also { rememberPicture(PhoneScreen.MAIN, it) }
         } catch (e: InterruptedException) {
             throw e
         } catch (_: Exception) {
@@ -355,6 +417,9 @@ class PhoneCore(
 
     /** The driver for [screen], or the sentence explaining why there is none. */
     private fun driverFor(screen: PhoneScreen): Either<String, PhoneDriver> {
+        // Pure GUI: one fullscreen app, no second screen. Checked before env.driver so a refused
+        // call never brings the virtual display up (phone_control) or waits on it.
+        if (screen == PhoneScreen.BACKGROUND && pureGui()) return Either.Left(pureGuiSentence(pictureLabel))
         val d = env.driver(screen) ?: return Either.Left(unavailable(screen))
         val av = try {
             d.availability()
@@ -396,11 +461,14 @@ class PhoneCore(
         say(if (which == PhoneScreen.BACKGROUND) ui.get("phone_reading_background", "DSH 正在看后台屏") else ui.get("phone_reading_screen", "DSH 正在看屏幕")) // l10n:keep test default
         val snap = driver.observe(detail = a.bool("detail") == true, image = a.bool("image") == true, region = region)
         tasks.setApp(snap.appLabel)
+        rememberPicture(which, snap)
         val shown = safety.filterScreen(snap)
         val refused = shown !== snap
         return Out(
             // l10n:keep agent tool result
-            if (refused) "没有读取这个屏幕的内容。" else "",
+            if (refused) "没有读取这个屏幕的内容。"
+            else if (which == PhoneScreen.MAIN && pureGui()) " " + pureGuiHint(snap.appLabel)
+            else "",
             error = refused,
             screen = shown,
             app = snap.appLabel ?: snap.packageName,
@@ -440,11 +508,14 @@ class PhoneCore(
         say(if (which == PhoneScreen.BACKGROUND) ui.get("phone_reading_background", "DSH 正在看后台屏") else ui.get("phone_reading_screen", "DSH 正在看屏幕")) // l10n:keep test default
         val snap = driver.observe(detail = a.bool("detail") == true, image = a.bool("image") == true)
         tasks.setApp(snap.appLabel)
+        rememberPicture(which, snap)
         val shown = safety.filterScreen(snap)
         val refused = shown !== snap
         return Out(
             // l10n:keep agent tool result
-            if (refused) "没有读取这个屏幕的内容。" else "等了 ${ms} 毫秒。",
+            if (refused) "没有读取这个屏幕的内容。"
+            else if (which == PhoneScreen.MAIN && pureGui()) "等了 ${ms} 毫秒。 " + pureGuiHint(snap.appLabel)
+            else "等了 ${ms} 毫秒。",
             error = refused,
             screen = shown,
             app = snap.appLabel ?: snap.packageName,
@@ -576,6 +647,8 @@ class PhoneCore(
         val owner = tasks.activeOwner() ?: return stoppedOut(summary)
         // canvas 类页面没有元素可点, 坐标是唯一操作方式; 告诉门, 它在任务模式里可以不再逐次问。
         val kind0 = driver.screenKind()
+        // Acting on a page nobody can read from the tree: from here on the task is pure GUI.
+        if (which == PhoneScreen.MAIN && (kind0 == ScreenKind.CANVAS || kind0 == ScreenKind.BLANKED)) enterPureGui(driver.foregroundPackage())
         val needsVision = kind == WriteKind.TAP_XY && (kind0 == ScreenKind.CANVAS || kind0 == ScreenKind.BLANKED)
         val verdict = safety.checkWrite(kind, target, pkg, appLabel, typed, submit, point, needsVision)
         val decision = when (val r = safety.resolve(verdict, scope)) {
@@ -728,7 +801,11 @@ class PhoneCore(
          * Apps whose screens an outside GUI scheme reads and drives itself (微信 today): the
          * overlay's status line would land inside that picture and shift the targets it looks for.
          */
-        private val QUIET_STATUS_PACKAGES = setOf("com.tencent.mm")
+        /**
+         * Apps an outside GUI scheme reads and drives on its own (微信): a task on one of them is
+         * pure GUI — one fullscreen app, no virtual screen, nothing drawn over it.
+         */
+        private val GUI_SCHEME_PACKAGES = setOf("com.tencent.mm")
 
         /** The call's own time, not counting waits for the person. */
         fun budgetMs(tool: String): Long = when (tool) {
