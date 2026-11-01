@@ -757,8 +757,12 @@ internal class MainScreenDriver(private val service: PhoneA11yService, private v
         // A tree page was already measured by [changeNote]; a canvas page only here.
         // The zoom the verification may have taken wins over the settled screenshot: it is what the
         // model needs to see after a miss.
+        val withPicture = verified.shot ?: out.screen?.let { base ->
+            if (verified.bytes == null || base.image != null) base
+            else base.copy(image = verified.bytes, imageMime = verified.mime ?: base.imageMime)
+        }
         return out.copy(message = verified.note + idNote, change = verified.amount ?: out.change,
-            screen = verified.shot ?: out.screen)
+            screen = withPicture)
     }
 
     /**
@@ -793,7 +797,16 @@ internal class MainScreenDriver(private val service: PhoneA11yService, private v
             val change = PixelDiff.diff(before, after)
             if (change >= CHANGED) {
                 clearMiss()
-                return Change(message, change)
+                // On a picture page the tap's result is the new picture: without it the model pays a
+                // whole `screen` round trip after every tap (measured: 12 taps, 12 extra reads in one
+                // 炉石 task). The shot is already taken above, so this costs nothing extra.
+                return Change(
+                    message + "\n" + "下面是这次点击之后的画面（同一张截图，不用再 screen）：接着点、滚或输入都可以直接做。",
+                    change,
+                    null,
+                    shot.bytes,
+                    shot.mime,
+                )
             }
             val hits = bumpMiss(track)
             val amount = String.format(java.util.Locale.ROOT, "%.2f", change)
@@ -855,7 +868,14 @@ internal class MainScreenDriver(private val service: PhoneA11yService, private v
         try {
             val snap = publish(cap, false)
             val change = changeNote(previous, snap, scrolled, track, verifyPixels)
-            return ActionResult(true, message + change.note, toSnapshot(snap), change.amount)
+            // A picture page has nothing else to show: without the picture the model has to spend a
+            // whole `screen` round trip after every scroll and key (measured: 12 taps and 4 scrolls
+            // in one 炉石 task, each followed by its own read).
+            val shown = toSnapshot(snap)
+            val withPicture = if (picture && shown.image == null) {
+                runCatching { observeShot() }.getOrNull() ?: shown
+            } else shown
+            return ActionResult(true, message + change.note, withPicture, change.amount)
         } finally { cap.recycle() }
 
     }
@@ -919,6 +939,9 @@ internal class MainScreenDriver(private val service: PhoneA11yService, private v
         val amount: Float?,
         /** A picture to go with the note (a zoom of what was just tapped), when one was taken. */
         val shot: ScreenSnapshot? = null,
+        /** The picture taken right after a tap that worked: what the model would `screen` for. */
+        val bytes: ByteArray? = null,
+        val mime: String? = null,
     )
 
     /**
