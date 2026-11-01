@@ -735,7 +735,7 @@ class PhoneCore(
         val snap = driver.observe(detail = a.bool("detail") == true, image = a.bool("image") == true, region = region)
         env.log(
             "read ${snap.id} ${snap.packageName} kind=${snap.kind} secure=${snap.secure} poorTree=${snap.poorTree} " +
-                "image=${snap.image != null} task=${tasks.snapshot().id}",
+                "image=${snap.image != null} ${snap.image?.size ?: 0}B region=${region?.let { "${it.left},${it.top},${it.right},${it.bottom}" } ?: "-"} task=${tasks.snapshot().id}",
         )
         tasks.setApp(snap.appLabel)
         // After the page is known, not before: a picture page (a game, 微信 under an outside GUI
