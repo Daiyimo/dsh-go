@@ -38,6 +38,12 @@ class RuntimeController private constructor(private val app: Context) : DshProce
     private val logs = ArrayDeque<String>()
     private val logDir = File(app.filesDir, "runtime/logs")
     private val logFile = File(logDir, "dsh.log")
+    /**
+     * The same lines where adb can read them: the private log needs `run-as`, which a release build
+     * does not allow, so anything the person can see and we cannot ("连不上我的模型配置") was
+     * unreadable from a PC. Only redacted lines land here.
+     */
+    private val sharedLog = File(app.getExternalFilesDir(null) ?: app.filesDir, "dsh-runtime.log")
     private val lkgFile = File(app.filesDir, "runtime/lkg/lkg.json")
     private val prefs = app.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
@@ -813,6 +819,9 @@ class RuntimeController private constructor(private val app: Context) : DshProce
             logFile.parentFile?.mkdirs()
             if (logFile.length() > MAX_LOG_BYTES) logFile.renameTo(File(logFile.path + ".1"))
             logFile.appendText(line + "\n")
+            sharedLog.parentFile?.mkdirs()
+            if (sharedLog.length() > MAX_LOG_BYTES) sharedLog.renameTo(File(sharedLog.path + ".1"))
+            sharedLog.appendText(line + "\n")
         } catch (_: Exception) {
         }
     }
