@@ -273,6 +273,17 @@ class PhoneControl private constructor(private val app: Context) : PhoneEnv, Con
      */
     override fun launchFullscreen(): Boolean = prefs.getBoolean(K_LAUNCH_FULLSCREEN, true)
 
+    /** A game app: 游戏类任务 run pure GUI without the person listing the package by hand. */
+    override fun isGame(packageName: String): Boolean = gameCache.getOrPut(packageName) {
+        runCatching {
+            val info = app.packageManager.getApplicationInfo(packageName, 0)
+            info.category == android.content.pm.ApplicationInfo.CATEGORY_GAME ||
+                info.metaData?.getBoolean("com.android.app.game") == true
+        }.getOrDefault(false)
+    }
+
+    private val gameCache = java.util.concurrent.ConcurrentHashMap<String, Boolean>()
+
     /** True when the switch was stored. It used to answer with the new value, so switching it OFF
      *  looked like a failure to the page ("it did not work") and the row bounced back. */
     fun setLaunchFullscreen(on: Boolean): Boolean {

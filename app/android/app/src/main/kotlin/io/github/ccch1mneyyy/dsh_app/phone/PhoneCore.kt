@@ -52,6 +52,13 @@ interface PhoneEnv {
      * process that a ROM may put in a small window. Off leaves the way the system chooses.
      */
     fun launchFullscreen(): Boolean = true
+    /**
+     * True when the package is a game. A game is driven the same way a listed app is (纯 GUI): the
+     * virtual screen goes, the "DSH 正在看屏幕" line stays off, and home/back do not throw the task
+     * out. Measured without it: the first `key home` of a 炉石 task went through and the model
+     * spent two calls tapping icons on 系统桌面 (m05362).
+     */
+    fun isGame(packageName: String): Boolean = false
     /** The focused field is a password / code field: DSH never types there. */
     fun imePassword(): Boolean = false
     /**
@@ -492,7 +499,12 @@ class PhoneCore(
             "open ${app.packageName} background=$background scheme=$schemeApp " +
                 "listed=${env.guiScheme().joinToString(",")} fullscreen=${env.launchFullscreen()} a11y=${env.a11yState()}",
         )
-        if (app.packageName in env.guiScheme()) {
+        // A game is the other half of what the person asked for (m00001): in a task that opens one,
+        // the virtual screen goes, the screen line stays off, and home/back do not throw the task
+        // out. Without this the first `key home` of a 炉石 task went through and the model then
+        // tapped icons on 系统桌面 (measured 18:37:24).
+        val game = runCatching { env.isGame(app.packageName) }.getOrDefault(false)
+        if (app.packageName in env.guiScheme() || game) {
             // A virtual screen from an earlier task may still show this app. Take it down before
             // the first launch: the task runs in one fullscreen app, and leaving the display up
             // means the person sees 微信 appear on it and vanish again when the first read
@@ -750,10 +762,17 @@ class PhoneCore(
         say(if (which == PhoneScreen.BACKGROUND) ui.get("phone_reading_background", "DSH 正在看后台屏") else ui.get("phone_reading_screen", "DSH 正在看屏幕")) // l10n:keep test default
         val shown = safety.filterScreen(snap)
         val refused = shown !== snap
+        // Every task in one log started with `tool screen error decision=refused:read app=DSH Go`
+        // (m05362): the phone still sits on this app, nothing is latched to return to, and there is
+        // nothing to refuse. Say what to do next as a normal answer, so the model neither retries
+        // the read nor presses back.
+        val ownOnly = refused && snap.packageName == env.ownPackage() && latchedApp() == null
         val blind = !refused && !env.policies().canSeeImages &&
             (snap.kind == ScreenKind.CANVAS || snap.kind == ScreenKind.BLANKED)
         return Out(
             when {
+                // l10n:keep agent tool result
+                ownOnly -> "现在前台是 DSH 自己（任务刚开始，手机还停在我们的界面上），这里没有可操作的东西。用 open 打开目标 App（例如微信 com.tencent.mm），打开之后直接 screen 读它，不要按 back 或 home。"
                 // l10n:keep agent tool result
                 refused -> shown.text
                 // A picture page for a model that cannot read pictures: say it here rather than
@@ -762,13 +781,13 @@ class PhoneCore(
                 which == PhoneScreen.MAIN && pureGui() -> pureGuiHint(snap.appLabel, snap.kind)
                 else -> ""
             },
-            error = refused,
+            error = refused && !ownOnly,
             // A picture the model cannot read is not sent again: the page text is enough to know
             // what is there, and another refusal costs a turn.
             screen = if (refused) null else if (blind) shown.copy(image = null, imageMime = null) else shown,
             app = snap.appLabel ?: snap.packageName,
             summary = "$summary ${snap.id}",
-            decision = if (refused) "refused:read" else "ok",
+            decision = if (ownOnly) "own-ui" else if (refused) "refused:read" else "ok",
         )
     }
 
@@ -786,11 +805,11 @@ class PhoneCore(
 
     /** Waits, then reads the screen: the only way to let a slow page finish without guessing. */
     private fun wait(a: Args, scope: SerialWorker.Scope): Out {
-        val ms = a.int("ms")?.toLong() ?: WAIT_DEFAULT_MS
-        if (ms < 1 || ms > WAIT_MAX_MS) {
-            // l10n:keep agent tool result
-            return Out("wait 的 ms 要在 1 到 5000 毫秒之间。", error = true, summary = PhoneToolCatalog.WAIT, decision = "invalid")
-        }
+        val asked = a.int("ms")?.toLong() ?: WAIT_DEFAULT_MS
+        // Clamped, not refused: the model asking for 3000 ms is not a mistake worth a whole round
+        // trip (measured three `tool wait error decision=invalid` inside one 炉石 task, 18:35:38).
+        val ms = asked.coerceIn(1L, WAIT_MAX_MS)
+        if (ms != asked) env.log("wait asked ${asked}ms, waited ${ms}ms")
         val which = if (a.bool("background") == true) PhoneScreen.BACKGROUND else PhoneScreen.MAIN
         val summary = if (which == PhoneScreen.BACKGROUND) ui.get("phone_log_background_read", "读后台屏") else ui.get("phone_log_wait", "等 %1\$d 毫秒", ms.toInt()) // l10n:keep test default
         val driver = when (val d = driverFor(which)) {
@@ -1035,10 +1054,15 @@ class PhoneCore(
         // `tool tap error decision=stale at=点 s4#4` on a BLANKED 微信 page).
         val picture = runCatching { driver.screenKind() != ScreenKind.TREE }.getOrDefault(false)
         // l10n:keep agent tool result
-        val text = if (picture)
+        var text = if (picture)
             "屏幕 $sid 是画面页：微信、游戏这类页面不把控件交给 DSH，上面没有控件编号，编号点击没有执行。画面页请用 tap_xy 点截图上的位置（0-1000 归一化坐标），滚动用 scroll。下面是最新的画面。"
         // l10n:keep agent tool result
         else "屏幕 $sid 已经过期，或者这个元素变了，没有执行。按下面的新屏幕重新选。"
+        // The numbers that DO exist, so a wrong id costs one call and not a `screen` plus a guess
+        // (measured: `tool tap error decision=stale at=点 s18#2` four times in one 炉石 task, each
+        // followed by a `back`).
+        val list = runCatching { driver.numbered() }.getOrDefault("")
+        if (list.isNotEmpty()) text += "现在这一屏的编号是：$list。直接点其中一个，不用再 screen。"
         return Out(text, error = true, screen = now, summary = summary, decision = "stale")
     }
 

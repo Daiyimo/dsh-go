@@ -73,7 +73,7 @@ object PhoneToolCatalog {
                 // l10n:keep agent tool catalog
                 "background:true 在后台屏打开（不打扰模式，需用户在设置里开通）。开着无障碍时返回打开后的屏幕。" +
                 // l10n:keep agent tool catalog
-                "微信、游戏这类只能看画面的应用没有后台屏，只在全屏 App 上操作。"
+                "微信、游戏这类只能看画面的应用没有后台屏，只在全屏 App 上操作（游戏类应用会自动这样：不用把它加进纯 GUI 名单）。"
                 // l10n:keep agent tool catalog
                 + "打开后不用回桌面：页面还在加载就直接再 screen 读一次。" +
                 // l10n:keep agent tool catalog
@@ -213,7 +213,8 @@ object PhoneToolCatalog {
         Tool(
             TAP,
             // l10n:keep agent tool catalog
-            "点一个元素，返回新屏幕。首次操作某个 App、或点发送 / 支付 / 删除这类敏感按钮时，会先请用户确认。",
+            "点一个元素，返回新屏幕。首次操作某个 App、或点发送 / 支付 / 删除这类敏感按钮时，会先请用户确认。" +
+                "编号不存在或已经过期时，答案里会给出这一屏现有的编号，直接点其中一个，不用再 screen。",
             // l10n:keep agent tool catalog
             linkedMapOf("screen" to SCREEN_ID, "id" to int("元素编号"), "long" to bool("长按")),
             listOf("screen", "id"),
@@ -295,7 +296,7 @@ object PhoneToolCatalog {
             // l10n:keep agent tool catalog
             "等一会儿，什么都不点，然后读当前屏幕。只在真的需要停住时用（动画没停、刚 handoff 回来）；" +
                 "页面还在加载就直接再 screen 一次，不要靠 wait 赌它加载完：读屏本身会等页面稳定。" +
-                "ms 是等待毫秒数，1 到 1500（超过会被拒）：停得越久越亏，读屏本身就会等页面稳定。",
+                "ms 是等待毫秒数，1 到 1500（填大了按 1500 算，不会报错）：停得越久越亏，读屏本身就会等页面稳定；多数时候直接 screen 就够。",
             linkedMapOf(
                 // l10n:keep agent tool catalog
                 "ms" to int("等待毫秒数，1-1500；省略等 2 秒", 1, 1_500),

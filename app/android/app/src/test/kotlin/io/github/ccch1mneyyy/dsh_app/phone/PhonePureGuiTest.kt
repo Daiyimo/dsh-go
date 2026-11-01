@@ -40,12 +40,16 @@ class PhonePureGuiTest {
     private var policies = PhonePolicies()
     private var secure = false
     private val fullscreens = mutableListOf<String>()
+    private val games = mutableSetOf<String>()
+    private var numberedText = ""
+    private val sleeps = mutableListOf<Long>()
 
     private fun driver(screen: PhoneScreen, id: String) = object : PhoneDriver {
         override val screen = screen
         override fun availability() = Availability(true)
         override fun foregroundPackage() = pkg
         override fun screenKind() = kind
+        override fun numbered() = numberedText
         override fun observe(detail: Boolean, image: Boolean, region: Box?) =
             ScreenSnapshot(id = id, text = "Example", appLabel = appLabel, packageName = pkg, secure = secure, kind = kind)
         override fun collect(screenId: String, listElementId: Int, maxPages: Int, until: String?) =
@@ -63,6 +67,10 @@ class PhonePureGuiTest {
         }
         override fun open(packageName: String): ActionResult {
             opens += packageName
+            // The app comes to the front: that is what a real start does, and pure GUI is decided
+            // by what is in front.
+            pkg = packageName
+            appLabel = packageName
             return ActionResult(true, "打开了 $appLabel", screen = ScreenSnapshot(id = id, text = "Example", appLabel = appLabel, packageName = pkg, kind = kind))
         }
     }
@@ -91,6 +99,7 @@ class PhonePureGuiTest {
         override fun backgroundUnavailable() = "后台屏用不了。"
         override fun closeBackground() { closeCount++ }
         override fun guiScheme() = scheme
+        override fun isGame(packageName: String) = packageName in games
         override fun homePackages() = home
         override fun launchFullscreen() = fullscreen
         override fun forceFullscreen(packageName: String): Boolean {
@@ -106,9 +115,13 @@ class PhonePureGuiTest {
         override fun zone() = ZoneId.of("UTC")
         override fun notifyFix(kind: String) {}
         override fun beforeHandoff(screen: PhoneScreen): String? = null
-        override fun sleep(ms: Long) {}
+        override fun sleep(ms: Long) { sleeps += ms }
         override fun system() = object : SystemApi {
-            override fun apps() = listOf(AppEntry("Example", "example.app"), AppEntry("微信", "com.tencent.mm"))
+            override fun apps() = listOf(
+                AppEntry("Example", "example.app"),
+                AppEntry("微信", "com.tencent.mm"),
+                AppEntry("炉石传说", "com.blizzard.wtcg.hearthstone"),
+            )
             override fun isInstalled(pkg: String) = true
             override fun launch(app: AppEntry): SysResult { launches += app.packageName; return SysResult(true, "打开了 ${app.label}") }
             override fun urlTarget(url: String) = error("unexpected URL")
@@ -455,6 +468,53 @@ class PhonePureGuiTest {
         assertFalse(out.text, out.isError)
         assertEquals("the app was not brought back", listOf("com.tencent.mm"), fullscreens)
         assertTrue(out.text, out.text.contains("拉回来"))
+    }
+
+    @Test fun aWaitLongerThanTheCapIsWaitedOutNotRefused() {
+        pkg = "com.tencent.mm"
+        appLabel = "微信"
+        readMain()
+        sleeps.clear()
+        // Measured three times in one 炉石 task: `tool wait error decision=invalid` because the
+        // model asked for 3000 ms, and each refusal cost a whole model turn (m05362).
+        val out = core.call(PhoneToolCatalog.WAIT, mapOf("ms" to 3000))
+        assertFalse("a 3000 ms wait must not be an error: ${out.text}", out.isError)
+        assertEquals(listOf(1_500L), sleeps)
+    }
+
+    @Test fun aReadOnOurOwnScreenSaysWhatToDoInsteadOfRefusing() {
+        pkg = "io.github.ccch1mneyyy.dsh_app"
+        appLabel = "DSH Go"
+        // Every task in one log started with `tool screen error decision=refused:read app=DSH Go`
+        // because the phone still sat on this app and nothing was latched to return to (m05362).
+        val out = core.call(PhoneToolCatalog.SCREEN, mapOf("screen" to "s1"))
+        assertFalse("this is a normal answer, not a refusal: ${out.text}", out.isError)
+        assertTrue(out.text, out.text.contains("open"))
+    }
+
+    @Test fun aWrongElementNumberComesBackWithTheNumbersThatExist() {
+        pkg = "com.tencent.mm"
+        appLabel = "微信"
+        kind = ScreenKind.TREE
+        numberedText = "#3 搜索、#5 返回"
+        readMain()
+        val out = core.call(PhoneToolCatalog.TAP, mapOf("screen" to "s9", "id" to 2))
+        assertTrue(out.isError)
+        assertTrue("the answer must list the numbers: ${out.text}", out.text.contains("#3 搜索"))
+    }
+
+    @Test fun aGameIsAPureGuiTaskFromTheFirstSecond() {
+        games += "com.blizzard.wtcg.hearthstone"
+        pkg = "com.android.launcher3"
+        appLabel = "桌面"
+        val out = core.call(PhoneToolCatalog.OPEN, mapOf("app" to "com.blizzard.wtcg.hearthstone"))
+        assertFalse(out.text, out.isError)
+        // 18:37:24 in the log: home went through in a 炉石 task and the model then tapped icons on
+        // 系统桌面. A game is the other half of 纯 GUI (m00001).
+        val home = core.call(PhoneToolCatalog.KEY, mapOf("key" to "home"))
+        assertFalse(home.text, home.isError)
+        assertTrue("home was pressed: ${keys}", keys.isEmpty())
+        assertTrue(home.text, home.text.contains("当没按"))
     }
 
     @Test fun aWaivedTaskIsNotAskedToTakeOverAgain() {

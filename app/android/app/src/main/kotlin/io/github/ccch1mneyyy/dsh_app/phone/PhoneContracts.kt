@@ -203,6 +203,13 @@ interface PhoneDriver {
      */
     fun forgetScreens() {}
 
+    /**
+     * The element numbers of the screen the model was last given, as one line ("#3 搜索、#5 返回").
+     * A `tap` with a number that no longer exists answers with this list, so a wrong number costs
+     * one call instead of a `screen` plus a guess (measured four times in one 炉石 task).
+     */
+    fun numbered(): String = ""
+
     /** Whether a focused editable field exists to paste into (微信 hides its tree, so: no). */
     fun fieldReady(): Boolean = false
 

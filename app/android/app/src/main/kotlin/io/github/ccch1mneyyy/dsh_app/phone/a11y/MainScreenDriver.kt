@@ -79,7 +79,8 @@ internal class MainScreenDriver(private val service: PhoneA11yService, private v
      * should be a handful of taps. Counting here turns that into one explicit refusal.
      */
     private val tapLock = Any()
-    private val taps = HashMap<String, Int>()
+    /** Recent taps per package, so a run of taps inside one small area stops (see TAP_REPEAT_RADIUS). */
+    private val taps = HashMap<String, MutableList<Pair<Int, Int>>>()
 
     /** Bumped by [abort] (stop, screen off): loops and waits started before it give up. */
     @Volatile private var abortGen = 0L
@@ -143,6 +144,12 @@ internal class MainScreenDriver(private val service: PhoneA11yService, private v
         manager.setPrimaryClip(android.content.ClipData.newPlainText("dsh", text))
         true
     }.getOrDefault(false)
+
+    override fun numbered(): String = synchronized(lock) {
+        latest?.screen?.elements?.take(14)?.joinToString("、") { e ->
+            "#${e.id} " + e.label.ifBlank { e.role }.take(18)
+        }.orEmpty()
+    }
 
     override fun forgetScreens() {
         synchronized(lock) {
@@ -668,15 +675,26 @@ internal class MainScreenDriver(private val service: PhoneA11yService, private v
                 PhoneLog.i("tap_xy refused: (${a.x},${a.y}) is outside the ${geometry.width}x${geometry.height} picture")
                 return ActionResult(false, "坐标 (${a.x}, ${a.y}) 换算后不在截图范围内（截图是 ${geometry.width}×${geometry.height}）。下面是当前屏幕，按它重新量一次再点。", observeShot())
             }
-        val spot = "${snap.packageName}|${a.x / TAP_REPEAT_STEP}|${a.y / TAP_REPEAT_STEP}"
-        val hits = synchronized(tapLock) { val n = (taps[spot] ?: 0) + 1; taps[spot] = n; n }
-        if (hits > TAP_REPEAT_MAX) {
-            PhoneLog.i("tap_xy refused: $spot tapped $hits times without the picture changing")
+        // By distance, not by grid cell: a 炉石 task tapped (500,840), (500,850), (500,860) and
+        // (500,880) in a row and the cell size made four different "spots" out of one target, so
+        // the guard stayed quiet and the model kept tapping the same button for a minute.
+        val near = synchronized(tapLock) {
+            val list = taps.getOrPut(snap.packageName ?: "") { ArrayList() }
+            val n = list.count {
+                kotlin.math.abs(it.first - a.x) <= TAP_REPEAT_RADIUS &&
+                    kotlin.math.abs(it.second - a.y) <= TAP_REPEAT_RADIUS
+            } + 1
+            list.add(a.x to a.y)
+            if (list.size > 32) list.removeAt(0)
+            n
+        }
+        if (near > TAP_REPEAT_MAX) {
+            PhoneLog.i("tap_xy refused: (${a.x},${a.y}) tapped $near times in one small area")
             // l10n:keep agent screen result
             return ActionResult(
                 false,
-                "同一个位置已经点了 ${hits - 1} 次，画面没有变化：这个位置不像是能点的东西，再点也不会有效果。" +
-                    "先 screen 看现在的画面，再换一个明显不同的位置（输入框、搜索框、页面上的按钮），或者 handoff 交给用户。",
+                "这一小片地方已经点了 ${near - 1} 次，画面没有因此变成你要的样子：它多半不是一个能点的按钮，再点也没用。" +
+                    "先 screen 看现在的画面，换一个明显不同的位置（或者滚动一下再找），确实不行就 handoff 交给用户。",
                 observeShot(),
             )
         }
@@ -1034,9 +1052,14 @@ internal class MainScreenDriver(private val service: PhoneA11yService, private v
         // stale and had to spend another round trip on `screen`.
         val held = latest
         val fingerprints = runCatching { ScreenFormat.index(cap.windows).map { it.fingerprint }.toSet() }.getOrNull()
-        val reuse = held != null && fingerprints != null && held.fingerprints == fingerprints &&
-            held.packageName == pkg && held.display == cap.screen &&
+        val samePage = held != null && held.packageName == pkg && held.display == cap.screen &&
             held.mainWindowId == cap.windows.lastOrNull()?.id
+        val sameFrame = samePage && fingerprints != null && held!!.fingerprints == fingerprints
+        // A picture page has no element to re-locate, so its id means "this page", not "this
+        // frame": carry it over even when the picture moved. Minting a new one on every tap made
+        // the id the model held expire instantly (measured five times in one task: every tap
+        // answered `tap_xy: s5 is not the latest screen (s6)`).
+        val reuse = sameFrame || (samePage && held!!.screen.kind != ScreenKind.TREE)
         val id = if (reuse) held!!.id else "${PhoneScreen.MAIN.prefix}${counter.incrementAndGet()}"
         val appLabel = label(pkg)
         val titles = cap.windows.mapNotNull { it.title } + ProtectedPages.titleTexts(cap.windows.firstOrNull()?.root, cap.screen.height)
@@ -1076,15 +1099,15 @@ internal class MainScreenDriver(private val service: PhoneA11yService, private v
         // still valid: carrying it over keeps `tap_xy` working on a page that was re-published
         // without a new screenshot (measured: `tap_xy refused: screen s2 has no picture`, one whole
         // round trip lost).
-        if (reuse) {
-            snap.bytes = held.bytes
-            snap.mime = held.mime
+        if (sameFrame) {
+            snap.bytes = held!!.bytes
+            snap.mime = held!!.mime
             // The geometry too: without it the reused id answers `tap_xy` with
             // "screen s4 has no picture" even though the picture itself was carried over, and the
             // model spends a whole `screen` + `tap_xy` pair (measured twice in one 微信 task).
-            snap.image = held.image
+            snap.image = held!!.image
         }
-        if (!reuse) synchronized(tapLock) { taps.clear() }
+        if (!samePage) synchronized(tapLock) { taps.clear() }
         latest = snap
         return snap
     }
@@ -1177,7 +1200,8 @@ internal class MainScreenDriver(private val service: PhoneA11yService, private v
         /** Half-width, in 0-1000, of the picture handed back after a miss. */
         private const val ZOOM_AROUND = 120
 
-        private const val TAP_REPEAT_STEP = 25
+        /** Taps within this many 0-1000 units of each other count as one spot (6% of the picture). */
+        private const val TAP_REPEAT_RADIUS = 60
         /** Attempts allowed on one spot before it is refused: a double tap still works. */
         private const val TAP_REPEAT_MAX = 3
         private const val CAPTURE_MS = 2_000L
