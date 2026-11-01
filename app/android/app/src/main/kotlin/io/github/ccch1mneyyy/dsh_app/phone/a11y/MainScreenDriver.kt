@@ -555,7 +555,13 @@ internal class MainScreenDriver(private val service: PhoneA11yService, private v
             val out = actuator.scroll(null, 0, a.direction == PhoneAction.Direction.LEFT || a.direction == PhoneAction.Direction.RIGHT,
                 Box(screen.left, screen.top + screen.height / 5, screen.right, screen.bottom - screen.height / 6), screen, a.direction)
             // l10n:keep agent screen result
-            if (!out.accepted) return ActionResult(false, "没能滚动。", observeQuiet())
+            if (!out.accepted) {
+                clock.pause(450) { cancelled(gen) }
+                if (!actuator.scroll(null, 0, a.direction == PhoneAction.Direction.LEFT || a.direction == PhoneAction.Direction.RIGHT,
+                        Box(screen.left, screen.top + screen.height / 5, screen.right, screen.bottom - screen.height / 6), screen, a.direction).accepted) {
+                    return ActionResult(false, "没能滚动。", observeQuiet())
+                }
+            }
             // l10n:keep agent screen result
             return after(before, snap, gen, "已${dirWord}滑动屏幕。", scrolled = true)
         }
@@ -668,7 +674,16 @@ internal class MainScreenDriver(private val service: PhoneA11yService, private v
         val before = clock.count
         PhoneLog.i("tap_xy norm=(${a.x},${a.y}) -> (${point.first},${point.second}) picture=${geometry.width}x${geometry.height} screen=${snap.display.width}x${snap.display.height} at=${geometry.originX},${geometry.originY}")
         // l10n:keep agent screen result
-        if (!actuator.tap(point.first, point.second)) return ActionResult(false, "系统没有接受这次点击。", observeQuiet())
+        if (!actuator.tap(point.first, point.second)) {
+            // A gesture issued right after the app came back in front is refused while the window
+            // is not the focus yet; one short retry is far cheaper than the round trip a failure
+            // costs (measured 16:01:36: `没能滚动` 700 ms after the launcher repair).
+            clock.pause(450) { cancelled(gen) }
+            if (!actuator.tap(point.first, point.second)) {
+                PhoneLog.i("tap_xy refused: the system took no gesture twice")
+                return ActionResult(false, "系统没有接受这次点击。", observeQuiet())
+            }
+        }
         // l10n:keep agent screen result
         val track = "p|${snap.packageName}|xy:${a.x},${a.y}"
         val out = after(before, snap, gen, "已点击截图上的 (${a.x}, ${a.y})（0-1000 归一化坐标）。", verifyPixels = false)
@@ -984,8 +999,12 @@ internal class MainScreenDriver(private val service: PhoneA11yService, private v
         // without a new screenshot (measured: `tap_xy refused: screen s2 has no picture`, one whole
         // round trip lost).
         if (reuse) {
-            snap.bytes = held!!.bytes
-            snap.mime = held!!.mime
+            snap.bytes = held.bytes
+            snap.mime = held.mime
+            // The geometry too: without it the reused id answers `tap_xy` with
+            // "screen s4 has no picture" even though the picture itself was carried over, and the
+            // model spends a whole `screen` + `tap_xy` pair (measured twice in one 微信 task).
+            snap.image = held.image
         }
         latest = snap
         return snap

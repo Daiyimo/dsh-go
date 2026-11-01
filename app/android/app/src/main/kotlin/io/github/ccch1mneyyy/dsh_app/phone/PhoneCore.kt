@@ -1025,14 +1025,16 @@ class PhoneCore(
         } catch (_: Exception) {
             null
         }
-        return Out(
-            // l10n:keep agent tool result
-            "屏幕 $sid 已经过期，或者这个元素变了，没有执行。按下面的新屏幕重新选。",
-            error = true,
-            screen = now,
-            summary = summary,
-            decision = "stale",
-        )
+        // A picture page has no element numbers at all, so the old sentence ("the screen expired")
+        // sent the model hunting for a new id instead of using the picture (measured
+        // `tool tap error decision=stale at=点 s4#4` on a BLANKED 微信 page).
+        val picture = runCatching { driver.screenKind() != ScreenKind.TREE }.getOrDefault(false)
+        // l10n:keep agent tool result
+        val text = if (picture)
+            "屏幕 $sid 是画面页：微信、游戏这类页面不把控件交给 DSH，上面没有控件编号，编号点击没有执行。画面页请用 tap_xy 点截图上的位置（0-1000 归一化坐标），滚动用 scroll。下面是最新的画面。"
+        // l10n:keep agent tool result
+        else "屏幕 $sid 已经过期，或者这个元素变了，没有执行。按下面的新屏幕重新选。"
+        return Out(text, error = true, screen = now, summary = summary, decision = "stale")
     }
 
     /**

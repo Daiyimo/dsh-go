@@ -299,6 +299,30 @@ class PhonePureGuiTest {
         assertTrue(out.text, out.text.contains("纯 GUI"))
     }
 
+    @Test fun anElementIdOnAPicturePageSaysUseThePicture() {
+        // Measured `tool tap error decision=stale at=点 s4#4` on a BLANKED 微信 page: the generic
+        // "the screen expired" sentence sent the model hunting for a new id instead of the picture
+        // it already had, and that round trip is the most expensive thing in a canvas task.
+        pkg = "com.tencent.mm"
+        appLabel = "微信"
+        kind = ScreenKind.BLANKED
+        readMain()
+        val out = core.call(PhoneToolCatalog.TAP, mapOf("screen" to "s1", "id" to 4))
+        assertTrue(out.isError)
+        assertTrue("a picture page must not be described as an expired screen: ${out.text}", out.text.contains("画面页"))
+        assertTrue(out.text, out.text.contains("tap_xy"))
+    }
+
+    @Test fun anElementIdOnATreePageStillReadsAsStale() {
+        pkg = "example.app"
+        appLabel = "Example"
+        kind = ScreenKind.TREE
+        readMain()
+        val out = core.call(PhoneToolCatalog.TAP, mapOf("screen" to "s1", "id" to 4))
+        assertTrue(out.isError)
+        assertTrue(out.text, out.text.contains("过期"))
+    }
+
     @Test fun aRefusedReadSaysWhy() {
         pkg = "com.icbc"
         appLabel = "ICBC"
