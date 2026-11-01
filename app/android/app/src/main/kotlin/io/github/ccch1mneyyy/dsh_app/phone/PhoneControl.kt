@@ -178,6 +178,7 @@ class PhoneControl private constructor(private val app: Context) : PhoneEnv, Con
     }
 
     init {
+        PhoneLog.attach(app)
         PhoneRegistry.notificationGate = notificationGate
         PhoneRegistry.promptGate = prompts
         PhoneRegistry.controlListener = this
@@ -384,6 +385,9 @@ class PhoneControl private constructor(private val app: Context) : PhoneEnv, Con
 
     fun stopTask(reason: String): Boolean {
         tasks.stop(reason)
+        // The hold refuses this turn's retries for `PhoneTasks.stopHoldMs`; it is a fixed window
+        // (it no longer grows with every refused call) and Dart's turn end clears it outright.
+        log("task stop: $reason (hold ${'$'}{tasks.stopHoldMs / 1000}s, not extended)")
         return true
     }
 
@@ -764,7 +768,8 @@ class PhoneControl private constructor(private val app: Context) : PhoneEnv, Con
     }
 
     override fun log(message: String) {
-        Log.i("DshPhone", message)
+        // One funnel: logcat for the live read, the file for after the buffer rolled.
+        PhoneLog.i(message)
     }
 
     override fun a11yState(): A11yState = when {

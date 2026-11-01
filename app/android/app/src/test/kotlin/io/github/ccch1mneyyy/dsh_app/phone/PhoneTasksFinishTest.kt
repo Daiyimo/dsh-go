@@ -51,6 +51,34 @@ class PhoneTasksFinishTest {
         assertTrue(t.finish())
     }
 
+    @Test fun aRefusedRetryDoesNotExtendTheStop() {
+        // 结束任务 while a call runs: the stopped turn keeps retrying. Each refusal used to push the
+        // window another 30 s, so a task started right after the stop never got to act at all.
+        val t = tasks()
+        t.begin()
+        t.stop("用户在 App 里停止")
+        now += 10_000
+        assertTrue(t.begin() is PhoneTasks.Begin.Refused)
+        now += 10_000
+        assertTrue(t.begin() is PhoneTasks.Begin.Refused)
+        // 31 s after the stop, not 50: refusing cost nothing.
+        now += 11_000
+        assertTrue(t.begin() is PhoneTasks.Begin.Go)
+        assertFalse(t.snapshot().stopped)
+    }
+
+    @Test fun theTurnsEndClearsTheStopEvenWithACallStillInFlight() {
+        // The stop interrupted a call that is still unwinding; the turn is over all the same, so the
+        // next task must start clean instead of inheriting the hold.
+        val t = tasks()
+        t.begin()
+        t.stop("用户在 App 里停止")
+        t.callStarted()
+        assertFalse(t.finish())
+        assertFalse("the stop hold outlived the turn that asked for it", t.snapshot().stopped)
+        assertTrue(t.begin() is PhoneTasks.Begin.Go)
+    }
+
     @Test fun callEndsNeverGoNegative() {
         val t = tasks()
         t.callEnded()

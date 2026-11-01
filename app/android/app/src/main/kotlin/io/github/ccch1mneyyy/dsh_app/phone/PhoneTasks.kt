@@ -73,7 +73,10 @@ class PhoneTasks(
         synchronized(lock) {
             val now = clock()
             if (now < stoppedUntil) {
-                stoppedUntil = now + stopHoldMs
+                // The hold is a fixed window from the stop. It used to be re-armed on every refused
+                // call, which turned a single stop into a trap: as long as the stopped turn (or a
+                // new one started right after it) kept calling tools, the window never ended, and
+                // every later task was refused in turn — the person saw "结束任务之后新任务也被中断".
                 return Begin.Refused(STOPPED_MESSAGE + (stopReason?.let { "（$it）" } ?: ""))
             }
             // This call is in flight already, so only the pause and the clock count here.
@@ -154,7 +157,15 @@ class PhoneTasks(
         val owner: Owner
         synchronized(lock) {
             if (expectedTaskId != null && expectedTaskId != taskId) return null
-            if (inFlight > 0) return null
+            if (inFlight > 0) {
+                // A call of the stopped turn is still winding down. The turn is over all the same, so
+                // its stop hold goes: leaving it armed here (as it used to) made the hold outlive the
+                // turn that asked for it, and the next task started inside a window nobody wanted.
+                stoppedUntil = 0L
+                stopReason = null
+                lock.notifyAll()
+                return null
+            }
             val stopped = clock() < stoppedUntil
             if (!active && !stopped) return null
             if (active) endLocked() else lifecycle++
