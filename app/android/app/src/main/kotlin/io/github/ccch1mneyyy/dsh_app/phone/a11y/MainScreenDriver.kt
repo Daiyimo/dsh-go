@@ -208,7 +208,9 @@ internal class MainScreenDriver(private val service: PhoneA11yService, private v
                         val secrets = ScreenShooter.sensitiveBounds(cap.windows)
                         // A zoomed crop is for reading small print, not for matching ids: no numbers on it, so the
                         // note that says "no element numbers, read the 10x10 grid" stays true.
-                        val shot = shooter.shoot(window, cap.screen, if (region == null) snap.screen.elements else emptyList(), secrets, minOf(left - 300, 3_000), region)
+                        val shot = shooter.shoot(window, cap.screen, if (region == null) snap.screen.elements else emptyList(), secrets, minOf(left - 300, 3_000), region,
+                            grid = snap.screen.kind != ScreenKind.TREE,
+                        )
                         secure = shot.secure
                         if (shot.bytes != null) {
                             bytes = shot.bytes
@@ -631,13 +633,27 @@ internal class MainScreenDriver(private val service: PhoneA11yService, private v
 
     private fun tapXY(a: PhoneAction.TapXY, gen: Long): ActionResult {
         val snap = latest
-        if (snap == null || snap.id != a.screenId) {
-            // The model kept an id from before a hiccup (a 30 s system freeze, a timed-out call).
-            // Answer with the same thing `screen` would — picture included — so the next call can
-            // simply re-measure; a text-only refusal costs it a whole extra round trip.
-            PhoneLog.i("tap_xy refused: ${a.screenId} is not the latest screen (${snap?.id ?: "none"})")
+        if (snap == null) {
+            PhoneLog.i("tap_xy refused: no screen read yet (asked for ${a.screenId})")
             // l10n:keep agent screen result
-            return ActionResult(false, "屏幕编号 ${a.screenId} 不是最新的（现在是 ${snap?.id ?: "还没有读过屏幕"}）：坐标对不上。下面是当前屏幕，按它的编号重新量一次再点。", observeShot())
+            return ActionResult(false, "还没有读过屏幕：先 screen 一次，按它给的编号和画面量坐标。", observeShot())
+        }
+        // A picture page has nothing but the picture, so a wrong or invented id (measured 18:17 in
+        // 炉石: s20/s21/s22/s23 were answered "not the latest screen (s19)" and cost four round
+        // trips) costs more than it protects: tap what the newest picture shows and say which one
+        // was used.
+        var idNote = ""
+        if (snap.id != a.screenId) {
+            if (snap.screen.kind == ScreenKind.TREE) {
+                // A tree page's numbers belong to one read: acting on another read's numbers could
+                // hit a different element entirely (secret words, money), so keep refusing here.
+                PhoneLog.i("tap_xy refused: ${a.screenId} is not the latest screen (${snap.id})")
+                // l10n:keep agent screen result
+                return ActionResult(false, "屏幕编号 ${a.screenId} 不是最新的（现在是 ${snap.id}）：坐标对不上。下面是当前屏幕，按它的编号重新量一次再点。", observeShot())
+            }
+            PhoneLog.i("tap_xy: ${a.screenId} is not the latest screen (${snap.id}), tapping the latest picture")
+            // l10n:keep agent screen result
+            idNote = "\n（你给的画面编号 ${a.screenId} 不是最新的，这次是按最新画面 ${snap.id} 量的坐标点的。）"
         }
         // l10n:keep agent screen result
         // A tree page needs no coordinates: every element has an id, and a point tap there would
@@ -723,7 +739,7 @@ internal class MainScreenDriver(private val service: PhoneA11yService, private v
         // A tree page was already measured by [changeNote]; a canvas page only here.
         // The zoom the verification may have taken wins over the settled screenshot: it is what the
         // model needs to see after a miss.
-        return out.copy(message = verified.note, change = verified.amount ?: out.change,
+        return out.copy(message = verified.note + idNote, change = verified.amount ?: out.change,
             screen = verified.shot ?: out.screen)
     }
 
@@ -763,7 +779,10 @@ internal class MainScreenDriver(private val service: PhoneA11yService, private v
             }
             val hits = bumpMiss(track)
             val amount = String.format(java.util.Locale.ROOT, "%.2f", change)
-            val zoom = if (hits >= 2) runCatching { observeShot(zoomAround(x, y)) }.getOrNull() else null
+            // Worth one extra screenshot on every miss, not only the second: a model that measured
+            // the target a few percent off (点「特勤处」落到「军需处」) corrects at once when it
+            // can see the spot under its finger, and a second wrong tap costs a round trip.
+            val zoom = runCatching { observeShot(zoomAround(x, y)) }.getOrNull()
             // Second miss on the same spot: a picture of the spot at up to 3x is worth more than
             // another sentence about coordinates — a model that measured the target a few percent
             // off sees what is actually under its finger and corrects, instead of pressing the same
@@ -773,7 +792,7 @@ internal class MainScreenDriver(private val service: PhoneA11yService, private v
                 return Change(message + "\n" + "点击后画面几乎没有变化（差异 $amount），这已经是同一目标连续第 $hits 次没有反应：停止重复点击。改试相邻的目标，或 handoff 交给用户；不要继续猜坐标。下面是刚才点的那一带放大后的画面，按它重新量坐标（坐标仍按整屏 0-1000 算），或者改点相邻的目标、handoff 交给用户。", change, zoom)
             }
             // l10n:keep agent screen result
-            return Change(message + "\n" + "点击后画面几乎没有变化（差异 $amount）。先核对你手上的坐标：tap_xy 的 x/y 是 0-1000 归一化坐标（0,0=截图左上角，1000,1000=截图右下角），不是像素、不是百分数，从图上量出来的像素要换算。再确认目标真的在这一屏：状态栏、输入法键盘下方、刚加载出来的空白页都可能让点击落空。同一位置第二次仍然没有变化就停手，改 handoff 交给用户。", change)
+            return Change(message + "\n" + "点击后画面几乎没有变化（差异 $amount）。下面是刚才点的那一带放大后的画面，十字是点的位置：对着它重新量坐标（仍按整屏 0-1000 算），别凭记忆再点一遍。先核对你手上的坐标：tap_xy 的 x/y 是 0-1000 归一化坐标（0,0=截图左上角，1000,1000=截图右下角），不是像素、不是百分数，从图上量出来的像素要换算。再确认目标真的在这一屏：状态栏、输入法键盘下方、刚加载出来的空白页都可能让点击落空。同一位置第二次仍然没有变化就停手，改 handoff 交给用户。", change, zoom)
         } catch (_: Exception) {
             return Change(message, null)
         } finally {

@@ -56,6 +56,7 @@ internal class ScreenShooter(private val service: AccessibilityService, private 
         secrets: List<Box>,
         timeoutMs: Long,
         region: Box? = null,
+        grid: Boolean = false,
     ): Shot {
         // l10n:keep agent screenshot result
         if (Build.VERSION.SDK_INT < 30) return Shot(null, null, null, false, "本机系统低于 Android 11，不支持无障碍截图")
@@ -98,7 +99,11 @@ internal class ScreenShooter(private val service: AccessibilityService, private 
                 try {
                     val sx = w.toFloat() / origin.width.coerceAtLeast(1)
                     val sy = h.toFloat() / origin.height.coerceAtLeast(1)
-                    draw(scaled, marks, secrets, origin, sx, sy)
+                    draw(scaled, marks, secrets, origin, sx, sy, grid)
+                    // A crop is always taken around the point just tapped (see zoomAround), so the
+                    // centre of it is where the finger landed: marking it turns "the tap was a few
+                    // percent off" into something the model can see and correct.
+                    if (zoom != null) drawCross(scaled)
                     val out = ByteArrayOutputStream()
                     scaled.compress(Bitmap.CompressFormat.JPEG, if (zoom != null) 92 else 80, out)
                     return Shot(out.toByteArray(), "image/jpeg", ImageGeometry(origin.left, origin.top, sx, sy, w, h), false, null)
@@ -189,7 +194,7 @@ internal class ScreenShooter(private val service: AccessibilityService, private 
         return dark >= n * n * 97 / 100
     }
 
-    private fun draw(bitmap: Bitmap, marks: List<ScreenElement>, secrets: List<Box>, origin: Box, sx: Float, sy: Float) {
+    private fun draw(bitmap: Bitmap, marks: List<ScreenElement>, secrets: List<Box>, origin: Box, sx: Float, sy: Float, grid: Boolean) {
         val canvas = Canvas(bitmap)
         val grey = Paint().apply { color = Color.rgb(128, 128, 128) }
         for (b in secrets) {
@@ -197,10 +202,8 @@ internal class ScreenShooter(private val service: AccessibilityService, private 
         }
         // No elements to number (canvas / blanked page): give the model a ruler instead of a bare
         // picture, so "the button in the middle-right" becomes a 0-1000 point it can write down.
-        if (marks.isEmpty()) {
-            drawGrid(bitmap)
-            return
-        }
+        if (grid) drawGrid(bitmap)
+        if (marks.isEmpty()) return
         val outline = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeWidth = 2f; color = Color.argb(200, 61, 90, 152) }
         val tag = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.argb(230, 33, 50, 98) }
         val halo = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeWidth = 1.5f; color = Color.WHITE }
@@ -254,6 +257,21 @@ internal class ScreenShooter(private val service: AccessibilityService, private 
             val y = (i * stepY).coerceIn(size, bitmap.height - 2f)
             canvas.drawText(label, 2f, y, halo)
             canvas.drawText(label, 2f, y, text)
+        }
+    }
+
+    /** Marks the centre of a crop: the point the finger just tapped. */
+    private fun drawCross(bitmap: Bitmap) {
+        val canvas = Canvas(bitmap)
+        val cx = bitmap.width / 2f
+        val cy = bitmap.height / 2f
+        val arm = (minOf(bitmap.width, bitmap.height) * 0.14f).coerceAtLeast(10f)
+        val halo = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeWidth = 6f; color = Color.argb(220, 0, 0, 0) }
+        val hot = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeWidth = 3f; color = Color.argb(240, 255, 64, 64) }
+        for (p in listOf(halo, hot)) {
+            canvas.drawLine(cx - arm, cy, cx + arm, cy, p)
+            canvas.drawLine(cx, cy - arm, cx, cy + arm, p)
+            canvas.drawCircle(cx, cy, arm * 0.55f, p)
         }
     }
 

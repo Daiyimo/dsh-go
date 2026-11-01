@@ -1199,7 +1199,10 @@ class PhoneCore(
         // (no hard rule behind it) then costs a whole turn waiting for a card that contradicts that
         // promise, so it is answered here instead: keep going. A hard rule (密码, 系统设置, 不碰名单,
         // 看不懂画面) still stops and asks, because there the person really has to take over.
-        if (cause == null && tasks.isWaived) {
+        // 始终免确认 (ConfirmMode.ALWAYS) waives every task with no per-task flag set, so
+        // asking tasks.isWaived alone let the card pop for the person who picked the global
+        // switch (measured 18:17:30: a model-initiated handoff waited for a tap in 炉石).
+        if (cause == null && (tasks.isWaived || safety.waived())) {
             env.log("handoff skipped: this task is waived and no hard rule refused the last step")
             // l10n:keep agent tool result
             return Out(

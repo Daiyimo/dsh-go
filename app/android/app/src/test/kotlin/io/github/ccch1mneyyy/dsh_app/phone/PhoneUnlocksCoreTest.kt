@@ -14,6 +14,14 @@ import org.junit.Test
 class PhoneUnlocksCoreTest {
     private val tasks = PhoneTasks()
     private var policies = PhonePolicies(confirmMode = ConfirmMode.ALWAYS)
+
+    /**
+     * With 始终免确认 nothing is asked, and a hand-off the model starts on its own is skipped
+     * outright (the card would only waste a turn). These three tests are about what that card
+     * says — which rule a hard refusal came from and that the next task does not inherit it —
+     * so they run under 本任务免确认 without the waiver being granted.
+     */
+    private fun askPerTask() { policies = policies.copy(confirmMode = ConfirmMode.TASK) }
     private val handoffs = mutableListOf<HandoffCause?>()
     private val statuses = mutableListOf<String?>()
     private var field = TargetInfo("s1", 1, "输入框", "支付密码", "example.app", "Example", true, true, true)
@@ -92,6 +100,7 @@ class PhoneUnlocksCoreTest {
     }
 
     @Test fun theHandoffAfterAHardRefusalNamesTheRule() {
+        askPerTask()
         assertTrue(type("135790").isError)
         assertFalse(handoff().isError)
         assertEquals(listOf<HandoffCause?>(HandoffCause.SECRET), handoffs)
@@ -109,6 +118,7 @@ class PhoneUnlocksCoreTest {
     }
 
     @Test fun aWriteThatGoesThroughClearsTheRefusalBeforeIt() {
+        askPerTask()
         assertTrue(type("135790").isError)
         field = TargetInfo("s1", 1, "按钮", "下一步", "example.app", "Example", false, false, false)
         assertFalse(tap().isError)
@@ -117,6 +127,7 @@ class PhoneUnlocksCoreTest {
     }
 
     @Test fun anotherTaskDoesNotInheritTheRefusal() {
+        askPerTask()
         assertTrue(type("135790").isError)
         tasks.endTask()
         assertFalse(handoff().isError)
