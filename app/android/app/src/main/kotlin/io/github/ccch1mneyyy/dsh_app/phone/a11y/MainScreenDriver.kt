@@ -961,6 +961,14 @@ internal class MainScreenDriver(private val service: PhoneA11yService, private v
             formatted = format(notes + "提示：用户已允许 DSH 填写密码和验证码，标着「不可代填」的输入框也可以输入。")
         }
         val snap = Snapshot(id, formatted, pkg, appLabel, protectedPage, cap.ownAppInFront, cap.windows.lastOrNull()?.id, cap.hiddenWindowTitle != null, cap.screen)
+        // The id is only reused when nothing on the page moved, so the picture that came with it is
+        // still valid: carrying it over keeps `tap_xy` working on a page that was re-published
+        // without a new screenshot (measured: `tap_xy refused: screen s2 has no picture`, one whole
+        // round trip lost).
+        if (reuse) {
+            snap.bytes = held!!.bytes
+            snap.mime = held!!.mime
+        }
         latest = snap
         return snap
     }

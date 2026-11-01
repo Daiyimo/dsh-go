@@ -171,14 +171,18 @@ class BackgroundControl private constructor(context: Context) {
      */
     private fun engineCall(op: String, fill: Bundle.() -> Unit): Boolean {
         val shared = mode != "off"
-        val ch = if (shared) activeChannel() else openAny()
+        // With the virtual screen off the engine still has to be asked for the fullscreen repair,
+        // the freeze whitelist and the input keys, and connecting a shell channel for each of them
+        // cost 0.9 s every time (measured: `privileged fullscreen via one-shot` inside an `open`
+        // that took 2.25 s). Keep the channel for the task instead; `endTask` drops it.
+        val ch = if (shared) activeChannel() else spare?.takeIf { it.alive() } ?: openAny()?.also { spare = it }
         var why: String? = null
         val ok = ch != null && runCatching {
             val answer = ch.execute(Bundle().apply { putString(Proto.OP, op); fill() })
             answer.getBoolean(Proto.OK).also { if (!it) why = answer.getString(Proto.ERROR) ?: "no reason" }
         }.onFailure { why = "${it.javaClass.simpleName}: ${it.message}" }.getOrDefault(false)
         PhoneLog.i("privileged $op via ${if (shared) mode else "one-shot"}: ok=$ok channel=${ch != null}" + (why?.let { " why=$it" } ?: ""))
-        if (!shared) disconnectAll()
+        if (!shared && ch == null) spare = null
         return ok
     }
 
@@ -244,6 +248,7 @@ class BackgroundControl private constructor(context: Context) {
             driverTaskId = null
             if (PhoneRegistry.backgroundDriver === ended) PhoneRegistry.backgroundDriver = null
             ended?.release()
+            spare = null
             notifyChanged()
         }
     }
@@ -255,6 +260,9 @@ class BackgroundControl private constructor(context: Context) {
     }
 
     // ---- channel plumbing --------------------------------------------------
+
+    /** One-shot channel kept between calls while the virtual screen is off (see [engineCall]). */
+    @Volatile private var spare: PrivilegedChannel? = null
 
     private fun activeChannel(): PrivilegedChannel? {
         channel?.takeIf { it.alive() }?.let { return it }
