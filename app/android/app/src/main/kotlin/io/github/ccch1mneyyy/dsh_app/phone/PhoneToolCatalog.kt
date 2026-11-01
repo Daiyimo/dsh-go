@@ -259,6 +259,8 @@ object PhoneToolCatalog {
                 // l10n:keep agent tool catalog
                 "back 只用来关弹窗、退回上一页：它经常直接把 App 退出去，退出去之后 DSH 会再拉回来，但这一来一回白花时间。页面上有「返回」「×」「关闭」就点页面上的，没必要不要按 back。" +
                 // l10n:keep agent tool catalog
+                "同一屏已经按过两次 back 还按第三次会被直接拒绝（不再执行）：那就别按 back，改点页面上的「返回」「×」或者用 open。" +
+                // l10n:keep agent tool catalog
                 "微信、游戏这类纯 GUI 任务在一个应用里跑的时候 home 和 notifications 会被忽略（按了也当没按，别重复按）：回桌面会把全屏应用挤成小窗、滑动还会滑到负一屏，拉通知栏会让全屏应用失去前台；要换应用用 open。",
             // l10n:keep agent tool catalog
             linkedMapOf("key" to enum(KEYS, "按键"), "screen" to str("屏幕号；省略时作用于主屏")),
@@ -274,6 +276,8 @@ object PhoneToolCatalog {
                 // l10n:keep agent tool catalog
                 "游戏进横屏这类转屏之后，旧截图上的坐标就作废了：结果会说方向变了，先 screen 重新读一次再点。" +
                 "点了没变化时，结果里会说明原因（坐标单位、状态栏、目标不在这一屏）；同一位置连续两次没变化就停手，改 handoff 交给用户。" +
+                // l10n:keep agent tool catalog
+                "同一位置第二次没反应时，结果会附一张那一带放大的截图：照着它重新量坐标，别凭记忆再点一遍。" +
                 // l10n:keep agent tool catalog
                 "默认每次点击都请用户确认；在本任务免确认模式下、且这个 App 本任务已经批准过，canvas 类页面的坐标点击不再逐次问。",
             linkedMapOf(
@@ -309,7 +313,9 @@ object PhoneToolCatalog {
         Tool(
             HANDOFF,
             // l10n:keep agent tool catalog
-            "把手机交给用户完成登录、验证码、支付或你没把握的步骤，等用户点「继续」或「停止」，最长 10 分钟。",
+            "把手机交给用户完成登录、验证码、支付或你没把握的步骤，等用户点「继续」或「停止」，最长 10 分钟。" +
+                // l10n:keep agent tool catalog
+                "任务是「本任务免确认」时，你自己发起的 handoff 不会弹给用户，等于白停一次：能接着做就接着做；密码、系统设置、不碰名单这类硬规则被拦下时，交还才有用。",
             // l10n:keep agent tool catalog
             linkedMapOf("reason" to str("要用户做什么，一句话")),
             listOf("reason"),

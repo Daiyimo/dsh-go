@@ -288,6 +288,10 @@ class PhoneCore(
     /** The task whose screen ids are still valid; a new task starts with none. */
     private var screensTask = -1L
 
+    /** How often `back` was pressed on one screen id, so a back that changes nothing stops. */
+    private val backLock = Any()
+    private val backs = HashMap<String, Int>()
+
     /**
      * The task's last hard refusal (密码框, 系统设置, 不碰名单), for the `handoff` that usually
      * follows it: the card says which rule it was. Cleared by a write that went through, a new
@@ -395,6 +399,7 @@ class PhoneCore(
         val task = tasks.snapshot().id
         if (task != screensTask) {
             screensTask = task
+            synchronized(backLock) { backs.clear() }
             runCatching { env.forgetScreens() }
         }
         if (tasks.isPaused) {
@@ -1116,6 +1121,23 @@ class PhoneCore(
                 decision = "ignored:leave-app",
             )
         }
+        // A back that changes nothing is the cheapest loop in the log (15 presses in one 炉石 task):
+        // the model reads 「界面没有明显变化」, thinks, and presses back again. Answer the third one
+        // instead of running it, the same way a repeated tap_xy is answered.
+        if (key == PhoneAction.GlobalKey.BACK) {
+            val spot = sid ?: "main"
+            val hits = synchronized(backLock) { val n = (backs[spot] ?: 0) + 1; backs[spot] = n; n }
+            if (hits > BACK_MAX) {
+                env.log("key: back pressed $hits times on $spot, refused")
+                // l10n:keep agent tool result
+                return Out(
+                    "back 已经在同一屏按了 ${hits - 1} 次，页面没有因为 back 回到你要的地方：别再按 back 了。先 screen 看现在的画面，再换办法——页面上有「返回」「×」就点它，要回应用用 open，找不到路用 handoff。",
+                    error = false,
+                    summary = summary,
+                    decision = "ignored:back",
+                )
+            }
+        }
         val driver = when (val d = driverFor(which)) {
             is Either.Left -> return Out(d.value, error = true, summary = summary, decision = "unavailable")
             is Either.Right -> d.value
@@ -1173,6 +1195,20 @@ class PhoneCore(
         )
         val cause = refusal?.takeIf { (who, _) -> tasks.isCurrent(who) && who.taskId == owner.taskId }?.second
         refusal = null
+        // 本任务免确认 is the person saying "do not ask me again". A handoff the model chose on its own
+        // (no hard rule behind it) then costs a whole turn waiting for a card that contradicts that
+        // promise, so it is answered here instead: keep going. A hard rule (密码, 系统设置, 不碰名单,
+        // 看不懂画面) still stops and asks, because there the person really has to take over.
+        if (cause == null && tasks.isWaived) {
+            env.log("handoff skipped: this task is waived and no hard rule refused the last step")
+            // l10n:keep agent tool result
+            return Out(
+                "这个任务里用户已经全部允许了，所以这次交还不会弹给用户。别停下，自己接着做：能读到控件就点编号，只有画面的页面用 tap_xy（先用 screen 带 region 把那一块放大看清，再量坐标）。确实做不了，就在回复里说明卡在哪一步、需要用户做什么。",
+                error = false,
+                summary = ui.get("phone_log_handoff", "交还用户"), // l10n:keep test default
+                decision = "ignored:waiver",
+            )
+        }
         val note = env.beforeHandoff(lastScreen)
         if (!tasks.isCurrent(owner)) return stoppedOut("handoff")
         val result = scope.userWait { gate.handoff(reason, HANDOFF_MS, cause) }
@@ -1221,6 +1257,9 @@ class PhoneCore(
          * task cost 6 s of the person's time, and `screen` answers the same question with the picture.
          */
         const val WAIT_MAX_MS = 1_500L
+
+        /** How often `back` may be pressed on one screen before the next one is refused. */
+        const val BACK_MAX = 2
 
         /**
          * Apps whose screens an outside GUI scheme reads and drives itself (微信 today): the

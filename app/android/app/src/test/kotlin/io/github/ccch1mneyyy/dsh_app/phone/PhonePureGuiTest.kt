@@ -25,6 +25,9 @@ class PhonePureGuiTest {
     private var scheme = PhoneCore.DEFAULT_GUI_SCHEME
     private var home: Set<String> = emptySet()
 
+    /** How often the person was actually asked to take over (a 请你操作 card). */
+    private var handoffs = 0
+
     /** How often the driver was told to drop the screen ids the model still holds. */
     private var forgotten = 0
 
@@ -73,7 +76,10 @@ class PhonePureGuiTest {
         override fun isLocked() = false
         override fun gate() = object : UserGate {
             override fun confirm(request: ConfirmRequest) = Decision.ALLOW_ONCE
-            override fun handoff(reason: String, timeoutMs: Long) = HandoffResult.CONTINUE
+            override fun handoff(reason: String, timeoutMs: Long): HandoffResult {
+                handoffs++
+                return HandoffResult.CONTINUE
+            }
             // Null is kept: taking a line down is observable, and the point of the change.
             override fun status(text: String?) { statuses += text }
         }
@@ -449,6 +455,37 @@ class PhonePureGuiTest {
         assertFalse(out.text, out.isError)
         assertEquals("the app was not brought back", listOf("com.tencent.mm"), fullscreens)
         assertTrue(out.text, out.text.contains("拉回来"))
+    }
+
+    @Test fun aWaivedTaskIsNotAskedToTakeOverAgain() {
+        // 本任务免确认 is a promise not to ask. A handoff the model chose on its own then costs a
+        // whole turn waiting for a card that contradicts it (m05240: 为什么还会偶现请你操作的授权弹窗).
+        pkg = "com.tencent.mm"
+        appLabel = "微信"
+        kind = ScreenKind.BLANKED
+        readMain()
+        tasks.waive()
+        val out = core.call(PhoneToolCatalog.HANDOFF, mapOf("reason" to "你自己点一下登录"))
+        assertFalse(out.text, out.isError)
+        assertEquals("the person was asked anyway", 0, handoffs)
+        assertTrue(out.text, out.text.contains("不会弹给用户"))
+    }
+
+    @Test fun aBackPressedAgainOnTheSameScreenIsRefused() {
+        // 15 backs in one 炉石 task (log 17:42–17:45), each answered 界面没有明显变化, each followed by
+        // another turn of thinking. The third one on one screen is answered instead of pressed.
+        pkg = "com.tencent.mm"
+        appLabel = "微信"
+        kind = ScreenKind.TREE
+        readMain()
+        val first = core.call(PhoneToolCatalog.KEY, mapOf("key" to "back"))
+        val second = core.call(PhoneToolCatalog.KEY, mapOf("key" to "back"))
+        val third = core.call(PhoneToolCatalog.KEY, mapOf("key" to "back"))
+        assertFalse(first.text, first.isError)
+        assertFalse(second.text, second.isError)
+        assertEquals("the third back reached the phone: " + third.text, 2, keys.size)
+        assertFalse("refusing a back is not an error: " + third.text, third.isError)
+        assertTrue(third.text, third.text.contains("别再按"))
     }
 
     @Test fun theHomeKeyStillWorksForAnOrdinaryApp() {

@@ -614,8 +614,8 @@ internal class MainScreenDriver(private val service: PhoneA11yService, private v
      * spending a whole round trip asking for the screen again — the single most expensive thing in
      * a canvas task.
      */
-    private fun observeShot(): ScreenSnapshot? =
-        runCatching { observe(detail = false, image = true, region = null) }.getOrNull()
+    private fun observeShot(region: Box? = null): ScreenSnapshot? =
+        runCatching { observe(detail = false, image = true, region = region) }.getOrNull()
 
     /** A page that carries no picture cannot be point-tapped; say which way to go. */
     private fun refusedNoPicture(a: PhoneAction.TapXY, snap: Snapshot): ActionResult {
@@ -716,9 +716,15 @@ internal class MainScreenDriver(private val service: PhoneA11yService, private v
         // l10n:keep agent screen result
         val track = "p|${snap.packageName}|xy:${a.x},${a.y}"
         val out = after(before, snap, gen, "已点击截图上的 (${a.x}, ${a.y})（0-1000 归一化坐标）。", verifyPixels = false)
-        val verified = verifyPointTap(snap, out.message, track)
+        val verified = verifyPointTap(snap, out.message, track, a.x, a.y)
+        verified.amount?.let {
+            PhoneLog.i("tap_xy verified: change=$it at=(${a.x},${a.y})")
+        }
         // A tree page was already measured by [changeNote]; a canvas page only here.
-        return out.copy(message = verified.note, change = verified.amount ?: out.change)
+        // The zoom the verification may have taken wins over the settled screenshot: it is what the
+        // model needs to see after a miss.
+        return out.copy(message = verified.note, change = verified.amount ?: out.change,
+            screen = verified.shot ?: out.screen)
     }
 
     /**
@@ -738,7 +744,7 @@ internal class MainScreenDriver(private val service: PhoneA11yService, private v
      * Returns the note together with the measured diff, so the one signal the GUI channel really
      * has (did the picture move?) reaches the action log as well as the model.
      */
-    private fun verifyPointTap(snap: Snapshot, message: String, track: String): Change {
+    private fun verifyPointTap(snap: Snapshot, message: String, track: String, x: Int, y: Int): Change {
         if (snap.screen.kind == ScreenKind.TREE) return Change(message, null)
         val before = snap.bytes?.let { ScreenShooter.thumbnail(it) } ?: return Change(message, null)
         val cap = try { capture() } catch (_: Exception) { return Change(message, null) }
@@ -757,9 +763,14 @@ internal class MainScreenDriver(private val service: PhoneA11yService, private v
             }
             val hits = bumpMiss(track)
             val amount = String.format(java.util.Locale.ROOT, "%.2f", change)
+            val zoom = if (hits >= 2) runCatching { observeShot(zoomAround(x, y)) }.getOrNull() else null
+            // Second miss on the same spot: a picture of the spot at up to 3x is worth more than
+            // another sentence about coordinates — a model that measured the target a few percent
+            // off sees what is actually under its finger and corrects, instead of pressing the same
+            // wrong point again (m05240: 第一次点击点不到对的点).
             if (hits >= 2) {
                 // l10n:keep agent screen result
-                return Change(message + "\n" + "点击后画面几乎没有变化（差异 $amount），这已经是同一目标连续第 $hits 次没有反应：停止重复点击。改试相邻的目标，或 handoff 交给用户；不要继续猜坐标。", change)
+                return Change(message + "\n" + "点击后画面几乎没有变化（差异 $amount），这已经是同一目标连续第 $hits 次没有反应：停止重复点击。改试相邻的目标，或 handoff 交给用户；不要继续猜坐标。下面是刚才点的那一带放大后的画面，按它重新量坐标（坐标仍按整屏 0-1000 算），或者改点相邻的目标、handoff 交给用户。", change, zoom)
             }
             // l10n:keep agent screen result
             return Change(message + "\n" + "点击后画面几乎没有变化（差异 $amount）。先核对你手上的坐标：tap_xy 的 x/y 是 0-1000 归一化坐标（0,0=截图左上角，1000,1000=截图右下角），不是像素、不是百分数，从图上量出来的像素要换算。再确认目标真的在这一屏：状态栏、输入法键盘下方、刚加载出来的空白页都可能让点击落空。同一位置第二次仍然没有变化就停手，改 handoff 交给用户。", change)
@@ -768,6 +779,20 @@ internal class MainScreenDriver(private val service: PhoneA11yService, private v
         } finally {
             cap.recycle()
         }
+    }
+
+    /**
+     * The box to zoom after a point tap missed: around the point, in the same 0-1000 space the model
+     * used, wide enough that the target is inside it even if the estimate was a few percent off.
+     */
+    private fun zoomAround(x: Int, y: Int): Box {
+        val half = ZOOM_AROUND
+        val left = (x - half).coerceIn(0, 1_000)
+        val top = (y - half).coerceIn(0, 1_000)
+        val right = (x + half).coerceIn(0, 1_000)
+        val bottom = (y + half).coerceIn(0, 1_000)
+        return Box(left, top, maxOf(right, left + 40).coerceAtMost(1_000),
+            maxOf(bottom, top + 40).coerceAtMost(1_000))
     }
 
     /** Waits for the UI to settle, reads the new screen (`+` marks) and says whether anything changed. */
@@ -852,7 +877,12 @@ internal class MainScreenDriver(private val service: PhoneA11yService, private v
     }
 
     /** What an action did to the screen, as reported to the model ([note]) and to the log ([amount]). */
-    private class Change(val note: String, val amount: Float?)
+    private class Change(
+        val note: String,
+        val amount: Float?,
+        /** A picture to go with the note (a zoom of what was just tapped), when one was taken. */
+        val shot: ScreenSnapshot? = null,
+    )
 
     /**
      * Pixel verdict for a page with no elements (canvas, blanked): screenshot now and diff against
@@ -1125,6 +1155,9 @@ internal class MainScreenDriver(private val service: PhoneA11yService, private v
         private const val WINDOWING_MODE_FULLSCREEN = 1
         private const val OBSERVE_MS = 4_800L
         /** Two taps within this many normalized units count as "the same spot" (2.5% of the picture). */
+        /** Half-width, in 0-1000, of the picture handed back after a miss. */
+        private const val ZOOM_AROUND = 120
+
         private const val TAP_REPEAT_STEP = 25
         /** Attempts allowed on one spot before it is refused: a double tap still works. */
         private const val TAP_REPEAT_MAX = 3
