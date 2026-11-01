@@ -46,7 +46,7 @@ Games, self-drawn canvas pages and encrypted or obfuscated pages have no readabl
 
 A model that can't see pictures can't help on these pages: there is no tree to read and the screenshot means nothing to it, so DSH refuses coordinate taps and makes the model hand the phone back to you instead of guessing coordinates until the budget runs out.
 
-When the whole-screen picture is too small to read the fine print, the model can ask for a region on screen (for example 200,300,800,900, 0-1000) and DSH zooms into just that part; coordinates on the zoomed picture still count from its own top-left as 0,0. While a page is still loading or an animation is still running, the model can also wait a moment before reading the screen again.
+When the whole-screen picture is too small to read the fine print, the model can ask for a region on screen (for example 200,300,800,900, 0-1000) and DSH crops just that part and enlarges it (a small crop grows to about 900 px on the long side, at most 3x, so the letters can actually be read); coordinates on the zoomed picture still count from its own top-left as 0,0. A whole screen goes out at 1300 px on the long side, which on a 1200x2670 phone is half the pixels gone — the few lines of small print in a mini-program menu only come back through a region read. While a page is still loading or an animation is still running, the model can also wait a moment before reading the screen again.
 
 These pages and WeChat are worked pure GUI, one fullscreen app for the whole task:
 

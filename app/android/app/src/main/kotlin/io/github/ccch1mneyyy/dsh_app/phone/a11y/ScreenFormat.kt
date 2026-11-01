@@ -118,10 +118,10 @@ object ScreenFormat {
     const val POOR_TREE_NOTE = "提示：本页文字信息不足（游戏、自绘界面、部分小程序常见）。能看图的模型可以 screen 加 image 看标号截图；否则请用户协助。"
 
     // l10n:keep model screen format
-    const val CANVAS_NOTE = "提示：本页没有可用的控件（游戏、自绘 canvas、加密混淆页常见）。DSH 已自动附上截图，图上没有编号，请直接看画面；要点击时用 tap_xy，坐标是 0-1000 归一化（0,0=截图左上角，1000,1000=截图右下角），不要用像素、不要用百分数。看不清的小字可以再 screen 一次并给出 region（截取一小块放大）。回到上一页用 key back，不要把标题栏、右上角的三个点、悬浮小茶杯当成关闭键来点：图上看不出那些按钮的效果，点了往往只是把当前页面关掉。目标不在屏上就换一屏再试，或 handoff 交给用户。"
+    const val CANVAS_NOTE = "提示：本页没有可用的控件（游戏、自绘 canvas、加密混淆页常见）。DSH 已自动附上截图，图上没有编号，请直接看画面；要点击时用 tap_xy，坐标是 0-1000 归一化（0,0=截图左上角，1000,1000=截图右下角），不要用像素、不要用百分数。看不清的小字别再猜：再 screen 一次并给出 region=\"x1,y1,x2,y2\"（0-1000），DSH 会把那一块放大发给你（放大图左上角还是 0,0）。回到上一页用 key back，不要把标题栏、右上角的三个点、悬浮小茶杯当成关闭键来点：图上看不出那些按钮的效果，点了往往只是把当前页面关掉。目标不在屏上就换一屏再试，或 handoff 交给用户。"
 
     // l10n:keep model screen format
-    const val BLANKED_NOTE = "提示：这是一个画面页——微信、游戏这类 App 不把控件交给 DSH 看，所以没有控件编号。这不是出错，也不是内容被加密，纯 GUI 就是这样工作的：看下面的截图，点击用 tap_xy 的 0-1000 归一化坐标，滚动用 scroll，不要凭猜测给 tap/type 一个编号。看不清的小字可以再 screen 一次并给出 region（截取一小块放大）。"
+    const val BLANKED_NOTE = "提示：这是一个画面页——微信、游戏这类 App 不把控件交给 DSH 看，所以没有控件编号。这不是出错，也不是内容被加密，纯 GUI 就是这样工作的：看下面的截图，点击用 tap_xy 的 0-1000 归一化坐标，滚动用 scroll，不要凭猜测给 tap/type 一个编号。看不清的小字别再猜：再 screen 一次并给出 region=\"x1,y1,x2,y2\"（0-1000，例如 \"0,300,1000,420\"），DSH 会把那一块放大（最多 3 倍）发给你，菜单里那几行小字这样才读得出。"
 
     /**
      * Page shape from the tree alone (no screenshot), because the question that matters is

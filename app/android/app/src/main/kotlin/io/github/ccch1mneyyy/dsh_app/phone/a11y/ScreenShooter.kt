@@ -86,10 +86,10 @@ internal class ScreenShooter(private val service: AccessibilityService, private 
                 ?: return Shot(null, null, null, false, "放大的区域不在屏幕范围内，请给一个在屏内的矩形")
             try {
                 val origin = zoom ?: full
-                val factor = minOf(1f, 1300f / max(source.width, source.height))
+                val factor = scaleFactor(source.width, source.height, zoom != null)
                 val w = (source.width * factor).roundToInt().coerceAtLeast(1)
                 val h = (source.height * factor).roundToInt().coerceAtLeast(1)
-                var scaled = if (factor < 1f) Bitmap.createScaledBitmap(source, w, h, true) else source
+                var scaled = if (factor != 1f) Bitmap.createScaledBitmap(source, w, h, true) else source
                 if (scaled === source || !scaled.isMutable) {
                     val mutable = scaled.copy(Bitmap.Config.ARGB_8888, true)
                     if (scaled !== source) scaled.recycle()
@@ -100,7 +100,7 @@ internal class ScreenShooter(private val service: AccessibilityService, private 
                     val sy = h.toFloat() / origin.height.coerceAtLeast(1)
                     draw(scaled, marks, secrets, origin, sx, sy)
                     val out = ByteArrayOutputStream()
-                    scaled.compress(Bitmap.CompressFormat.JPEG, 80, out)
+                    scaled.compress(Bitmap.CompressFormat.JPEG, if (zoom != null) 92 else 80, out)
                     return Shot(out.toByteArray(), "image/jpeg", ImageGeometry(origin.left, origin.top, sx, sy, w, h), false, null)
                 } finally { scaled.recycle() }
             } finally { if (source !== bitmap) source.recycle() }
@@ -258,6 +258,32 @@ internal class ScreenShooter(private val service: AccessibilityService, private 
     }
 
     companion object {
+        /** Long side of a whole-screen capture; past this the payload costs more than it shows. */
+        private const val SHOT_MAX_SIDE = 1_300f
+
+        /** A crop is enlarged until its long side reaches this, so small print has pixels. */
+        private const val ZOOM_MIN_SIDE = 900f
+
+        /** Enlarging further only interpolates: the letters get bigger and blurrier. */
+        private const val ZOOM_UPSCALE_LIMIT = 3f
+
+        /**
+         * How much to resize a capture before it is sent.
+         *
+         * A whole phone screen (1200x2670 here) squeezed to 1300 px on the long side loses about
+         * half its pixels, and mini-program print — three characters a few millimetres high — goes
+         * with them: the person watched a submenu read as "no such text" while it was right there
+         * in the picture. A crop has fewer pixels to begin with, so it is enlarged to at least
+         * [ZOOM_MIN_SIDE] (never more than [ZOOM_UPSCALE_LIMIT] times, or the letters get soft)
+         * and sent at a quality that survives JPEG.
+         */
+        internal fun scaleFactor(width: Int, height: Int, zoomed: Boolean): Float {
+            val long = max(width, height).toFloat().coerceAtLeast(1f)
+            if (long > SHOT_MAX_SIDE) return SHOT_MAX_SIDE / long
+            if (!zoomed || long >= ZOOM_MIN_SIDE) return 1f
+            return minOf(ZOOM_UPSCALE_LIMIT, ZOOM_MIN_SIDE / long)
+        }
+
         /** A [PixelDiff] thumbnail of a captured JPEG, for post-tap verification; null when unreadable. */
         fun thumbnail(bytes: ByteArray?): IntArray? {
             if (bytes == null) return null
