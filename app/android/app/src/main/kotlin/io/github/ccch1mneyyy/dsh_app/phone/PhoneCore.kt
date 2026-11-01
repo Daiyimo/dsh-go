@@ -1037,6 +1037,16 @@ class PhoneCore(
         return Out(text, error = true, screen = now, summary = summary, decision = "stale")
     }
 
+    /** The app this task is latched on, or null when it is not working inside one app. */
+    private fun latchedApp(): String? {
+        val task = tasks.snapshot().id
+        return when {
+            pictureApp != null && pictureTask == task -> pictureApp
+            schemeApp != null && schemeTask == task -> schemeApp
+            else -> null
+        }
+    }
+
     /**
      * True when the page the model is working on belongs to a launcher while the task is latched on
      * one app: an icon tap re-opens the running app (into a small window on this ROM), and a sideways
@@ -1053,14 +1063,8 @@ class PhoneCore(
         // It refuses only when the repair failed. Refusing whenever the home screen was in front made
         // a background task do nothing at all after the person simply left the phone on the launcher
         // ("切到后台就执行不了"), so the app is brought back and the call goes on.
-        val task = tasks.snapshot().id
-        val latched = (pictureApp != null && pictureTask == task) || (schemeApp != null && schemeTask == task)
-        if (!pureGuiEntered || !latched) return false
-        val app = when {
-            pictureApp != null && pictureTask == task -> pictureApp
-            schemeApp != null && schemeTask == task -> schemeApp
-            else -> null
-        } ?: return false
+        if (!pureGuiEntered) return false
+        val app = latchedApp() ?: return false
         val pkg = runCatching { env.peekPackage() }.getOrNull() ?: return false
         val home = env.homePackages()
         if (pkg !in home) return false
@@ -1125,8 +1129,35 @@ class PhoneCore(
             PhoneAction.GlobalKey.NOTIFICATIONS -> ui.get("phone_key_notifications", "通知栏") // l10n:keep test default
         }))
         val res = driver.perform(PhoneAction.Key(sid ?: "${which.prefix}0", key))
-        return Out(res.message, error = !res.ok, screen = res.screen?.let { safety.filterScreen(it) }, summary = summary,
-            decision = if (res.ok) "ok" else "failed", change = res.change)
+        var message = res.message
+        var decision = if (res.ok) "ok" else "failed"
+        // back is the one key that can throw the task out of its app altogether (log 16:51:34: back,
+        // then two opens to get 微信 back). When it does, put the app back instead of letting the next
+        // call answer stale/failed — that cost two model turns and ~15 s.
+        if (key == PhoneAction.GlobalKey.BACK && res.ok) {
+            // The latch, not pureGui(): once back has left the app the foreground package is no
+            // longer in the scheme, so pureGui() already answers false exactly when the repair is
+            // needed.
+            val app = latchedApp()
+            if (app != null) {
+                env.sleep(300L)
+                val front = runCatching { env.peekPackage() }.getOrNull()
+                if (front != null && front != app) {
+                    val back = runCatching { env.forceFullscreen(app) }.getOrDefault(false)
+                    env.log("back left the app ($front): brought $app back ok=$back")
+                    message += "\n" + if (back) {
+                        // l10n:keep agent tool result
+                        "back 把任务退出了 App，DSH 已经把它拉回来了：页面还是原来那个，直接 screen 看一眼接着做，不用再 open。"
+                    } else {
+                        // l10n:keep agent tool result
+                        "back 把任务退出了 App，也没能拉回来：用 open 重新打开这个 App。"
+                    }
+                    if (back) decision = "ok:returned"
+                }
+            }
+        }
+        return Out(message, error = !res.ok, screen = res.screen?.let { safety.filterScreen(it) }, summary = summary,
+            decision = decision, change = res.change)
     }
 
     private fun handoff(a: Args, scope: SerialWorker.Scope): Out {

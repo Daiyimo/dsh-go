@@ -250,12 +250,38 @@ class ChatTranscript {
     // is already committed or has more than one live attempt (the latest keeps the key).
     final used = {for (final item in durable) item.key};
     final latest = {for (final draft in _drafts.values) draft.rowKey: draft};
-    return [
-      ...durable,
-      for (final draft in _drafts.values)
-        ...draft.items(useRowKey: !used.contains(draft.rowKey) && identical(latest[draft.rowKey], draft)),
-    ];
+    final merged = <ChatItem>[...durable];
+    for (final draft in _drafts.values) {
+      final rows = draft.items(useRowKey: !used.contains(draft.rowKey) && identical(latest[draft.rowKey], draft));
+      if (rows.isEmpty) continue;
+      merged.insertAll(_draftAt(merged, draft.startedAfterSeq), rows);
+    }
+    return merged;
   }
+
+  /// Where a live draft belongs among the durable rows.
+  ///
+  /// Appending every draft instead put a step's reasoning BELOW the tool rows that same step had
+  /// already dispatched, so the transcript showed 「先按 back，再解释为什么按 back」 until the
+  /// message committed and jumped to its place. [startedAfterSeq] is the cursor the attempt started
+  /// from, so the first durable row with a bigger seq is the first one that belongs after the draft.
+  static int _draftAt(List<ChatItem> items, int startedAfterSeq) {
+    var anchor = false;
+    for (var i = 0; i < items.length; i++) {
+      final seq = _seqOf(items[i]);
+      if (seq == null) continue;
+      if (seq > startedAfterSeq) return anchor ? i : items.length;
+      anchor = true;
+    }
+    return items.length;
+  }
+
+  static int? _seqOf(ChatItem item) => switch (item) {
+    UserChatItem(:final seq) => seq,
+    AssistantChatItem(:final seq) => seq,
+    ToolChatItem(:final seq) => seq,
+    NoticeChatItem(:final seq) => seq,
+  };
 
   /// Applies one event; returns `true` when [items] may have changed.
   bool apply(DshEvent event) {

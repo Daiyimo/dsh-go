@@ -42,6 +42,48 @@ void main() {
     expect(transcript.items.whereType<AssistantChatItem>().single.key, draft.key);
   });
 
+  test('a step that is still streaming stays above the tool row it dispatched', () {
+    final t = DateTime(2026);
+    final transcript = ChatTranscript();
+    transcript.apply(TurnStartedEvent(1, t, const {}, turn: 1));
+    transcript.apply(
+      ToolCallEvent(
+        3,
+        t,
+        const {},
+        turn: 1,
+        step: 1,
+        callId: 'c1',
+        name: 'phone',
+        arguments: '{}',
+      ),
+    );
+    // The model starts step 2 (the cursor was 3), then dispatches its own tool call as seq 4.
+    transcript.apply(AssistantStreamStarted('a2', 0, turn: 1, step: 2, startedAfterSeq: 3));
+    transcript.apply(
+      AssistantChunkEvent('a2', 1, index: 0, time: t, chunk: const ReasoningDeltaChunk(0, '先按 back')),
+    );
+    transcript.apply(
+      ToolCallEvent(
+        4,
+        t,
+        const {},
+        turn: 1,
+        step: 2,
+        callId: 'c2',
+        name: 'phone',
+        arguments: '{"name":"key"}',
+      ),
+    );
+
+    final items = transcript.items;
+    final reasoning = items.indexWhere((i) => i is AssistantChatItem);
+    final dispatched = items.indexWhere((i) => i is ToolChatItem && i.callId == 'c2');
+    expect(reasoning, greaterThanOrEqualTo(0));
+    expect(dispatched, greaterThanOrEqualTo(0));
+    expect(reasoning, lessThan(dispatched), reason: 'the reasoning that asked for the tap must not sit below it');
+  });
+
   test('only the latest draft for a step owns its shared row key', () {
     final t = ChatTranscript();
     for (final id in ['first', 'second']) {

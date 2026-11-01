@@ -257,6 +257,8 @@ object PhoneToolCatalog {
             // l10n:keep agent tool catalog
             "按系统键，返回新屏幕：back 返回、home 回桌面、recents 最近任务、notifications 下拉通知栏。" +
                 // l10n:keep agent tool catalog
+                "back 只用来关弹窗、退回上一页：它经常直接把 App 退出去，退出去之后 DSH 会再拉回来，但这一来一回白花时间。页面上有「返回」「×」「关闭」就点页面上的，没必要不要按 back。" +
+                // l10n:keep agent tool catalog
                 "微信、游戏这类纯 GUI 任务在一个应用里跑的时候 home 和 notifications 会被忽略（按了也当没按，别重复按）：回桌面会把全屏应用挤成小窗、滑动还会滑到负一屏，拉通知栏会让全屏应用失去前台；要换应用用 open。",
             // l10n:keep agent tool catalog
             linkedMapOf("key" to enum(KEYS, "按键"), "screen" to str("屏幕号；省略时作用于主屏")),

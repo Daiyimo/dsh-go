@@ -435,6 +435,22 @@ class PhonePureGuiTest {
         assertEquals("the key was delivered anyway", emptyList<PhoneAction.GlobalKey>(), keys)
     }
 
+    @Test fun aBackThatThrowsTheTaskOutOfTheAppBringsItBack() {
+        // back is model-shorthand for "close this popup" but on this ROM it often closes the app
+        // itself (log 16:51:34: back, then two opens to return). The app is brought back instead of
+        // leaving the next call to answer stale/failed.
+        pkg = "com.tencent.mm"
+        appLabel = "微信"
+        kind = ScreenKind.BLANKED
+        readMain()
+        pkg = "com.android.launcher3"
+        appLabel = "桌面"
+        val out = core.call(PhoneToolCatalog.KEY, mapOf("key" to "back"))
+        assertFalse(out.text, out.isError)
+        assertEquals("the app was not brought back", listOf("com.tencent.mm"), fullscreens)
+        assertTrue(out.text, out.text.contains("拉回来"))
+    }
+
     @Test fun theHomeKeyStillWorksForAnOrdinaryApp() {
         pkg = "example.app"
         appLabel = "Example"
