@@ -838,10 +838,10 @@ class PhoneCore(
     /** tap / type / scroll / tap_xy: route, resolve, gate, perform. */
     private fun act(name: String, a: Args, scope: SerialWorker.Scope): Out {
         val sid = (if (name == PhoneToolCatalog.TAP_XY) a.str("observation") else a.str("screen"))
-        if (onLauncher()) {
+        if (stuckOnLauncher()) {
             // l10n:keep agent tool result
             return Out(
-                "现在在桌面上，不在任务的应用里：在桌面上点击、滑动会把任务带偏（还会滑到负一屏）。要看当前页用 screen，要回到应用用 open。",
+                "任务的应用没能拉回前台，现在还在桌面上：在桌面上点击、滑动会把任务带偏（还会滑到负一屏）。要看当前页用 screen，要回到应用用 open。",
                 error = true,
                 decision = "refused:launcher",
             )
@@ -1001,7 +1001,7 @@ class PhoneCore(
     /** The element no longer matches its snapshot: refuse and show the screen as it is now. */
     private fun stale(driver: PhoneDriver, sid: String, summary: String): Out {
         val now = try {
-            safety.filterScreen(driver.observe(detail = false, image = false))
+            safety.filterScreen(driver.observe(detail = false, image = true))
         } catch (e: InterruptedException) {
             throw e
         } catch (_: Exception) {
@@ -1023,20 +1023,33 @@ class PhoneCore(
      * swipe on the home screen lands on the ROM's 负一屏 assistant page — either way the task loses
      * the app it was working in and there is no picture of it left to work from.
      */
-    private fun onLauncher(): Boolean {
+    private fun stuckOnLauncher(): Boolean {
         // Only after this task has actually gone pure GUI, and only while the latch belongs to this
         // task: [pureGui] also consults a cached foreground package, and on the first call of a task
         // that cache could still name 微信 while the phone itself was sitting on the launcher — the
         // task's very first tap was then refused as "now on the desktop" (log 03:20:49
         // `tap error decision=refused:launcher task=4`).
+        //
+        // It refuses only when the repair failed. Refusing whenever the home screen was in front made
+        // a background task do nothing at all after the person simply left the phone on the launcher
+        // ("切到后台就执行不了"), so the app is brought back and the call goes on.
         val task = tasks.snapshot().id
         val latched = (pictureApp != null && pictureTask == task) || (schemeApp != null && schemeTask == task)
         if (!pureGuiEntered || !latched) return false
+        val app = when {
+            pictureApp != null && pictureTask == task -> pictureApp
+            schemeApp != null && schemeTask == task -> schemeApp
+            else -> null
+        } ?: return false
         val pkg = runCatching { env.peekPackage() }.getOrNull() ?: return false
         val home = env.homePackages()
-        val on = pkg in home
-        if (on) env.log("launcher in front while latched ($pkg): tap/scroll refused")
-        return on
+        if (pkg !in home) return false
+        val ok = runCatching { env.forceFullscreen(app) }.getOrDefault(false)
+        env.log("launcher in front while latched ($pkg): brought $app back ok=$ok")
+        if (!ok) return true
+        env.sleep(600)
+        val again = runCatching { env.peekPackage() }.getOrNull()
+        return again != null && again in home
     }
 
     private fun key(a: Args): Out {

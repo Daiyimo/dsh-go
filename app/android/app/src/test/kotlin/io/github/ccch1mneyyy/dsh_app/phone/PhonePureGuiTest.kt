@@ -24,6 +24,9 @@ class PhonePureGuiTest {
     private var kind = ScreenKind.TREE
     private var scheme = PhoneCore.DEFAULT_GUI_SCHEME
     private var home: Set<String> = emptySet()
+
+    /** False: the ROM refused to bring the task's app back, so it stays on the launcher. */
+    private var canBringBack = true
     private val launches = mutableListOf<String>()
     private val opens = mutableListOf<String>()
     private val keys = mutableListOf<PhoneAction.GlobalKey>()
@@ -42,11 +45,15 @@ class PhonePureGuiTest {
         override fun collect(screenId: String, listElementId: Int, maxPages: Int, until: String?) =
             error("unexpected collect")
         override fun target(screenId: String, elementId: Int) = null
-        override fun perform(action: PhoneAction): ActionResult = if (action is PhoneAction.Key) {
-            keys += action.key
-            ActionResult(true, "按了${action.key}")
-        } else {
-            error("unexpected action")
+        override fun perform(action: PhoneAction): ActionResult = when (action) {
+            is PhoneAction.Key -> {
+                keys += action.key
+                ActionResult(true, "按了${action.key}")
+            }
+            // A tap, a swipe or a coordinate tap after the app came back: nothing to do but say it
+            // landed, because the point of these tests is which calls are refused.
+            is PhoneAction.TapXY, is PhoneAction.Tap, is PhoneAction.Scroll -> ActionResult(true, "做到了", null)
+            else -> error("unexpected action")
         }
         override fun open(packageName: String): ActionResult {
             opens += packageName
@@ -79,6 +86,7 @@ class PhonePureGuiTest {
         override fun launchFullscreen() = fullscreen
         override fun forceFullscreen(packageName: String): Boolean {
             fullscreens += packageName
+            if (!canBringBack) return false
             // The real call starts the task again, so the next read is of that app, not of DSH's own UI.
             pkg = packageName
             appLabel = if (packageName == "com.tencent.mm") "微信" else packageName
@@ -407,7 +415,7 @@ class PhonePureGuiTest {
         assertEquals(listOf(PhoneAction.GlobalKey.HOME), keys)
     }
 
-    @Test fun aTapOnTheHomeScreenIsRefusedWhileLatched() {
+    @Test fun aTapOnTheHomeScreenBringsTheAppBackAndGoesOn() {
         pkg = "com.game.example"
         appLabel = "Game"
         kind = ScreenKind.CANVAS
@@ -418,6 +426,23 @@ class PhonePureGuiTest {
         pkg = "com.android.launcher3"
         appLabel = "桌面"
         kind = ScreenKind.TREE
+        val out = core.call(PhoneToolCatalog.TAP_XY, mapOf("observation" to "s1", "x" to 500, "y" to 900))
+        // Refusing made a background task do nothing at all after the person left the phone on the
+        // launcher: the app is brought back and the tap goes on instead.
+        assertEquals(listOf("com.game.example"), fullscreens)
+        assertFalse("the tap was dropped after the app came back: ${out.text}", out.isError)
+    }
+
+    @Test fun aTapOnTheHomeScreenIsRefusedWhenTheAppCannotComeBack() {
+        pkg = "com.game.example"
+        appLabel = "Game"
+        kind = ScreenKind.CANVAS
+        readMain()
+        home = setOf("com.android.launcher3")
+        pkg = "com.android.launcher3"
+        appLabel = "桌面"
+        kind = ScreenKind.TREE
+        canBringBack = false
         val out = core.call(PhoneToolCatalog.TAP_XY, mapOf("observation" to "s1", "x" to 500, "y" to 900))
         assertTrue("a tap was delivered on the home screen: ${out.text}", out.isError)
         assertTrue(out.text, out.text.contains("桌面上"))
@@ -452,7 +477,7 @@ class PhonePureGuiTest {
         assertFalse("an old task's latch refused the new task: ${out.text}", out.text.contains("桌面上"))
     }
 
-    @Test fun aLauncherSwipeIsRefusedWhileLatched() {
+    @Test fun aLauncherSwipeBringsTheAppBackInsteadOfSwipingTheDesktop() {
         pkg = "com.game.example"
         appLabel = "Game"
         kind = ScreenKind.CANVAS
@@ -461,8 +486,10 @@ class PhonePureGuiTest {
         pkg = "com.stepos.ailauncher"
         appLabel = "桌面"
         val out = core.call(PhoneToolCatalog.SCROLL, mapOf("screen" to "s1", "direction" to "left"))
-        assertTrue("the swipe into 负一屏 was allowed: ${out.text}", out.isError)
-        assertTrue(out.text, out.text.contains("桌面上"))
+        // 负一屏 is only reachable while the launcher is in front: the app comes back first, then the
+        // scroll happens inside it.
+        assertEquals(listOf("com.game.example"), fullscreens)
+        assertFalse("the scroll was dropped after the app came back: ${out.text}", out.isError)
     }
 
     @Test fun anEmptiedListLetsWeChatBackOntoTheVirtualScreen() {
