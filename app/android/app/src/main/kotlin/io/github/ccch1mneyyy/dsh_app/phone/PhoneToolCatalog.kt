@@ -257,7 +257,7 @@ object PhoneToolCatalog {
             // l10n:keep agent tool catalog
             "按系统键，返回新屏幕：back 返回、home 回桌面、recents 最近任务、notifications 下拉通知栏。" +
                 // l10n:keep agent tool catalog
-                "微信、游戏这类纯 GUI 任务在一个应用里跑的时候 home 会被忽略（按了也当没按，别重复按）：回桌面会把全屏应用挤成小窗、滑动还会滑到负一屏，要换应用用 open。",
+                "微信、游戏这类纯 GUI 任务在一个应用里跑的时候 home 和 notifications 会被忽略（按了也当没按，别重复按）：回桌面会把全屏应用挤成小窗、滑动还会滑到负一屏，拉通知栏会让全屏应用失去前台；要换应用用 open。",
             // l10n:keep agent tool catalog
             linkedMapOf("key" to enum(KEYS, "按键"), "screen" to str("屏幕号；省略时作用于主屏")),
             listOf("key"),
@@ -289,10 +289,10 @@ object PhoneToolCatalog {
             // l10n:keep agent tool catalog
             "等一会儿，什么都不点，然后读当前屏幕。只在真的需要停住时用（动画没停、刚 handoff 回来）；" +
                 "页面还在加载就直接再 screen 一次，不要靠 wait 赌它加载完：读屏本身会等页面稳定。" +
-                "ms 是等待毫秒数，1 到 5000。",
+                "ms 是等待毫秒数，1 到 1500（超过会被拒）：停得越久越亏，读屏本身就会等页面稳定。",
             linkedMapOf(
                 // l10n:keep agent tool catalog
-                "ms" to int("等待毫秒数，1-5000；省略等 2 秒", 1, 5_000),
+                "ms" to int("等待毫秒数，1-1500；省略等 2 秒", 1, 1_500),
                 // l10n:keep agent tool catalog
                 "screen" to str("屏幕号；省略时作用于主屏"),
                 // l10n:keep agent tool catalog

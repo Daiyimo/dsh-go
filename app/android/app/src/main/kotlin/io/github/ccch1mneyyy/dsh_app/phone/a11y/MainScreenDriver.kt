@@ -71,6 +71,16 @@ internal class MainScreenDriver(private val service: PhoneA11yService, private v
     private var missKey: String? = null
     private var missCount = 0
 
+    /**
+     * How often the same spot of the same page was tapped since the page last moved.
+     *
+     * A picture page gives no other feedback, so a model that taps a spot that does nothing keeps
+     * tapping it: measured 5× `(540,120)` and 5× `(395,130)` in one 微信 task, 4 minutes for what
+     * should be a handful of taps. Counting here turns that into one explicit refusal.
+     */
+    private val tapLock = Any()
+    private val taps = HashMap<String, Int>()
+
     /** Bumped by [abort] (stop, screen off): loops and waits started before it give up. */
     @Volatile private var abortGen = 0L
 
@@ -642,6 +652,18 @@ internal class MainScreenDriver(private val service: PhoneA11yService, private v
                 PhoneLog.i("tap_xy refused: (${a.x},${a.y}) is outside the ${geometry.width}x${geometry.height} picture")
                 return ActionResult(false, "坐标 (${a.x}, ${a.y}) 换算后不在截图范围内（截图是 ${geometry.width}×${geometry.height}）。下面是当前屏幕，按它重新量一次再点。", observeShot())
             }
+        val spot = "${snap.packageName}|${a.x / TAP_REPEAT_STEP}|${a.y / TAP_REPEAT_STEP}"
+        val hits = synchronized(tapLock) { val n = (taps[spot] ?: 0) + 1; taps[spot] = n; n }
+        if (hits > TAP_REPEAT_MAX) {
+            PhoneLog.i("tap_xy refused: $spot tapped $hits times without the picture changing")
+            // l10n:keep agent screen result
+            return ActionResult(
+                false,
+                "同一个位置已经点了 ${hits - 1} 次，画面没有变化：这个位置不像是能点的东西，再点也不会有效果。" +
+                    "先 screen 看现在的画面，再换一个明显不同的位置（输入框、搜索框、页面上的按钮），或者 handoff 交给用户。",
+                observeShot(),
+            )
+        }
         // l10n:keep agent screen result
         if (snap.ownApp && !lifted.ownApp) return ActionResult(false, "这是 DSH 自己的界面，不操作。")
         // l10n:keep agent screen result
@@ -664,7 +686,14 @@ internal class MainScreenDriver(private val service: PhoneA11yService, private v
         }
         val capPkg = cap.packageName
         val capWindow = cap.windows.lastOrNull()?.id
-        val same = try { capPkg == snap.packageName && capWindow == snap.mainWindowId } finally { cap.recycle() }
+        // The window id changes whenever the app swaps one of its own windows (a 微信 mini program
+        // opening, a dialog over the same page) while the picture is still the same fullscreen
+        // surface. Refusing on the id alone cost a whole round trip on a tap that would have landed
+        // (measured 16:23:55 `page changed under the picture (com.tencent.mm -> com.tencent.mm)`).
+        if (capPkg == snap.packageName && capWindow != snap.mainWindowId) {
+            PhoneLog.i("tap_xy: window id changed (${snap.mainWindowId} -> $capWindow), same app and picture")
+        }
+        val same = try { capPkg == snap.packageName && cap.screen == snap.display } finally { cap.recycle() }
         // l10n:keep agent screen result
         if (!same) {
             PhoneLog.i("tap_xy refused: page changed under the picture (${snap.packageName} -> $capPkg)")
@@ -1006,6 +1035,7 @@ internal class MainScreenDriver(private val service: PhoneA11yService, private v
             // model spends a whole `screen` + `tap_xy` pair (measured twice in one 微信 task).
             snap.image = held.image
         }
+        if (!reuse) synchronized(tapLock) { taps.clear() }
         latest = snap
         return snap
     }
@@ -1094,6 +1124,10 @@ internal class MainScreenDriver(private val service: PhoneA11yService, private v
         /** WindowConfiguration.WINDOWING_MODE_FULLSCREEN. */
         private const val WINDOWING_MODE_FULLSCREEN = 1
         private const val OBSERVE_MS = 4_800L
+        /** Two taps within this many normalized units count as "the same spot" (2.5% of the picture). */
+        private const val TAP_REPEAT_STEP = 25
+        /** Attempts allowed on one spot before it is refused: a double tap still works. */
+        private const val TAP_REPEAT_MAX = 3
         private const val CAPTURE_MS = 2_000L
         /**
          * Mean pixel change below this counts as "the tap did nothing" (a scroll or a page open

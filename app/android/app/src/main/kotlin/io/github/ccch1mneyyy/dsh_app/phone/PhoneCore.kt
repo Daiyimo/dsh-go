@@ -1091,13 +1091,22 @@ class PhoneCore(
             }
         }
         val summary = ui.get("phone_log_key", "按键 %1\$s", key.name.lowercase()) // l10n:keep test default
-        if (key == PhoneAction.GlobalKey.HOME && pureGui()) {
+        // Leaving the app while a task runs inside it never helps: home squeezes the fullscreen app
+        // into the ROM's small window, notifications pulls the shade over it (measured
+        // `key notifications` + `key back` in one 微信 task, two model turns for nothing).
+        val leave = when {
+            key == PhoneAction.GlobalKey.HOME -> "home"
+            key == PhoneAction.GlobalKey.NOTIFICATIONS -> "notifications"
+            else -> null
+        }
+        if (leave != null && pureGui()) {
             // Not an error on purpose: answering `error` costs the model a whole turn to re-plan
             // (log 15:48:17 `refused:leave-app`, and the next request only repeated the open), while
             // nothing happened on the phone either way.
             // l10n:keep agent tool result
+            val what = if (leave == "home") "回桌面会把全屏 App 挤成小窗，滑动还会滑到负一屏" else "拉下通知栏会让全屏 App 失去前台"
             return Out(
-                "home 这次按了也当没按：任务还在应用里，什么都没变（回桌面会把全屏 App 挤成小窗，滑动还会滑到负一屏）。看当前页用 screen，换应用用 open。",
+                "$leave 这次按了也当没按：任务还在应用里，什么都没变（$what）。看当前页用 screen，换应用用 open。",
                 error = false,
                 summary = summary,
                 decision = "ignored:leave-app",
@@ -1176,7 +1185,11 @@ class PhoneCore(
         const val WAIT_DEFAULT_MS = 2_000L
         /** 5 s, not 30: a task that needs longer is a task whose page has not come up, and a page
          *  that has not come up in five seconds is not helped by waiting thirty. */
-        const val WAIT_MAX_MS = 5_000L
+        /**
+         * A wait is only ever a bet that the page finishes loading. Measured: two `wait 3000` in one
+         * task cost 6 s of the person's time, and `screen` answers the same question with the picture.
+         */
+        const val WAIT_MAX_MS = 1_500L
 
         /**
          * Apps whose screens an outside GUI scheme reads and drives itself (微信 today): the
