@@ -583,19 +583,40 @@ internal class MainScreenDriver(private val service: PhoneA11yService, private v
             // l10n:keep agent screen result
             if (snap?.ownApp == true && !lifted.ownApp) return ActionResult(false, "这是 DSH 自己的界面，不操作。")
             val screen = screenBox()
+            val horizontal = a.direction == PhoneAction.Direction.LEFT || a.direction == PhoneAction.Direction.RIGHT
+            val area = Box(screen.left, screen.top + screen.height / 5, screen.right, screen.bottom - screen.height / 6)
             val before = clock.count
-            val out = actuator.scroll(null, 0, a.direction == PhoneAction.Direction.LEFT || a.direction == PhoneAction.Direction.RIGHT,
-                Box(screen.left, screen.top + screen.height / 5, screen.right, screen.bottom - screen.height / 6), screen, a.direction)
+            val out = actuator.scroll(null, 0, horizontal, area, screen, a.direction)
             // l10n:keep agent screen result
             if (!out.accepted) {
                 clock.pause(450) { cancelled(gen) }
-                if (!actuator.scroll(null, 0, a.direction == PhoneAction.Direction.LEFT || a.direction == PhoneAction.Direction.RIGHT,
-                        Box(screen.left, screen.top + screen.height / 5, screen.right, screen.bottom - screen.height / 6), screen, a.direction).accepted) {
+                if (!actuator.scroll(null, 0, horizontal, area, screen, a.direction).accepted) {
                     return ActionResult(false, "没能滚动。", observeQuiet())
                 }
             }
             // l10n:keep agent screen result
-            return after(before, snap, gen, "已${dirWord}滑动屏幕。", scrolled = true)
+            val first = after(before, snap, gen, "已${dirWord}滑动屏幕。", scrolled = true)
+            val moved = first.change
+            PhoneLog.i("scroll verified: change=$moved dir=${a.direction}")
+            // A game or a self-drawn list usually ignores one short flick: the finger has to travel
+            // slowly and far before the list follows. Without this the same `scroll` came back six
+            // times in one 炉石 task with the picture never moving (23:22:26 to 23:24:24).
+            if (moved != null && moved < TAP_DEAD_CHANGE) {
+                clock.pause(300) { cancelled(gen) }
+                val long = when (a.direction) {
+                    PhoneAction.Direction.DOWN -> actuator.swipe(area.centerX, area.bottom - area.height / 10, area.centerX, area.top + area.height / 10, SLOW_SWIPE_MS)
+                    PhoneAction.Direction.UP -> actuator.swipe(area.centerX, area.top + area.height / 10, area.centerX, area.bottom - area.height / 10, SLOW_SWIPE_MS)
+                    PhoneAction.Direction.RIGHT -> actuator.swipe(area.right - area.width / 10, area.centerY, area.left + area.width / 10, area.centerY, SLOW_SWIPE_MS)
+                    PhoneAction.Direction.LEFT -> actuator.swipe(area.left + area.width / 10, area.centerY, area.right - area.width / 10, area.centerY, SLOW_SWIPE_MS)
+                }
+                if (long) {
+                    PhoneLog.i("scroll retried as a slow drag (the first one moved nothing)")
+                    val second = after(before, snap, gen, "已${dirWord}滑动屏幕（第一下内容没动，又用慢一点的拖拽试了一次）。", scrolled = true)
+                    PhoneLog.i("scroll retried: change=${second.change} dir=${a.direction}")
+                    return second
+                }
+            }
+            return first
         }
         val res = resolve(a.screenId, targetId)
         val r = res as? Resolved ?: return res as ActionResult
@@ -1248,6 +1269,9 @@ internal class MainScreenDriver(private val service: PhoneA11yService, private v
 
         /** Below this a tap left the picture alone; above it the page really moved. */
         private const val TAP_DEAD_CHANGE = 0.01f
+
+    /** A drag long enough for a game list to follow the finger (a 350 ms flick is ignored). */
+    private const val SLOW_SWIPE_MS = 900L
         /** Attempts allowed on one spot before it is refused: a double tap still works. */
         private const val TAP_REPEAT_MAX = 3
         private const val CAPTURE_MS = 2_000L
