@@ -257,7 +257,7 @@ object PhoneToolCatalog {
             // l10n:keep agent tool catalog
             "按系统键，返回新屏幕：back 返回、home 回桌面、recents 最近任务、notifications 下拉通知栏。" +
                 // l10n:keep agent tool catalog
-                "微信、游戏这类纯 GUI 任务在一个应用里跑的时候 home 会被拒绝：回桌面会把全屏应用挤成小窗、滑动还会滑到负一屏，要换应用用 open。",
+                "微信、游戏这类纯 GUI 任务在一个应用里跑的时候 home 会被忽略（按了也当没按，别重复按）：回桌面会把全屏应用挤成小窗、滑动还会滑到负一屏，要换应用用 open。",
             // l10n:keep agent tool catalog
             linkedMapOf("key" to enum(KEYS, "按键"), "screen" to str("屏幕号；省略时作用于主屏")),
             listOf("key"),

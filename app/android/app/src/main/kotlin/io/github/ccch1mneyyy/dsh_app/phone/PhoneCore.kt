@@ -316,6 +316,9 @@ class PhoneCore(
     }
 
     private fun runCall(name: String, args: Map<String, Any?>): ToolOutput {
+        // How long the phone took, on the same line as the decision: the gaps between lines are the
+        // model's, and telling them apart is the whole point of the log.
+        val startedAt = System.nanoTime() / 1_000_000L
         if (name !in PhoneToolCatalog.names) {
             // l10n:keep agent tool result
             return ToolOutput("没有这个手机工具：$name。可用：${PhoneToolCatalog.names.joinToString("、")}", isError = true)
@@ -351,8 +354,9 @@ class PhoneCore(
             )
         }
         out.summary?.let { log.add(name, out.app, it, out.decision ?: if (out.error) "error" else "ok", out.change) }
+        val took = (System.nanoTime() / 1_000_000L - startedAt).coerceAtLeast(0)
         env.log(
-            "tool $name ${if (out.error) "error" else "ok"}" +
+            "tool $name ${if (out.error) "error" else "ok"} (${took}ms)" +
                 (out.decision?.let { " decision=$it" } ?: "") +
                 (out.app?.let { " app=$it" } ?: "") +
                 (out.summary?.let { " at=$it" } ?: "") +
@@ -1086,12 +1090,15 @@ class PhoneCore(
         }
         val summary = ui.get("phone_log_key", "按键 %1\$s", key.name.lowercase()) // l10n:keep test default
         if (key == PhoneAction.GlobalKey.HOME && pureGui()) {
+            // Not an error on purpose: answering `error` costs the model a whole turn to re-plan
+            // (log 15:48:17 `refused:leave-app`, and the next request only repeated the open), while
+            // nothing happened on the phone either way.
             // l10n:keep agent tool result
             return Out(
-                "任务正在一个应用里跑，不要按桌面：看当前页用 screen，换应用用 open。这台机型从桌面重开会把全屏 App 挤成小窗，在桌面上滑动还会滑到负一屏，任务就回不去了。",
-                error = true,
+                "home 这次按了也当没按：任务还在应用里，什么都没变（回桌面会把全屏 App 挤成小窗，滑动还会滑到负一屏）。看当前页用 screen，换应用用 open。",
+                error = false,
                 summary = summary,
-                decision = "refused:leave-app",
+                decision = "ignored:leave-app",
             )
         }
         val driver = when (val d = driverFor(which)) {

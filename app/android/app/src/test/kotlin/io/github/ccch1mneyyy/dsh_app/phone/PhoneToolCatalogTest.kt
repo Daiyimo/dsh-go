@@ -18,7 +18,7 @@ class PhoneToolCatalogTest {
     @Test fun theToolListHashOnlyChangesOnPurpose() {
         assertEquals(
             "the phone tool list changed; if this is deliberate, update this hash — every model request carries it",
-            "d7078a07ff1f1451324ae900c34b758a0eff68c8e73ec06d8d814f608138945a",
+            "58cc0285ebdfac787ca6668eb6e5a2b24bf6b1df88b6d8782505843229f91644",
             listHash(),
         )
     }

@@ -395,17 +395,19 @@ class PhonePureGuiTest {
         assertEquals("a task that is not latched has nothing to bring back", emptyList<String>(), fullscreens)
     }
 
-    @Test fun theHomeKeyIsRefusedWhileTheTaskRunsInOneApp() {
+    @Test fun theHomeKeyIsIgnoredInsideOneAppWithoutLookingLikeAFailure() {
         // Going home is what cost the person the task: this ROM re-opens the running app in its
         // small window, and a swipe on the home screen lands on 负一屏 — the game never came back
-        // to the same picture. A latched task therefore cannot press home at all.
+        // to the same picture. So home does nothing inside a latched task; it is reported as
+        // ignored rather than as an error, because an error costs a whole model turn to re-plan.
         pkg = "com.game.example"
         appLabel = "Game"
         kind = ScreenKind.CANVAS
         readMain()
         val out = core.call(PhoneToolCatalog.KEY, mapOf("key" to "home"))
-        assertTrue("home was pressed inside a latched task: ${out.text}", out.isError)
-        assertTrue(out.text, out.text.contains("不要按桌面"))
+        assertFalse("home must not be pressed inside a latched task: ${out.text}", out.isError)
+        assertTrue(out.text, out.text.contains("当没按"))
+        assertTrue("home was pressed on the phone: ${keys}", keys.isEmpty())
         assertEquals("the key was delivered anyway", emptyList<PhoneAction.GlobalKey>(), keys)
     }
 
