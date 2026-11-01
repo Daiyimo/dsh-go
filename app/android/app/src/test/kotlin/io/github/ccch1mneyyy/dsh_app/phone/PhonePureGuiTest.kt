@@ -43,6 +43,10 @@ class PhonePureGuiTest {
     private val games = mutableSetOf<String>()
     private var numberedText = ""
     private val sleeps = mutableListOf<Long>()
+    /** Every line the core wrote to the device log: a decision is checked, not guessed. */
+    private val logs = mutableListOf<String>()
+    /** True: the home screen stays in front after the first bring-back (19:55:38). */
+    private var launcherSticksOnce = false
 
     private fun driver(screen: PhoneScreen, id: String) = object : PhoneDriver {
         override val screen = screen
@@ -106,6 +110,7 @@ class PhonePureGuiTest {
             fullscreens += packageName
             if (!canBringBack) return false
             // The real call starts the task again, so the next read is of that app, not of DSH's own UI.
+            if (launcherSticksOnce && fullscreens.size == 1) return true
             pkg = packageName
             appLabel = if (packageName == "com.tencent.mm") "微信" else packageName
             return true
@@ -116,6 +121,7 @@ class PhonePureGuiTest {
         override fun notifyFix(kind: String) {}
         override fun beforeHandoff(screen: PhoneScreen): String? = null
         override fun sleep(ms: Long) { sleeps += ms }
+        override fun log(message: String) { logs += message }
         override fun system() = object : SystemApi {
             override fun apps() = listOf(
                 AppEntry("Example", "example.app"),
@@ -298,8 +304,9 @@ class PhonePureGuiTest {
     }
 
     @Test fun aWeChatTaskTakesDownALeftoverDisplayBeforeItLaunches() {
-        pkg = "com.tencent.mm"
-        appLabel = "微信"
+        // The phone sits on the launcher: the start has to happen, and the display goes first.
+        pkg = "com.android.launcher3"
+        appLabel = "桌面"
         val out = core.call(PhoneToolCatalog.OPEN, mapOf("app" to "com.tencent.mm"))
         assertFalse(out.text, out.isError)
         assertEquals("a virtual screen from an earlier task was left up", 1, closeCount)
@@ -470,7 +477,7 @@ class PhonePureGuiTest {
         assertTrue(out.text, out.text.contains("拉回来"))
     }
 
-    @Test fun aWaitLongerThanTheCapIsWaitedOutNotRefused() {
+    @Test fun aWaitDoesNotSpendTheTurnWaitingForNothing() {
         pkg = "com.tencent.mm"
         appLabel = "微信"
         readMain()
@@ -479,7 +486,10 @@ class PhonePureGuiTest {
         // model asked for 3000 ms, and each refusal cost a whole model turn (m05362).
         val out = core.call(PhoneToolCatalog.WAIT, mapOf("ms" to 3000))
         assertFalse("a 3000 ms wait must not be an error: ${out.text}", out.isError)
-        assertEquals(listOf(1_500L), sleeps)
+        // Every action already settles by itself before it answers, so a wait (65 of them in one
+        // log, 21 of those two in a row) buys nothing but its own round trip.
+        assertTrue("a wait must not sleep: $sleeps", sleeps.isEmpty())
+        assertTrue(out.text, out.text.contains("没有额外等待"))
     }
 
     @Test fun aReadOnOurOwnScreenSaysWhatToDoInsteadOfRefusing() {
@@ -490,6 +500,44 @@ class PhonePureGuiTest {
         val out = core.call(PhoneToolCatalog.SCREEN, mapOf("screen" to "s1"))
         assertFalse("this is a normal answer, not a refusal: ${out.text}", out.isError)
         assertTrue(out.text, out.text.contains("open"))
+    }
+
+    @Test fun aReadOnOurOwnScreenIsAnAnswerEvenWhileAnAppIsLatched() {
+        // 19:54:44: the task was latched on a game, DSH Go took the front for a second, and the read
+        // answered `decision=refused:read app=DSH Go` — the friendly answer was only given while
+        // nothing was latched. Our own screen is never actionable, latch or not.
+        pkg = "com.game.example"
+        appLabel = "Game"
+        kind = ScreenKind.CANVAS
+        readMain()
+        // The read asks for the game's fullscreen first; here the ROM will not give it back, so the
+        // screen in front stays DSH's own and the latch is still the game's.
+        canBringBack = false
+        pkg = "io.github.ccch1mneyyy.dsh_app"
+        appLabel = "DSH Go"
+        kind = ScreenKind.TREE
+        val out = readMain()
+        assertFalse("our own screen is an answer, not a refusal: ${out.text}", out.isError)
+        assertTrue(out.text, out.text.contains("open"))
+        assertEquals("the read tried to bring the game back first", listOf("com.game.example"), fullscreens)
+    }
+
+    @Test fun ourOwnScreenNeverBecomesThePictureApp() {
+        // 19:54:30: DSH Go took the front for a second inside a canvas task and the latch was set to
+        // our own package (`pure gui on: io.github.ccch1mneyyy.dsh_app (task 2)`), which is what the
+        // next task's first read answered with a refusal.
+        pkg = "io.github.ccch1mneyyy.dsh_app"
+        appLabel = "DSH Go"
+        kind = ScreenKind.CANVAS
+        readMain()
+        assertTrue(
+            "our own screen must not be latched as a picture: ${logs.joinToString(" | ")}",
+            logs.none { it.contains("pure gui on: io.github.ccch1mneyyy.dsh_app") },
+        )
+        assertTrue(
+            "the guard has to fire: ${logs.joinToString(" | ")}",
+            logs.any { it.contains("pure gui: our own screen is in front") },
+        )
     }
 
     @Test fun aWrongElementNumberComesBackWithTheNumbersThatExist() {
@@ -589,6 +637,28 @@ class PhonePureGuiTest {
         val out = core.call(PhoneToolCatalog.TAP_XY, mapOf("observation" to "s1", "x" to 500, "y" to 900))
         assertTrue("a tap was delivered on the home screen: ${out.text}", out.isError)
         assertTrue(out.text, out.text.contains("桌面上"))
+    }
+
+    @Test fun aLauncherThatStaysAfterTheFirstRepairGetsASecondOne() {
+        // 19:55:38: `brought com.blizzard.wtcg.hearthstone back ok=true` and the very next look still
+        // saw the launcher, so the turn was refused (`tap_xy error decision=refused:launcher`) and the
+        // model spent a 7887 ms open getting back where it already was.
+        pkg = "com.game.example"
+        appLabel = "Game"
+        kind = ScreenKind.CANVAS
+        readMain()
+        home = setOf("com.android.launcher3")
+        pkg = "com.android.launcher3"
+        appLabel = "桌面"
+        kind = ScreenKind.TREE
+        launcherSticksOnce = true
+        val out = core.call(PhoneToolCatalog.TAP_XY, mapOf("observation" to "s1", "x" to 500, "y" to 900))
+        assertFalse("the second repair brought the game back: ${out.text}", out.isError)
+        assertEquals(listOf("com.game.example", "com.game.example"), fullscreens)
+        assertTrue(
+            "the retry has to be visible in the log: ${logs.joinToString(" | ")}",
+            logs.any { it.contains("launcher still in front after the first repair") },
+        )
     }
 
     @Test fun theDesktopIsNotRefusedBeforeTheTaskHasGonePureGui() {

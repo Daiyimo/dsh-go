@@ -112,11 +112,30 @@ if ((dry)); then
   exit 0
 fi
 
-# Toolchain: use what's on PATH; the gitignored tooling/env.sh is the fallback.
-if ! command -v flutter >/dev/null 2>&1; then
-  [[ -f $ROOT/tooling/env.sh ]] && source "$ROOT/tooling/env.sh"
-  command -v flutter >/dev/null 2>&1 || die "flutter is not on PATH"
+# Toolchain: env.sh is the source of truth, sourced unconditionally — even when
+# flutter is already on PATH. Sourcing it only as a fallback left PUB_CACHE and
+# GRADLE_USER_HOME unset in exactly the shells that have flutter on PATH, so pub
+# rebuilt its whole cache under %LOCALAPPDATA%\Pub\Cache on C: (the C: copy holds
+# asn1lib-1.6.5 while the G: cache resolves 1.6.1 — two independent caches) and
+# Gradle recreated ~/.gradle there. tooling/emu.sh already sources it this way.
+if [[ -f $ROOT/tooling/env.sh ]]; then
+  source "$ROOT/tooling/env.sh"
 fi
+command -v flutter >/dev/null 2>&1 || die "flutter is not on PATH"
+
+# Both caches must be on G:, never C:. With PUB_CACHE unset every Flutter
+# plugin's compileDebugKotlin fails with java.nio's "this and base files have
+# different roots" (sources under G:, cache under C:), which is the failure this
+# guard turns into a one-line error instead of a half-finished build.
+for _cache_var in PUB_CACHE GRADLE_USER_HOME; do
+  _cache_val=${!_cache_var:-}
+  if [[ -z $_cache_val ]]; then
+    die "$_cache_var is unset; tooling/env.sh must set it"
+  fi
+  if [[ ${_cache_val,,} == /c || ${_cache_val,,} == /c/* ]]; then
+    die "$_cache_var=$_cache_val is on C:; it must live on G:"
+  fi
+done
 
 stop_daemon() {
   ((keep_daemon)) && return 0
@@ -138,7 +157,8 @@ aapt2=$(command -v aapt2 || true)
 if [[ -z $aapt2 ]]; then
   sdk=${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}
   [[ -n $sdk ]] || sdk=$(sed -n 's/^sdk\.dir=//p' "$APP/android/local.properties" 2>/dev/null || true)
-  aapt2=$(ls -1d "$sdk"/build-tools/*/aapt2 2>/dev/null | sort -V | tail -n 1 || true)
+  # Windows ships aapt2.exe; Git-Bash's ls does not match a bare "aapt2".
+  aapt2=$(ls -1d "$sdk"/build-tools/*/aapt2* 2>/dev/null | sort -V | tail -n 1 || true)
 fi
 [[ -n $aapt2 ]] || echo "build-apk: aapt2 not found; the APKs' versionCode won't be read back" >&2
 

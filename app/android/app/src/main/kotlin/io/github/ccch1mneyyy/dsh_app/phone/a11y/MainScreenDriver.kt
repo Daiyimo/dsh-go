@@ -80,7 +80,12 @@ internal class MainScreenDriver(private val service: PhoneA11yService, private v
      */
     private val tapLock = Any()
     /** Recent taps per package, so a run of taps inside one small area stops (see TAP_REPEAT_RADIUS). */
-    private val taps = HashMap<String, MutableList<Pair<Int, Int>>>()
+    private val taps = HashMap<String, MutableList<TapMark>>()
+
+    /** One point tap: [dead] is set when the screen barely changed, so only wasted taps count. */
+    private class TapMark(val x: Int, val y: Int) {
+        var dead = false
+    }
 
     /** Bumped by [abort] (stop, screen off): loops and waits started before it give up. */
     @Volatile private var abortGen = 0L
@@ -222,10 +227,18 @@ internal class MainScreenDriver(private val service: PhoneA11yService, private v
                         if (shot.bytes != null) {
                             bytes = shot.bytes
                             mime = shot.mime
-                            snap.image = shot.geometry
-                            // l10n:keep agent screen result
-                            snap.bytes = shot.bytes
-                            snap.mime = shot.mime
+                            // A crop is for reading small print. Letting it become the screen's
+                            // geometry made every following tap land somewhere else: 炉石 measured
+                            // `at=2135,971 picture=900x384` on the same id the model had measured on
+                            // a 1300x584 full picture, and four taps then hit nothing.
+                            if (region == null) {
+                                snap.image = shot.geometry
+                                // l10n:keep agent screen result
+                                snap.bytes = shot.bytes
+                                snap.mime = shot.mime
+                            } else {
+                                text.append("\n已附图：这是放大后的那一小块，只用来读小字。点击坐标仍然按整屏 0-1000 量（不按这张放大图），画面编号还是 ${snap.id}。")
+                            }
                             // l10n:keep agent screen result
                             if (region == null && snap.screen.kind == ScreenKind.TREE && snap.screen.elements.isNotEmpty()) {
                                 // l10n:keep agent screen result
@@ -678,22 +691,23 @@ internal class MainScreenDriver(private val service: PhoneA11yService, private v
         // By distance, not by grid cell: a 炉石 task tapped (500,840), (500,850), (500,860) and
         // (500,880) in a row and the cell size made four different "spots" out of one target, so
         // the guard stayed quiet and the model kept tapping the same button for a minute.
+        val mark = TapMark(a.x, a.y)
         val near = synchronized(tapLock) {
             val list = taps.getOrPut(snap.packageName ?: "") { ArrayList() }
             val n = list.count {
-                kotlin.math.abs(it.first - a.x) <= TAP_REPEAT_RADIUS &&
-                    kotlin.math.abs(it.second - a.y) <= TAP_REPEAT_RADIUS
-            } + 1
-            list.add(a.x to a.y)
+                it.dead && kotlin.math.abs(it.x - a.x) <= TAP_REPEAT_RADIUS &&
+                    kotlin.math.abs(it.y - a.y) <= TAP_REPEAT_RADIUS
+            }
+            list.add(mark)
             if (list.size > 32) list.removeAt(0)
             n
         }
-        if (near > TAP_REPEAT_MAX) {
-            PhoneLog.i("tap_xy refused: (${a.x},${a.y}) tapped $near times in one small area")
+        if (near >= TAP_REPEAT_MAX) {
+            PhoneLog.i("tap_xy refused: (${a.x},${a.y}) tapped ${near + 1} times with no change in one small area")
             // l10n:keep agent screen result
             return ActionResult(
                 false,
-                "这一小片地方已经点了 ${near - 1} 次，画面没有因此变成你要的样子：它多半不是一个能点的按钮，再点也没用。" +
+                "这一小片地方已经点了 ${near + 1} 次，每次画面都几乎没有变化：它多半不是一个能点的按钮，再点也没用。" +
                     "先 screen 看现在的画面，换一个明显不同的位置（或者滚动一下再找），确实不行就 handoff 交给用户。",
                 observeShot(),
             )
@@ -753,6 +767,10 @@ internal class MainScreenDriver(private val service: PhoneA11yService, private v
         val verified = verifyPointTap(snap, out.message, track, a.x, a.y)
         verified.amount?.let {
             PhoneLog.i("tap_xy verified: change=$it at=(${a.x},${a.y})")
+            // Only a tap that changed nothing counts towards the "same spot again" guard: a game
+            // asks for the same button three or four times in a row while the picture moves every
+            // time (measured: (915,927) refused although each of those taps had redrawn the board).
+            if (it < TAP_DEAD_CHANGE) mark.dead = true
         }
         // A tree page was already measured by [changeNote]; a canvas page only here.
         // The zoom the verification may have taken wins over the settled screenshot: it is what the
@@ -797,11 +815,13 @@ internal class MainScreenDriver(private val service: PhoneA11yService, private v
             val change = PixelDiff.diff(before, after)
             if (change >= CHANGED) {
                 clearMiss()
+                // How much it moved, not only that it did (see changeNote): without the size the
+                // model re-tapped a button that had already navigated, 19:57:16.
                 // On a picture page the tap's result is the new picture: without it the model pays a
                 // whole `screen` round trip after every tap (measured: 12 taps, 12 extra reads in one
                 // 炉石 task). The shot is already taken above, so this costs nothing extra.
                 return Change(
-                    message + "\n" + "下面是这次点击之后的画面（同一张截图，不用再 screen）：接着点、滚或输入都可以直接做。",
+                    message + "\n" + changeNote(change) + "\n" + "下面是这次点击之后的画面（同一张截图，不用再 screen）：接着点、滚或输入都可以直接做。",
                     change,
                     null,
                     shot.bytes,
@@ -1225,6 +1245,9 @@ internal class MainScreenDriver(private val service: PhoneA11yService, private v
 
         /** Taps within this many 0-1000 units of each other count as one spot (6% of the picture). */
         private const val TAP_REPEAT_RADIUS = 60
+
+        /** Below this a tap left the picture alone; above it the page really moved. */
+        private const val TAP_DEAD_CHANGE = 0.01f
         /** Attempts allowed on one spot before it is refused: a double tap still works. */
         private const val TAP_REPEAT_MAX = 3
         private const val CAPTURE_MS = 2_000L
@@ -1233,6 +1256,27 @@ internal class MainScreenDriver(private val service: PhoneA11yService, private v
          * changes far more; a tap that only moves a focus ring changes less).
          */
         private const val CHANGED = 0.05f
+        /**
+         * Mean pixel change above this is a whole new page, not a highlight or a spinner. The size
+         * of the change is the one signal that stops the A to B to A flap: a model told "0.46, a
+         * whole page" does not tap the same button again and walk back to where it started
+         * (measured 19:57:16: (500,118) scored 0.46, then (520,118) scored 0.46 — six turns burned
+         * on one strip of the picture before the repeat guard stopped it).
+         */
+        internal const val CHANGED_PAGE = 0.2f
+
+        /**
+         * What the model is told about a change that did register: how much the picture moved. The
+         * picture itself follows, so this is the one thing it cannot see for itself.
+         */
+        internal fun changeNote(change: Float): String {
+            val size = String.format(java.util.Locale.ROOT, "%.2f", change)
+            // l10n:keep agent screen result
+            return if (change >= CHANGED_PAGE)
+                "这次点击之后画面变化很大（差异 $size，像是翻了页或换了界面）。按新画面继续下一步；如果这一下点偏了，改点别的地方，不要在原地再点一次。"
+            // l10n:keep agent screen result
+            else "这次点击之后画面有变化（差异 $size）。按新画面继续下一步，不要在原地重复点。"
+        }
         private const val COLLECT_MS = 100_000L
         private const val COLLECT_CHARS = 60_000
     }

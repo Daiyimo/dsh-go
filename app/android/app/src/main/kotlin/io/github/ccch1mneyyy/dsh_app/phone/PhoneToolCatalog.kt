@@ -294,12 +294,12 @@ object PhoneToolCatalog {
         Tool(
             WAIT,
             // l10n:keep agent tool catalog
-            "等一会儿，什么都不点，然后读当前屏幕。只在真的需要停住时用（动画没停、刚 handoff 回来）；" +
-                "页面还在加载就直接再 screen 一次，不要靠 wait 赌它加载完：读屏本身会等页面稳定。" +
-                "ms 是等待毫秒数，1 到 1500（填大了按 1500 算，不会报错）：停得越久越亏，读屏本身就会等页面稳定；多数时候直接 screen 就够。",
+            "读一次当前画面。它不会真的等待：每个动作（点击、滚动、按键）在返回前已经等过页面稳定，" +
+                "所以停一秒只是白白多花一个来回——日志里 65 次 wait、21 次连着两次，等于几十秒。" +
+                "画面在动就直接 screen 一次看现在；页面在加载也不用 wait，读屏本身会等到稳定。",
             linkedMapOf(
                 // l10n:keep agent tool catalog
-                "ms" to int("等待毫秒数，1-1500；省略等 2 秒", 1, 1_500),
+                "ms" to int("保留参数：填什么都不会真的等待（动作已经等过页面稳定）", 0, 1_500),
                 // l10n:keep agent tool catalog
                 "screen" to str("屏幕号；省略时作用于主屏"),
                 // l10n:keep agent tool catalog

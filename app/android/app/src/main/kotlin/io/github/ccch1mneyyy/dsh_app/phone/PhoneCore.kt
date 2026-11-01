@@ -236,6 +236,15 @@ class PhoneCore(
      * it straight back up.
      */
     private fun enterPureGui(pkg: String?, label: String? = null) {
+        // Our own screen is nobody's picture. Latching it (measured 19:54:30
+        // `pure gui on: io.github.ccch1mneyyy.dsh_app (task 2)`: our app took the front for a
+        // second, and a tap on an old canvas screen id ran the latch again) made the next task's
+        // first read answer with a refusal instead of "open the app you want" — the friendly
+        // answer is only given while nothing is latched, and the latch was our own package.
+        if (pkg == env.ownPackage()) {
+            env.log("pure gui: our own screen is in front, no picture to latch")
+            return
+        }
         pictureApp = pkg ?: UNKNOWN_PACKAGE
         if (pkg != null && pkg in env.guiScheme()) {
             schemeApp = pkg
@@ -261,10 +270,12 @@ class PhoneCore(
         val scheme = pkg != null && pkg in env.guiScheme()
         if (snap.kind == ScreenKind.CANVAS || snap.kind == ScreenKind.BLANKED || scheme) {
             enterPureGui(pkg, snap.appLabel)
-        } else if (pkg != null && pkg != pictureApp && !neutral(pkg)) {
+        } else if (pkg != null && pkg != pictureApp && !neutral(pkg) && pkg != env.ownPackage()) {
             // Another app in front ends the picture; a system page or the home screen on top of it
             // does not — it is the permission sheet, the shade, or the launcher the model just
-            // pressed home to, and the app under it is still the one being worked on.
+            // pressed home to, and the app under it is still the one being worked on. DSH's own UI
+            // belongs with them: this ROM hands the front to our app for a second at a time
+            // (19:55:37, 19:56:43, 19:58:25) and the app underneath is still the driven one.
             clearLatch()
         }
     }
@@ -515,6 +526,31 @@ class PhoneCore(
             runCatching { env.closeBackground() }
         }
         if (!background) {
+            // The model reopens an app it is already in: the log has `open` twice in 1.5 s and
+            // `open -> apps -> open` chains, each one a start (1.8 s) plus a whole round trip.
+            val front = runCatching { env.peekPackage() }.getOrNull()
+            if (front == app.packageName) {
+                val shown = runCatching {
+                    env.driver(PhoneScreen.MAIN)?.observe(detail = false, image = true)
+                }.getOrNull()
+                tasks.setApp(app.label)
+                lastScreen = PhoneScreen.MAIN
+                shown?.let { rememberPicture(PhoneScreen.MAIN, it) }
+                // Still ask for the fullscreen window: the ROM may have shrunk the task into its
+                // small window while the model was thinking, and taps in a small window go nowhere.
+                if (env.launchFullscreen()) {
+                    val full = runCatching { env.forceFullscreen(app.packageName) }.getOrDefault(false)
+                    env.log("fullscreen while already in front ${app.packageName}: ok=$full")
+                }
+                env.log("open ${app.packageName}: already in front, nothing started")
+                return Out(
+                    "「${app.label}」已经在前台了，不用再打开。下面是现在的画面（不用再 screen）：接着做就行。",
+                    app = shown?.appLabel ?: app.label,
+                    screen = shown?.let { safety.filterScreen(it) },
+                    summary = ui.get("phone_log_open_app", "打开 %1\$s", app.packageName), // l10n:keep test default
+                    decision = "already:open",
+                )
+            }
             // 全屏打开应用: the accessibility service may ask for the fullscreen windowing mode,
             // this process may not (a background start from an app lands wherever the ROM puts it —
             // on some it is a small floating window with the app under SystemUI decorations, which
@@ -540,12 +576,21 @@ class PhoneCore(
                             env.log("fullscreen after open ${app.packageName}: ok=$full")
                         }
                         // The start already settled on its own page: that page is the task's
-                        // picture from here, exactly as if it had been read.
-                        r.screen?.let { rememberPicture(PhoneScreen.MAIN, it) }
+                        // picture from here, exactly as if it had been read. A page without
+                        // numbers is unreadable without its picture, so take it now (120 ms) rather
+                        // than let the model spend a round trip on `screen` (~4 s): the log has 33
+                        // `open -> screen` pairs.
+                        val shot = if (r.screen != null && r.screen.kind != ScreenKind.TREE) {
+                            runCatching { driver.observe(detail = false, image = true) }.getOrNull() ?: r.screen
+                        } else {
+                            r.screen
+                        }
+                        shot?.let { rememberPicture(PhoneScreen.MAIN, it) }
                         return Out(
-                            r.message,
-                            app = r.screen?.appLabel ?: app.label,
-                            screen = r.screen?.let { safety.filterScreen(it) },
+                            if (shot != null && shot !== r.screen) r.message + "\n" + "下面是打开后的画面（不用再 screen）：接着做就行。"
+                            else r.message,
+                            app = shot?.appLabel ?: app.label,
+                            screen = shot?.let { safety.filterScreen(it) },
                             summary = ui.get("phone_log_open_app", "打开 %1\$s", app.packageName), // l10n:keep test default
                             decision = "ok",
                         )
@@ -766,13 +811,16 @@ class PhoneCore(
         // (m05362): the phone still sits on this app, nothing is latched to return to, and there is
         // nothing to refuse. Say what to do next as a normal answer, so the model neither retries
         // the read nor presses back.
-        val ownOnly = refused && snap.packageName == env.ownPackage() && latchedApp() == null
+        // Latch or not: our own UI is never actionable, so this is an answer and not a refusal.
+        // (19:54:44: the latch was still our own package from a stale `pure gui on:`, so the read
+        // came back `decision=refused:read app=DSH Go` and cost the task its first turn.)
+        val ownOnly = refused && snap.packageName == env.ownPackage()
         val blind = !refused && !env.policies().canSeeImages &&
             (snap.kind == ScreenKind.CANVAS || snap.kind == ScreenKind.BLANKED)
         return Out(
             when {
                 // l10n:keep agent tool result
-                ownOnly -> "现在前台是 DSH 自己（任务刚开始，手机还停在我们的界面上），这里没有可操作的东西。用 open 打开目标 App（例如微信 com.tencent.mm），打开之后直接 screen 读它，不要按 back 或 home。"
+                ownOnly -> "现在前台是 DSH 自己（手机停在了我们的界面上），这里没有可操作的东西。用 open 打开目标 App（例如微信 com.tencent.mm），打开之后直接 screen 读它，不要按 back 或 home。"
                 // l10n:keep agent tool result
                 refused -> shown.text
                 // A picture page for a model that cannot read pictures: say it here rather than
@@ -808,8 +856,11 @@ class PhoneCore(
         val asked = a.int("ms")?.toLong() ?: WAIT_DEFAULT_MS
         // Clamped, not refused: the model asking for 3000 ms is not a mistake worth a whole round
         // trip (measured three `tool wait error decision=invalid` inside one 炉石 task, 18:35:38).
-        val ms = asked.coerceIn(1L, WAIT_MAX_MS)
-        if (ms != asked) env.log("wait asked ${asked}ms, waited ${ms}ms")
+        // Nothing is waited for on purpose. Every action already settles by itself before it
+        // answers (400 ms on a picture page, 1.5 s on a tree page), so a `wait` adds nothing but
+        // its own round trip; the log had 65 of them, 21 of those two in a row.
+        val ms = 0L
+        if (asked > 0) env.log("wait skipped: the action already settled (asked ${asked}ms)")
         val which = if (a.bool("background") == true) PhoneScreen.BACKGROUND else PhoneScreen.MAIN
         val summary = if (which == PhoneScreen.BACKGROUND) ui.get("phone_log_background_read", "读后台屏") else ui.get("phone_log_wait", "等 %1\$d 毫秒", ms.toInt()) // l10n:keep test default
         val driver = when (val d = driverFor(which)) {
@@ -818,7 +869,7 @@ class PhoneCore(
         }
         if (env.isLocked()) return locked(summary)
         lastScreen = which
-        env.sleep(ms)
+        if (ms > 0L) env.sleep(ms)
         val snap = driver.observe(detail = a.bool("detail") == true, image = a.bool("image") == true)
         tasks.setApp(snap.appLabel)
         rememberPicture(which, snap)
@@ -828,8 +879,8 @@ class PhoneCore(
         return Out(
             // l10n:keep agent tool result
             if (refused) "没有读取这个屏幕的内容。"
-            else if (which == PhoneScreen.MAIN && pureGui()) "等了 ${ms} 毫秒。 " + pureGuiHint(snap.appLabel, snap.kind)
-            else "等了 ${ms} 毫秒。",
+            else if (which == PhoneScreen.MAIN && pureGui()) "没有额外等待，这是现在这一刻的画面。 " + pureGuiHint(snap.appLabel, snap.kind)
+            else "没有额外等待，这是现在这一刻的画面。",
             error = refused,
             screen = shown,
             app = snap.appLabel ?: snap.packageName,
@@ -1101,7 +1152,17 @@ class PhoneCore(
         env.log("launcher in front while latched ($pkg): brought $app back ok=$ok")
         if (!ok) return true
         env.sleep(600)
-        val again = runCatching { env.peekPackage() }.getOrNull()
+        var again = runCatching { env.peekPackage() }.getOrNull()
+        if (again == null || again !in home) return false
+        // The ROM hands the app back slowly: the repair reports ok while the home screen is still
+        // in front when we look again (measured 19:55:38 — `brought com.blizzard… back ok=true`,
+        // then `tap_xy error decision=refused:launcher`, then a 7887 ms open). Once more, with a
+        // longer settle, before the call is refused.
+        env.log("launcher still in front after the first repair: bringing $app back again")
+        val ok2 = runCatching { env.forceFullscreen(app) }.getOrDefault(false)
+        env.sleep(if (ok2) 900 else 0)
+        if (!ok2) return true
+        again = runCatching { env.peekPackage() }.getOrNull()
         return again != null && again in home
     }
 
