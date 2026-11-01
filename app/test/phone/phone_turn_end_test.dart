@@ -158,13 +158,20 @@ void main() {
     TestWidgetsFlutterBinding.ensureInitialized();
     late FakePhoneNative native;
     late ProviderContainer container;
+    late List<String> resumedSessions;
 
     Future<void> settle() => notify.settle();
 
     Future<PhoneTurnEndController> make({Set<String> running = const {'s1'}, String? viewed}) async {
       SharedPreferences.setMockInitialValues({});
       native = FakePhoneNative(status: phoneStatus(taskActive: false))..install();
-      container = ProviderContainer(overrides: [localConnectionProvider.overrideWith(() => _Local(_Client(running)))]);
+      resumedSessions = [];
+      container = ProviderContainer(
+        overrides: [
+          localConnectionProvider.overrideWith(() => _Local(_Client(running))),
+          phoneResumeProvider.overrideWithValue((sessionId) => resumedSessions.add(sessionId)),
+        ],
+      );
       addTearDown(container.dispose);
       await container.read(localConnectionProvider.future);
       if (viewed != null) container.read(currentSessionProvider.notifier).select(viewed);
@@ -196,6 +203,21 @@ void main() {
       final result = await phone.onTurnEnd(_end('s1', kind: AlertKind.stopped, turnEndKind: 'aborted'));
       expect(result?.closed, isTrue);
       expect(finishArgs()['reopen'], isTrue);
+    });
+
+    test('a phone turn cut short resumes itself', () async {
+      final phone = await make();
+      final asked = resumedSessions;
+      await phone.onTurnEnd(_end('s1', turnEndKind: 'max-tokens'));
+      expect(phone.resumesFor(1), 1, reason: 'the model ran out of tokens, not the person');
+      expect(asked, ['s1']);
+    });
+
+    test('a finished or stopped turn is not resumed', () async {
+      final phone = await make();
+      await phone.onTurnEnd(_end('s1'));
+      expect(phone.resumesFor(1), 0);
+      expect(resumedSessions, isEmpty);
     });
 
     test('other conversations, remote hosts and requests are left alone', () async {

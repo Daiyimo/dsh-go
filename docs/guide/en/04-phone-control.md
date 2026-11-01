@@ -71,7 +71,7 @@ Adjust it under **Floating bar** on the phone control page (shown once phone con
 
 - **Idle opacity**: 30% to 100%, 70% by default. At 100% the bar never fades.
 - **Collapse when idle**: off by default. When on, the bar shrinks to a ball after a few idle seconds, and opens by itself when you need to approve something.
-- **Back to DSH Go when done**: on by default. When the reply ends and the app is in the background, it tries to bring you back to that chat. If the system blocks background windows, use the notification; see Confirmations and return below.
+- **Back to DSH Go when done**: on by default. When the reply ends and the app is in the background, it tries to bring you back to that chat. If a turn is cut short mid-task (the model hits its output limit, or the connection drops), DSH carries on by itself, up to two times for the same task, instead of waiting for you to press Continue. If the system blocks background windows, use the notification; see Confirmations and return below.
 
 Whatever the settings, the bar closes when the reply ends.
 When the foreground app is WeChat, or while a game or another picture-only page is being worked, DSH does not put the bar on the screen at all: some external setups read the screen and pick their own tap positions, and a bar on top of it gets in their way — on a game it also shifts every position measured against the screenshot. Stop the task from the **Operating your phone** card in the app instead.

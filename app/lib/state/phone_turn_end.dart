@@ -27,6 +27,7 @@ import '../l10n/l10n.dart';
 import 'app_info.dart';
 import 'bots_state.dart';
 import 'chat_reveal.dart';
+import 'chat_state.dart';
 import 'connection_state.dart';
 import 'notify_state.dart' show appForegroundProvider, notifyChannelProvider;
 import 'phone_state.dart';
@@ -179,6 +180,36 @@ class PhoneTurnEndController extends Notifier<void> {
   MuxGeneration? _ownerGeneration;
   final _deferred = <String, _DeferredPhoneEnd>{};
 
+  /// Ends that are not the person's own stop: the model ran out of output
+  /// tokens, or the turn was interrupted (host restart, a dropped stream).
+  /// `aborted` is the person pressing stop; `completed` and `blocked` are final.
+  static const resumeKinds = {'max-tokens', 'interrupted'};
+
+  /// A phone case must not wait for a tap on 「继续」: the model asked for the
+  /// phone, so a turn cut short is ours to resume. Two tries keep a model that
+  /// keeps hitting the limit from looping.
+  static const maxResumes = 2;
+
+  final _resumed = <int, int>{};
+
+  /// How many times this task resumed itself, for tests and the trace.
+  int resumesFor(int taskId) => _resumed[taskId] ?? 0;
+
+  void _resumeIfCutShort(int taskId, ChatAlert alert) {
+    final kind = alert.turnEndKind ?? '';
+    debugPrint('DSH_PHONE_END task=$taskId kind=$kind');
+    if (!resumeKinds.contains(kind)) return;
+    final done = _resumed[taskId] ?? 0;
+    if (done >= maxResumes) return;
+    _resumed[taskId] = done + 1;
+    _trace('task=$taskId event=resume kind=$kind n=${done + 1}');
+    try {
+      ref.read(phoneResumeProvider)(alert.sessionId);
+    } catch (_) {
+      // No conversation to resume (closed, or a bot room): the notice stays.
+    }
+  }
+
   static const ownerWait = Duration(seconds: 5);
   static const maxDeferredEnds = 8;
 
@@ -243,6 +274,7 @@ class PhoneTurnEndController extends Notifier<void> {
       if (reading != null) _retireRead(reading, invalidate: false);
       _ownerClient = null;
       _ownerGeneration = null;
+      _resumed.clear();
       _trace('task=${link.taskId} event=begin');
       unawaited(_snapshot(link.taskId!));
     } else if (!link.armed) {
@@ -394,6 +426,7 @@ class PhoneTurnEndController extends Notifier<void> {
         return result.retired();
       }
       if (result.busy) link.refused(alert.sessionId, taskId);
+      if (!result.busy) _resumeIfCutShort(taskId, alert);
       if (result.opened && result.launched && !bot && ref.mounted && link.taskId == taskId) {
         ref.read(chatRevealProvider.notifier).reveal(alert.sessionId);
       }
@@ -428,5 +461,12 @@ class PhoneTurnEndController extends Notifier<void> {
     }();
   }
 }
+
+/// How a cut-short phone turn asks its conversation to go on. The real one
+/// sends 「继续」 into that conversation; tests replace it to see the decision
+/// without a live engine.
+final phoneResumeProvider = Provider<void Function(String sessionId)>(
+  (ref) => (sessionId) => ref.read(chatProvider(sessionId).notifier).send(appL10n.commonContinue),
+);
 
 final phoneTurnEndProvider = NotifierProvider<PhoneTurnEndController, void>(PhoneTurnEndController.new);
