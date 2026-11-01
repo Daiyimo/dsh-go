@@ -80,6 +80,9 @@ interface PhoneEnv {
      * process answers the next call tens of seconds late). See [KeepAwake].
      */
     fun keepAwake() {}
+
+    /** A new task starts: the screen ids the model was given before mean nothing now. */
+    fun forgetScreens() {}
     /** This app's own package, so a task can tell "the person came back to DSH" from another app. */
     fun ownPackage(): String = ""
 }
@@ -282,6 +285,9 @@ class PhoneCore(
     /** The screen of the last screen-based call, for `handoff`. */
     @Volatile private var lastScreen: PhoneScreen = PhoneScreen.MAIN
 
+    /** The task whose screen ids are still valid; a new task starts with none. */
+    private var screensTask = -1L
+
     /**
      * The task's last hard refusal (密码框, 系统设置, 不碰名单), for the `handoff` that usually
      * follows it: the card says which rule it was. Cleared by a write that went through, a new
@@ -378,6 +384,14 @@ class PhoneCore(
         when (val b = tasks.begin()) {
             is PhoneTasks.Begin.Refused -> return Out(b.message + "。", error = true, summary = name, decision = "stopped")
             is PhoneTasks.Begin.Go -> Unit
+        }
+        // The task that is alive now owns the screen ids. Checked after begin() because that is where a
+        // new task gets its id: before it, every call would look like "a new task" and drop the ids the
+        // model was just handed.
+        val task = tasks.snapshot().id
+        if (task != screensTask) {
+            screensTask = task
+            runCatching { env.forgetScreens() }
         }
         if (tasks.isPaused) {
             val go = scope.userWait { tasks.awaitResume(PAUSE_WAIT_MS) }

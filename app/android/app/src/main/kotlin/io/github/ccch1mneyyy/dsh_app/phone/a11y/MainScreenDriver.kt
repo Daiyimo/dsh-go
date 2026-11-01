@@ -134,6 +134,14 @@ internal class MainScreenDriver(private val service: PhoneA11yService, private v
         true
     }.getOrDefault(false)
 
+    override fun forgetScreens() {
+        synchronized(lock) {
+            if (latest == null) return
+            latest = null
+            PhoneLog.i("screens forgotten (a new task started)")
+        }
+    }
+
     override fun imeShown(): Boolean = runCatching {
         service.windows.any { it.type == AccessibilityWindowInfo.TYPE_INPUT_METHOD }
     }.getOrDefault(false)

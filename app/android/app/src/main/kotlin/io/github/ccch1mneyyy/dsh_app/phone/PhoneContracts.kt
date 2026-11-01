@@ -194,6 +194,15 @@ interface PhoneDriver {
     /** A keyboard window is on screen, i.e. some field already has the focus. */
     fun imeShown(): Boolean = false
 
+    /**
+     * Drops the screen the model was last given.
+     *
+     * Screen ids (`s7`) are only meaningful up to the next read, and a model that carries them into
+     * the next task taps an id that belongs to a page the previous task showed: every such call
+     * answered `stale` (log 15:33:37 `tool tap error decision=stale at=点 s13#2 task=2`).
+     */
+    fun forgetScreens() {}
+
     /** Whether a focused editable field exists to paste into (微信 hides its tree, so: no). */
     fun fieldReady(): Boolean = false
 

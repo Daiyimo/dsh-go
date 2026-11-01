@@ -701,6 +701,10 @@ class PhoneControl private constructor(private val app: Context) : PhoneEnv, Con
 
     override fun keepAwake() = KeepAwake.note(app)
 
+    override fun forgetScreens() {
+        PhoneRegistry.mainDriver?.forgetScreens()
+    }
+
     override fun ownPackage(): String = app.packageName
 
     override fun keyboardUp(): Boolean =

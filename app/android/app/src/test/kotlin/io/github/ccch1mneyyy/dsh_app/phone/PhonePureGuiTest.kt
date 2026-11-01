@@ -25,6 +25,9 @@ class PhonePureGuiTest {
     private var scheme = PhoneCore.DEFAULT_GUI_SCHEME
     private var home: Set<String> = emptySet()
 
+    /** How often the driver was told to drop the screen ids the model still holds. */
+    private var forgotten = 0
+
     /** False: the ROM refused to bring the task's app back, so it stays on the launcher. */
     private var canBringBack = true
     private val launches = mutableListOf<String>()
@@ -93,6 +96,7 @@ class PhonePureGuiTest {
             return true
         }
         override fun ownPackage() = "io.github.ccch1mneyyy.dsh_app"
+        override fun forgetScreens() { forgotten++ }
         override fun zone() = ZoneId.of("UTC")
         override fun notifyFix(kind: String) {}
         override fun beforeHandoff(screen: PhoneScreen): String? = null
@@ -490,6 +494,22 @@ class PhonePureGuiTest {
         // scroll happens inside it.
         assertEquals(listOf("com.game.example"), fullscreens)
         assertFalse("the scroll was dropped after the app came back: ${out.text}", out.isError)
+    }
+
+    @Test fun aNewTaskForgetsTheScreenIdsOfTheOldOne() {
+        pkg = "com.tencent.mm"
+        appLabel = "微信"
+        readMain()
+        assertEquals(1, forgotten)
+        // A read in the middle of a task must not expire the id the model was just handed.
+        readMain()
+        assertEquals(1, forgotten)
+        // Next task (the person pressed 结束任务 and asked something else): the old s-id is worthless.
+        tasks.finish()
+        pkg = "com.game.example"
+        appLabel = "Game"
+        readMain()
+        assertEquals(2, forgotten)
     }
 
     @Test fun anEmptiedListLetsWeChatBackOntoTheVirtualScreen() {
