@@ -1,8 +1,11 @@
 package io.github.ccch1mneyyy.dsh_app.phone
 
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.graphics.PixelFormat
+import android.os.Handler
+import android.os.Looper
 import android.os.SystemClock
 import android.view.Gravity
 import android.view.View
@@ -69,7 +72,10 @@ object FreezeShield {
     }
 
     private fun beat(app: Context) {
-        runCatching { app.sendBroadcast(Intent(ACTION).setPackage(app.packageName)) }
+        // A broadcast nobody receives is never delivered, so AMS never records
+        // FLAG_USING_BROADCAST: measured on 2026-11-01, the first version of this loop sent
+        // Intent(ACTION).setPackage(pkg) into the void and every freeze still landed.
+        runCatching { app.sendBroadcast(Intent(app, ShieldBeat::class.java).setAction(ACTION)) }
         if (providerOk != true) {
             val client = runCatching { app.contentResolver.acquireContentProviderClient(PROVIDER) }.getOrNull()
             providerOk = client != null
@@ -99,9 +105,17 @@ object FreezeShield {
                 y = 0
                 alpha = 0.01f
             }
-            wm.addView(view, params)
-            window = view
-            PhoneLog.i("freeze shield: window up")
+            // addView needs a looper: on the shield thread it threw "Can't create handler inside
+            // thread … that has not called Looper.prepare()" and no window ever appeared.
+            Handler(Looper.getMainLooper()).post {
+                runCatching {
+                    wm.addView(view, params)
+                    window = view
+                    PhoneLog.i("freeze shield: window up")
+                }.onFailure {
+                    PhoneLog.i("freeze shield: no window (${it.javaClass.simpleName}: ${it.message})")
+                }
+            }
         }.onFailure { PhoneLog.i("freeze shield: no window (${it.javaClass.simpleName}: ${it.message})") }
     }
 
@@ -111,4 +125,16 @@ object FreezeShield {
         app.getSystemService(WindowManager::class.java)?.removeView(view)
         PhoneLog.i("freeze shield: window down")
     }
+}
+
+/**
+ * The delivery target of the shield's own broadcast.
+ *
+ * It does nothing on purpose: the point is the delivery itself, because that is what makes the
+ * vendor record `FLAG_USING_BROADCAST` and keep the freeze pending. It must NOT touch
+ * [FreezeShield.note], which refreshes the deadline — a broadcast to ourselves would then keep the
+ * shield alive for ever.
+ */
+class ShieldBeat : BroadcastReceiver() {
+    override fun onReceive(context: Context, intent: Intent) = Unit
 }
