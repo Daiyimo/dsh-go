@@ -431,8 +431,18 @@ internal class MainScreenDriver(private val service: PhoneA11yService, private v
             return ActionResult(false, msg, now)
         }
         val el = snap.screen.element(elementId)
-            // l10n:keep agent screen result
-            ?: return ActionResult(false, "屏幕 $screenId 里没有编号 $elementId（共 ${snap.screen.elements.size} 项）。")
+            ?: if (snap.screen.kind != ScreenKind.TREE || snap.screen.elements.isEmpty()) {
+                // l10n:keep agent screen result
+                return ActionResult(
+                    false,
+                    "屏幕 $screenId 是画面页（${snap.appLabel}），上面没有控件编号，$elementId 不存在，没有执行。" +
+                        "画面页请用 tap_xy 点截图上的位置（0-1000 归一化坐标），需要滚动用 scroll。下面是最新的画面。",
+                    observeShot(),
+                )
+            } else {
+                // l10n:keep agent screen result
+                return ActionResult(false, "屏幕 $screenId 里没有编号 $elementId（共 ${snap.screen.elements.size} 项）。")
+            }
         val cap = capture()
         val hit = locate(cap, el)
         val node = hit?.let { cap.native(it.ref) }

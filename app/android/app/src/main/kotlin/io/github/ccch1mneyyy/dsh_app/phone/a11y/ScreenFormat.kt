@@ -121,7 +121,7 @@ object ScreenFormat {
     const val CANVAS_NOTE = "提示：本页没有可用的控件（游戏、自绘 canvas、加密混淆页常见）。DSH 已自动附上截图，图上没有编号，请直接看画面；要点击时用 tap_xy，坐标是 0-1000 归一化（0,0=截图左上角，1000,1000=截图右下角），不要用像素、不要用百分数。看不清的小字可以再 screen 一次并给出 region（截取一小块放大）。回到上一页用 key back，不要把标题栏、右上角的三个点、悬浮小茶杯当成关闭键来点：图上看不出那些按钮的效果，点了往往只是把当前页面关掉。目标不在屏上就换一屏再试，或 handoff 交给用户。"
 
     // l10n:keep model screen format
-    const val BLANKED_NOTE = "提示：这个页面不向 DSH 开放控件内容（加密或敏感页）。可以看截图，点击同样用 tap_xy 的 0-1000 归一化坐标；这类页面没有控件树可比，DSH 只能比截图的像素来判断点击到底有没有反应，所以点了没变化就 handoff 交给用户。看不清的小字可以再 screen 一次并给出 region（截取一小块放大）。"
+    const val BLANKED_NOTE = "提示：这是一个画面页——微信、游戏这类 App 不把控件交给 DSH 看，所以没有控件编号。这不是出错，也不是内容被加密，纯 GUI 就是这样工作的：看下面的截图，点击用 tap_xy 的 0-1000 归一化坐标，滚动用 scroll，不要凭猜测给 tap/type 一个编号。看不清的小字可以再 screen 一次并给出 region（截取一小块放大）。"
 
     /**
      * Page shape from the tree alone (no screenshot), because the question that matters is
