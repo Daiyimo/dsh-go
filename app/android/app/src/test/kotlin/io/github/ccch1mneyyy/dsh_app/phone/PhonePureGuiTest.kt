@@ -639,6 +639,36 @@ class PhonePureGuiTest {
         assertTrue(out.text, out.text.contains("桌面上"))
     }
 
+    @Test fun aTapBringsTheAppBackWhenThePersonIsLookingAtDshGo() {
+        // 23:09:22: DSH Go itself was in front while the game task ran, so every write was refused as
+        // own-app and the turn died right there. The tap pulls the game forward and goes on.
+        pkg = "com.blizzard.wtcg.hearthstone"
+        appLabel = "炉石传说"
+        kind = ScreenKind.CANVAS
+        readMain()
+        pkg = "io.github.ccch1mneyyy.dsh_app"
+        appLabel = "DSH Go"
+        kind = ScreenKind.TREE
+        val out = core.call(PhoneToolCatalog.TAP_XY, mapOf("observation" to "s1", "x" to 500, "y" to 900))
+        assertEquals(listOf("com.blizzard.wtcg.hearthstone"), fullscreens)
+        assertFalse("the tap was dropped although the game came back: ${out.text}", out.isError)
+    }
+
+    @Test fun aTapOnOurOwnScreenSaysSoWhenTheAppCannotComeBack() {
+        pkg = "com.blizzard.wtcg.hearthstone"
+        appLabel = "炉石传说"
+        kind = ScreenKind.CANVAS
+        readMain()
+        canBringBack = false
+        pkg = "io.github.ccch1mneyyy.dsh_app"
+        appLabel = "DSH Go"
+        kind = ScreenKind.TREE
+        val out = core.call(PhoneToolCatalog.TAP_XY, mapOf("observation" to "s1", "x" to 500, "y" to 900))
+        assertTrue("a tap was delivered on our own screen: ${out.text}", out.isError)
+        assertTrue(out.text, out.text.contains("DSH Go 自己"))
+        assertEquals(listOf("com.blizzard.wtcg.hearthstone"), fullscreens)
+    }
+
     @Test fun aLauncherThatStaysAfterTheFirstRepairGetsASecondOne() {
         // 19:55:38: `brought com.blizzard.wtcg.hearthstone back ok=true` and the very next look still
         // saw the launcher, so the turn was refused (`tap_xy error decision=refused:launcher`) and the

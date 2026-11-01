@@ -1008,6 +1008,26 @@ class PhoneCore(
             is Either.Right -> d.value
         }
         if (env.isLocked()) return locked(summary)
+        // The person opened DSH Go while the task runs (to watch it, or to reply): our own window is
+        // in front, so the gate would refuse every write as own-app — measured 23:09:22
+        // `tool tap_xy error (1199ms) decision=refused:own-app app=io.github.ccch1mneyyy.dsh_app`.
+        // Bring the task's app back first, exactly like the launcher repair, instead of dropping it.
+        val own = env.ownPackage()
+        if (own.isNotEmpty() && runCatching { env.peekPackage() }.getOrNull() == own) {
+            returnToTask()
+            if (runCatching { env.peekPackage() }.getOrNull() == own) {
+                val back = latchedApp()
+                // l10n:keep agent tool result
+                return Out(
+                    "现在前台是 DSH Go 自己（你可能正看着这个会话），手机操作要有目标 App 在前台：DSH 试着把" +
+                        (if (back != null) "「$back」" else "任务的应用") +
+                        "拉回前台，但没成功。先 screen 看现在是什么页面，或者用 open 重新打开目标 App；不要在这个界面上点。",
+                    error = true,
+                    summary = summary,
+                    decision = "refused:own-app",
+                )
+            }
+        }
         if (action == null) {
             if (env.imePassword()) {
                 // l10n:keep agent tool result
